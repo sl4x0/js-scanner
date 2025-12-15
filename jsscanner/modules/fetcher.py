@@ -207,20 +207,16 @@ class Fetcher:
             self.logger.info(f"Wayback query: {cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}")
             
             async with aiohttp.ClientSession() as session:
-                timeout = aiohttp.ClientTimeout(total=600, sock_read=300)
+                timeout = aiohttp.ClientTimeout(total=120, sock_read=60)
                 async with session.get(cdx_url, params=params, timeout=timeout) as response:
                     self.logger.info(f"Wayback API response status: {response.status}")
                     
                     if response.status == 200:
-                        # Get full response
-                        text = await response.text()
-                        lines = text.strip().split('\n')
-                        
-                        self.logger.info(f"Wayback returned {len(lines)} URLs")
-                        
-                        # Filter for .js files and deduplicate
-                        for line in lines:
-                            original_url = line.strip()
+                        # Stream line by line to handle large responses
+                        line_count = 0
+                        async for line in response.content:
+                            line_count += 1
+                            original_url = line.decode('utf-8', errors='ignore').strip()
                             
                             if not original_url:
                                 continue
@@ -240,8 +236,12 @@ class Fetcher:
                                     js_urls.add(original_url)
                             except:
                                 continue
+                            
+                            # Log progress every 1000 lines
+                            if line_count % 1000 == 0:
+                                self.logger.info(f"Processed {line_count} lines, found {len(js_urls)} JS URLs so far...")
                         
-                        self.logger.info(f"Found {len(js_urls)} unique .js URLs after deduplication")
+                        self.logger.info(f"Wayback returned {line_count} total URLs, found {len(js_urls)} unique .js files")
                     else:
                         self.logger.warning(f"Wayback returned status {response.status}")
                         
@@ -279,12 +279,18 @@ class Fetcher:
             # Track all JS requests
             async def handle_request(request):
                 url = request.url
-                parsed = urlparse(url)
-                # Proper .js detection using path, not substring
-                if (parsed.path.endswith('.js') or parsed.path.endswith('.mjs') or 
-                    'javascript' in request.resource_type):
+                resource_type = request.resource_type
+                
+                # Detect JS files by resource type OR file extension
+                if resource_type == 'script':
                     js_urls.add(url)
-                    self.logger.debug(f"Found JS: {url}")
+                    self.logger.debug(f"Found JS (script): {url}")
+                elif '.js' in url.lower():
+                    # Fallback: check if URL contains .js
+                    parsed = urlparse(url)
+                    if parsed.path.endswith('.js') or parsed.path.endswith('.mjs') or '.js?' in url.lower():
+                        js_urls.add(url)
+                        self.logger.debug(f"Found JS (extension): {url}")
             
             page.on('request', handle_request)
             
@@ -304,9 +310,10 @@ class Fetcher:
                 src = await script.get_attribute('src')
                 if src:
                     absolute_url = urljoin(target, src)
-                    parsed = urlparse(absolute_url)
-                    if parsed.path.endswith('.js') or parsed.path.endswith('.mjs'):
+                    # More permissive: accept anything that looks like JS
+                    if '.js' in absolute_url.lower():
                         js_urls.add(absolute_url)
+                        self.logger.debug(f"Found JS (DOM): {absolute_url}")
             
             # Look for inline script content with URLs
             inline_scripts = await page.query_selector_all('script:not([src])')
@@ -331,16 +338,8 @@ class Fetcher:
             if context:
                 await context.close()
         
-        # Remove duplicates and filter with proper path checking
-        filtered_urls = []
-        for url in js_urls:
-            try:
-                parsed = urlparse(url)
-                if parsed.path.endswith('.js') or parsed.path.endswith('.mjs'):
-                    filtered_urls.append(url)
-            except:
-                pass
-        js_urls = filtered_urls
+        # Convert set to list (deduplication already done)
+        js_urls = list(js_urls)
         
         self.logger.info(f"Found {len(js_urls)} scripts on live site")
         
