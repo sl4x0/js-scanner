@@ -152,6 +152,57 @@ class Fetcher:
         # Wayback settings
         self.wayback_max_results = config.get('wayback', {}).get('max_results', 10000)
     
+    def _is_in_scope(self, url: str, target: str) -> bool:
+        """
+        Check if URL is in scope (same root domain as target)
+        
+        Args:
+            url: URL to check
+            target: Target domain
+            
+        Returns:
+            True if in scope
+        """
+        from urllib.parse import urlparse
+        
+        try:
+            # Reject blob, data, javascript URLs
+            if url.startswith(('blob:', 'data:', 'javascript:')):
+                return False
+            
+            if not url.startswith(('http://', 'https://')):
+                return False
+            
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            if not domain:
+                return False
+            
+            # Remove port
+            if ':' in domain:
+                domain = domain.split(':')[0]
+            
+            # Get root domain
+            domain_parts = domain.split('.')
+            if len(domain_parts) >= 2:
+                root_domain = '.'.join(domain_parts[-2:])
+            else:
+                root_domain = domain
+            
+            # Get target root domain
+            target_clean = target.lower().replace('https://', '').replace('http://', '').replace('www.', '')
+            target_parts = target_clean.split('.')
+            if len(target_parts) >= 2:
+                target_root = '.'.join(target_parts[-2:])
+            else:
+                target_root = target_clean
+            
+            return root_domain == target_root
+            
+        except Exception:
+            return False
+    
     async def initialize(self):
         """Initialize Playwright browser only if needed"""
         # Only initialize if live scanning is enabled
@@ -245,10 +296,23 @@ class Fetcher:
                     else:
                         self.logger.warning(f"Wayback returned status {response.status}")
                         
+        except asyncio.TimeoutError:
+            self.logger.warning(f"Wayback request timed out after 120s")
         except Exception as e:
             self.logger.error(f"Error fetching from Wayback: {e}")
         
-        return list(js_urls)
+        # Filter to only target domain before returning
+        filtered_urls = []
+        for url in js_urls:
+            if self._is_in_scope(url, target):
+                filtered_urls.append(url)
+            else:
+                self.logger.debug(f"[WAYBACK] Filtered out-of-scope URL: {url}")
+        
+        if len(js_urls) > len(filtered_urls):
+            self.logger.info(f"Filtered {len(js_urls) - len(filtered_urls)} out-of-scope URLs from Wayback")
+        
+        return filtered_urls
     
     async def fetch_live(self, target: str) -> List[str]:
         """
@@ -277,10 +341,14 @@ class Fetcher:
             page = await context.new_page()
             page.set_default_timeout(self.page_timeout)
             
-            # Track all JS requests
+            # Track all JS requests (with strict domain filtering)
             async def handle_request(request):
                 url = request.url
                 resource_type = request.resource_type
+                
+                # Skip third-party scripts immediately
+                if not self._is_in_scope(url, target):
+                    return
                 
                 # Detect JS files by resource type OR file extension
                 if resource_type == 'script':
@@ -333,8 +401,11 @@ class Fetcher:
                 except:
                     pass  # Skip if inner_text fails
             
+        except asyncio.TimeoutError:
+            self.logger.warning(f"[TIMEOUT] Live scan timed out after {self.page_timeout/1000}s for {target}")
+            return list(js_urls)  # Return what we found so far
         except Exception as e:
-            self.logger.error(f"Error fetching live site: {e}")
+            self.logger.warning(f"[ERROR] Live scan failed for {target}: {str(e)[:100]}")
             return []
         finally:
             if page:
@@ -408,10 +479,16 @@ class Fetcher:
                             self.logger.debug(f"Skipping {url}: status {response.status}")
                         return None
         except asyncio.TimeoutError:
-            self.logger.warning(f"Timeout fetching {url}")
+            self.logger.debug(f"[TIMEOUT] {url}")
+            return None
+        except aiohttp.ClientConnectorError as e:
+            self.logger.debug(f"[DNS/CONN] Cannot reach {url}: {str(e)[:50]}")
+            return None
+        except aiohttp.ClientError as e:
+            self.logger.debug(f"[HTTP] Failed {url}: {str(e)[:50]}")
             return None
         except Exception as e:
-            self.logger.error(f"Error fetching {url}: {e}")
+            self.logger.debug(f"[ERROR] {url}: {str(e)[:50]}")
             return None
     
     async def fetch_with_playwright(self, url: str) -> Optional[str]:

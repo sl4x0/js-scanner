@@ -64,14 +64,55 @@ class Crawler:
                 # Convert to absolute URL
                 absolute_url = urljoin(base_url, match)
                 
-                # Only add if it's a valid JS URL and not visited
-                if self._is_valid_js_url(absolute_url) and absolute_url not in self.visited_urls:
+                # Only add if it's a valid JS URL, in scope, and not visited
+                if (self._is_valid_js_url(absolute_url) and 
+                    self._is_in_scope(absolute_url, base_url) and 
+                    absolute_url not in self.visited_urls):
                     js_urls.add(absolute_url)
                     self.visited_urls.add(absolute_url)
         
         self.logger.info(f"Found {len(js_urls)} linked JS files at depth {current_depth}")
         
         return list(js_urls)
+    
+    def _is_in_scope(self, url: str, base_url: str) -> bool:
+        """
+        Check if URL is in same domain as base_url
+        
+        Args:
+            url: URL to check
+            base_url: Base URL for scope comparison
+            
+        Returns:
+            True if in scope
+        """
+        from urllib.parse import urlparse
+        
+        try:
+            if not url.startswith(('http://', 'https://')):
+                return False
+            
+            url_domain = urlparse(url).netloc.lower()
+            base_domain = urlparse(base_url).netloc.lower()
+            
+            # Extract root domains
+            url_parts = url_domain.split('.')
+            base_parts = base_domain.split('.')
+            
+            if len(url_parts) >= 2:
+                url_root = '.'.join(url_parts[-2:])
+            else:
+                url_root = url_domain
+            
+            if len(base_parts) >= 2:
+                base_root = '.'.join(base_parts[-2:])
+            else:
+                base_root = base_domain
+            
+            return url_root == base_root
+            
+        except Exception:
+            return False
     
     def _should_skip(self, url: str) -> bool:
         """
