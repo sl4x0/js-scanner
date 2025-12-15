@@ -31,24 +31,24 @@ class ASTAnalyzer:
         try:
             import tree_sitter_javascript as tsjavascript
             
-            # Support both old (v0.20-0.21) and new (v0.22+) tree-sitter API
+            # Get the language
             language = tsjavascript.language()
             
-            # Try to determine API version and initialize accordingly
-            if hasattr(language, '__class__') and 'PyCapsule' in str(type(language)):
-                # New API (v0.22+) - language() returns PyCapsule, use directly
+            # Try new API first (v0.22+)
+            try:
                 self.parser = Parser()
-                self.parser.set_language(language)
-            else:
-                # Old API (v0.20-0.21) - need Language wrapper
-                try:
-                    from tree_sitter import Language
-                    self.JS_LANGUAGE = Language(language)
-                    self.parser = Parser(self.JS_LANGUAGE)
-                except:
-                    # Fallback: try direct assignment
-                    self.parser = Parser()
+                if hasattr(self.parser, 'set_language'):
                     self.parser.set_language(language)
+                else:
+                    # Old API (v0.20-0.21) - requires Language wrapper
+                    from tree_sitter import Language
+                    js_lang = Language(language)
+                    self.parser = Parser(js_lang)
+            except Exception:
+                # Fallback: try old API with Language wrapper
+                from tree_sitter import Language
+                js_lang = Language(language)
+                self.parser = Parser(js_lang)
             
             self.logger.info("Tree-sitter parser initialized")
         except Exception as e:
