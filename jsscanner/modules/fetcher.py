@@ -183,11 +183,11 @@ class Fetcher:
         """
         self.logger.info(f"Fetching from Wayback Machine: {target}")
         
-        # Wayback CDX API - match the exact working query format
+        # Wayback CDX API - get timestamp and original URL to construct archive URLs
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
             'url': f'*.{target}',
-            'fl': 'original',
+            'fl': 'timestamp,original',  # Need timestamp to construct archive URLs
             'collapse': 'urlkey',
             'limit': str(self.wayback_max_results)  # Prevent overwhelming responses
         }
@@ -216,15 +216,20 @@ class Fetcher:
                             line_text = line.decode('utf-8', errors='ignore').strip()
                             
                             if line_text:
-                                # Filter for JS files only
-                                if not ('.js' in line_text.lower() or line_text.endswith('.mjs')):
+                                # CDX format with fl=timestamp,original: "timestamp original_url"
+                                parts = line_text.split(' ', 1)
+                                if len(parts) != 2:
                                     continue
                                 
-                                # Ensure URL has protocol
-                                if not line_text.startswith(('http://', 'https://')):
-                                    line_text = f"https://{line_text}"
+                                timestamp, original_url = parts
                                 
-                                js_urls.add(line_text)
+                                # Filter for JS files only
+                                if not ('.js' in original_url.lower() or original_url.endswith('.mjs')):
+                                    continue
+                                
+                                # Construct Wayback archive URL: https://web.archive.org/web/{timestamp}/{original_url}
+                                wayback_url = f"https://web.archive.org/web/{timestamp}/{original_url}"
+                                js_urls.add(wayback_url)
                         
                         self.logger.info(f"Wayback processed {line_count} lines, found {len(js_urls)} JS URLs")
                         
