@@ -189,7 +189,7 @@ class Fetcher:
             'url': f'*.{target}',
             'fl': 'timestamp,original',  # Need timestamp to construct archive URLs
             'collapse': 'urlkey',
-            'limit': str(self.wayback_max_results)  # Prevent overwhelming responses
+            'limit': '5000'  # Reduced to avoid 504 timeouts on popular domains
         }
         
         js_urls = set()  # Use set to avoid duplicates
@@ -258,14 +258,20 @@ class Fetcher:
                             for line in text.strip().split('\n'):
                                 line = line.strip()
                                 if line:
-                                    # Filter for JS files
-                                    if not ('.js' in line.lower() or line.endswith('.mjs')):
+                                    # Parse timestamp and original URL (same format as main query)
+                                    parts = line.split(' ', 1)
+                                    if len(parts) != 2:
                                         continue
                                     
-                                    if not line.startswith(('http://', 'https://')):
-                                        line = f"https://{line}"
+                                    timestamp, original_url = parts
                                     
-                                    js_urls.add(line)
+                                    # Filter for JS files
+                                    if not ('.js' in original_url.lower() or original_url.endswith('.mjs')):
+                                        continue
+                                    
+                                    # Construct Wayback archive URL
+                                    wayback_url = f"https://web.archive.org/web/{timestamp}/{original_url}"
+                                    js_urls.add(wayback_url)
                             
                             self.logger.info(f"Total {len(js_urls)} URLs from Wayback after extended search")
                             
