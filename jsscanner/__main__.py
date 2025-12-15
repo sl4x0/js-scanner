@@ -11,6 +11,50 @@ from .core.engine import ScanEngine
 from .utils.logger import log_banner
 
 
+def show_version_info():
+    """Issue #16: Show enhanced version information with dependencies"""
+    print("JS Scanner v1.0.0")
+    print("\nDependencies:")
+    
+    # Python version
+    print(f"  Python: {sys.version.split()[0]}")
+    
+    # Key dependencies
+    try:
+        import aiohttp
+        print(f"  aiohttp: {aiohttp.__version__}")
+    except (ImportError, AttributeError):
+        print("  aiohttp: Not installed")
+    
+    try:
+        from playwright import __version__ as pw_version
+        print(f"  playwright: {pw_version}")
+    except (ImportError, AttributeError):
+        try:
+            import playwright
+            print("  playwright: installed (version unknown)")
+        except ImportError:
+            print("  playwright: Not installed")
+    
+    try:
+        import tree_sitter
+        print(f"  tree-sitter: {tree_sitter.__version__}")
+    except (ImportError, AttributeError):
+        print("  tree-sitter: Not installed")
+    
+    try:
+        import jsbeautifier
+        print(f"  jsbeautifier: {jsbeautifier.__version__}")
+    except (ImportError, AttributeError):
+        print("  jsbeautifier: Not installed")
+    
+    try:
+        import yaml as yaml_mod
+        print(f"  PyYAML: {yaml_mod.__version__ if hasattr(yaml_mod, '__version__') else 'installed'}")
+    except ImportError:
+        print("  PyYAML: Not installed")
+
+
 async def main():
     """Main execution function"""
     # Display banner
@@ -18,6 +62,11 @@ async def main():
     
     # Parse arguments
     args = parse_args()
+    
+    # Issue #16: Handle --version flag with enhanced output
+    if args.version:
+        show_version_info()
+        sys.exit(0)
     
     # Load configuration
     try:

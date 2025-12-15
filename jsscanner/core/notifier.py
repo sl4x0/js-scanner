@@ -175,7 +175,9 @@ class DiscordNotifier:
             embed: Embed data to send
         """
         try:
-            async with session.post(self.webhook_url, json=embed) as response:
+            # Issue #4: Add timeout to prevent hanging if Discord is down
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with session.post(self.webhook_url, json=embed, timeout=timeout) as response:
                 if response.status == 429:
                     # Rate limited by Discord
                     retry_after = int(response.headers.get('Retry-After', 5))
