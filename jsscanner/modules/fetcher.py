@@ -204,16 +204,22 @@ class Fetcher:
                     if response.status == 200:
                         text = await response.text()
                         
+                        self.logger.debug(f"Wayback response length: {len(text)} chars")
+                        
                         # Parse CDX format: each line is a URL
-                        for line in text.strip().split('\n'):
+                        lines = text.strip().split('\n')
+                        self.logger.debug(f"Wayback returned {len(lines)} lines")
+                        
+                        for line in lines:
                             line = line.strip()
-                            if line and line.endswith('.js'):
-                                # Validate it's a proper URL
-                                if line.startswith('http://') or line.startswith('https://'):
+                            if line:
+                                # Ensure URL has protocol
+                                if not line.startswith(('http://', 'https://')):
+                                    line = f"https://{line}"
+                                
+                                # Validate it looks like a JS URL
+                                if '.js' in line:
                                     js_urls.add(line)
-                                else:
-                                    # Add https:// if missing
-                                    js_urls.add(f"https://{line}")
                         
                         self.logger.info(f"Found {len(js_urls)} URLs from Wayback")
                     else:
@@ -223,24 +229,28 @@ class Fetcher:
             if len(js_urls) < 100:  # Only do second query if first didn't find much
                 params['url'] = f'*.{target}/*.js*'  # Include query params
                 
+                self.logger.debug("Running extended Wayback search with query params")
                 await self.wayback_limiter.acquire()
                 
                 async with aiohttp.ClientSession() as session:
                     async with session.get(cdx_url, params=params, timeout=aiohttp.ClientTimeout(total=60)) as response:
                         if response.status == 200:
                             text = await response.text()
+                            self.logger.debug(f"Extended search response length: {len(text)} chars")
+                            
                             for line in text.strip().split('\n'):
                                 line = line.strip()
-                                if line and '.js' in line:
-                                    if line.startswith('http://') or line.startswith('https://'):
+                                if line:
+                                    if not line.startswith(('http://', 'https://')):
+                                        line = f"https://{line}"
+                                    
+                                    if '.js' in line:
                                         js_urls.add(line)
-                                    else:
-                                        js_urls.add(f"https://{line}")
                             
                             self.logger.info(f"Total {len(js_urls)} URLs from Wayback after extended search")
                             
         except Exception as e:
-            self.logger.error(f"Error fetching from Wayback: {e}")
+            self.logger.error(f"Error fetching from Wayback: {e}", exc_info=True)
         
         return list(js_urls)
     
