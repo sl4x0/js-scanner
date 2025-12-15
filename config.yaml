@@ -1,0 +1,49 @@
+# Discord Integration
+# 🔴 CRITICAL SECURITY ALERT 🔴
+# The Discord webhook URL below is EXPOSED in your Git history!
+# IMMEDIATE ACTIONS REQUIRED:
+#   1. Go to Discord → Server Settings → Integrations → Webhooks
+#   2. DELETE the webhook ending in ...ljO7M3
+#   3. CREATE a new webhook and update this file
+#   4. NEVER commit config.yaml to Git again (it's in .gitignore)
+#   5. Use config.yaml.example as template for sharing
+# ⚠️ Consider using environment variable: DISCORD_WEBHOOK
+discord_webhook: "https://discord.com/api/webhooks/1450082381934362726/IAgRuWMbRnzpHaAezmqVPJdg05L3yYe9nG48RCV5Io6ob9ekytIqpCYxQDg6z-ljO7M3"
+discord_rate_limit: 30 # messages per minute
+
+# TruffleHog
+trufflehog_path: "/usr/local/bin/trufflehog"
+trufflehog_timeout: 300 # seconds per file
+
+# Fetching
+threads: 50 # Recommended: 50 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
+timeout: 30 # seconds
+user_agent: "Mozilla/5.0 (BugBounty/Research)"
+max_file_size: 209715200 # 200 MB perfile size limit
+
+# Playwright
+playwright:
+  headless: true
+  max_concurrent: 3
+  restart_after: 100 # Restart browser after N pages
+  page_timeout: 30000 # ms
+
+# Wayback
+wayback:
+  rate_limit: 15 # requests per second
+  max_results: 10000
+
+# Recursive Crawling
+recursion:
+  enabled: true
+  max_depth: 3 # Maximum crawl depth
+
+# AST Analysis
+ast:
+  enabled: true
+  min_word_length: 4 # minimum word length for wordlist
+
+# Logging
+logging:
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR
+  file_enabled: true

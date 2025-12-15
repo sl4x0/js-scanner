@@ -1,0 +1,42 @@
+# Discord Integration
+# ⚠️ SECURITY WARNING: Never commit real webhook URL to Git!
+# Get your webhook from: Discord Server > Settings > Integrations > Webhooks
+discord_webhook: "YOUR_DISCORD_WEBHOOK_URL_HERE"
+discord_rate_limit: 30  # messages per minute
+
+# TruffleHog
+trufflehog_path: "/usr/local/bin/trufflehog"
+trufflehog_timeout: 300  # seconds per file
+
+# Fetching
+threads: 25  # Recommended: 10 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
+timeout: 30  # seconds
+user_agent: "Mozilla/5.0 (BugBounty/Research)"
+max_file_size: 10485760  # 10MB max per JS file
+
+# Playwright
+playwright:
+  headless: true
+  max_concurrent: 3
+  restart_after: 100  # Restart browser after N pages
+  page_timeout: 30000  # ms
+  
+# Wayback
+wayback:
+  rate_limit: 15  # requests per second
+  max_results: 10000
+  
+# Recursive Crawling
+recursion:
+  enabled: true
+  max_depth: 3  # Maximum crawl depth
+  
+# AST Analysis
+ast:
+  enabled: true
+  min_word_length: 4  # minimum word length for wordlist
+  
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file_enabled: true
