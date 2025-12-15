@@ -183,43 +183,66 @@ class Fetcher:
         """
         self.logger.info(f"Fetching from Wayback Machine: {target}")
         
-        # Wayback CDX API with proper filters
+        # Wayback CDX API - simple query, filter by URL pattern
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
-            'url': f'*.{target}/*',
+            'url': f'*.{target}/*.js',  # Match .js URLs directly
             'matchType': 'domain',
-            'fl': 'original,timestamp',
-            'filter': ['statuscode:200', 'mimetype:application/javascript'],
-            'collapse': 'digest',  # Remove duplicates by content hash
+            'fl': 'original',  # Only need original URL
+            'collapse': 'urlkey',  # One result per unique URL
             'limit': self.wayback_max_results
         }
         
-        js_urls = []
+        js_urls = set()  # Use set to avoid duplicates
         
         try:
             # Apply rate limiting
             await self.wayback_limiter.acquire()
             
             async with aiohttp.ClientSession() as session:
-                async with session.get(cdx_url, params=params) as response:
+                async with session.get(cdx_url, params=params, timeout=aiohttp.ClientTimeout(total=60)) as response:
                     if response.status == 200:
                         text = await response.text()
-                        # Parse CDX format: original_url timestamp
+                        
+                        # Parse CDX format: each line is a URL
                         for line in text.strip().split('\n'):
-                            if line:
-                                parts = line.split()
-                                if parts:
-                                    url = parts[0]
-                                    if url.endswith('.js'):
-                                        js_urls.append(url)
+                            line = line.strip()
+                            if line and line.endswith('.js'):
+                                # Validate it's a proper URL
+                                if line.startswith('http://') or line.startswith('https://'):
+                                    js_urls.add(line)
+                                else:
+                                    # Add https:// if missing
+                                    js_urls.add(f"https://{line}")
                         
                         self.logger.info(f"Found {len(js_urls)} URLs from Wayback")
                     else:
                         self.logger.warning(f"Wayback returned status {response.status}")
+                        
+            # Also try with query params pattern (some JS have ?v=123)
+            if len(js_urls) < 100:  # Only do second query if first didn't find much
+                params['url'] = f'*.{target}/*.js*'  # Include query params
+                
+                await self.wayback_limiter.acquire()
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(cdx_url, params=params, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                        if response.status == 200:
+                            text = await response.text()
+                            for line in text.strip().split('\n'):
+                                line = line.strip()
+                                if line and '.js' in line:
+                                    if line.startswith('http://') or line.startswith('https://'):
+                                        js_urls.add(line)
+                                    else:
+                                        js_urls.add(f"https://{line}")
+                            
+                            self.logger.info(f"Total {len(js_urls)} URLs from Wayback after extended search")
+                            
         except Exception as e:
             self.logger.error(f"Error fetching from Wayback: {e}")
         
-        return js_urls
+        return list(js_urls)
     
     async def fetch_live(self, target: str) -> List[str]:
         """
