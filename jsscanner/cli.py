@@ -19,17 +19,46 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Scan a single target (auto-discover from Wayback + Live)
-  python -m jsscanner -t example.com
+  # Full discovery for a single domain (Wayback + Live)
+  python -m jsscanner -t example.com --discovery
   
-  # Scan with custom config
-  python -m jsscanner -t example.com --config custom-config.yaml
+  # Fast scan: httpx subdomains (live pages only, no Wayback)
+  python -m jsscanner -t example.com -i subdomains.txt
   
-  # Scan from input file
-  python -m jsscanner -t example.com -i urls.txt
+  # Deep scan: httpx subdomains with full discovery
+  python -m jsscanner -t example.com -i subdomains.txt --discovery
   
-  # Scan specific URLs
+  # Scan multiple domains with discovery
+  python -m jsscanner -t "program-name" -i domains.txt --discovery
+  
+  # Direct scan of specific JavaScript URLs (no discovery)
+  python -m jsscanner -t example.com -i js-files.txt
   python -m jsscanner -t example.com -u https://example.com/app.js https://example.com/main.js
+
+Discovery Mode:
+  --discovery flag controls whether to actively discover JS files:
+  
+  OFF (default with -i/-u):
+    - Scans only the URLs/domains provided in input
+    - Live page crawling only (fast)
+    - No Wayback Machine queries
+    - Best for: httpx output, known URL lists
+  
+  ON (with --discovery flag):
+    - Queries Wayback Machine for historical files
+    - Crawls live site with Playwright
+    - Comprehensive discovery
+    - Best for: initial recon, full coverage
+  
+  AUTO-ON (no -i or -u):
+    - Discovery automatically enabled when scanning a bare domain
+    - Example: python -m jsscanner -t example.com
+
+Performance Tips:
+  - Use -i without --discovery for fast httpx subdomain scans
+  - Use --discovery for comprehensive initial reconnaissance
+  - Use --no-wayback to skip Wayback (keeps live crawling)
+  - Use --threads to control concurrency (default: 10)
         """
     )
     
@@ -37,13 +66,13 @@ Examples:
     parser.add_argument(
         '-t', '--target',
         required=True,
-        help='Target domain (e.g., example.com)'
+        help='Project scope/name (e.g., example.com or "program-name") - used for filtering and output organization'
     )
     
     # Optional arguments
     parser.add_argument(
         '-i', '--input',
-        help='Input file with URLs (one per line)'
+        help='Input file containing domains, URLs, or JS files (one per line). Without --discovery, only live pages are scanned'
     )
     
     parser.add_argument(
@@ -74,6 +103,12 @@ Examples:
         '--no-recursion',
         action='store_true',
         help='Disable recursive crawling'
+    )
+    
+    parser.add_argument(
+        '--discovery',
+        action='store_true',
+        help='Enable full discovery mode (Wayback Machine + Live crawling). Default: OFF when using -i or -u, AUTO-ON for bare domains'
     )
     
     parser.add_argument(

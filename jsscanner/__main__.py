@@ -57,9 +57,29 @@ async def main():
         print(f"\n🎯 Targets detected: {len(targets)}")
         print("="*60)
     
-    # Prepare scan parameters
-    input_file = args.input
-    urls = args.urls
+    # === NEW: Determine Input List and Discovery Mode ===
+    targets_to_scan = []
+    discovery_mode = args.discovery  # Start with user's explicit flag
+    
+    if args.input:
+        # Read from input file
+        with open(args.input, 'r', encoding='utf-8', errors='ignore') as f:
+            targets_to_scan = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    elif args.urls:
+        # Use provided URLs
+        targets_to_scan = args.urls
+    else:
+        # If no input file or URLs provided, the target(s) ARE the input
+        # Force discovery mode ON in this case
+        targets_to_scan = targets
+        discovery_mode = True
+    
+    # Log the scan configuration
+    primary_scope = targets[0] if targets else args.target
+    print(f"\n🎯 Project Scope: {args.target}")
+    print(f"📂 Input Items: {len(targets_to_scan)}")
+    print(f"🔍 Discovery Mode: {'ON (Wayback + Live)' if discovery_mode else 'OFF (Direct scan only)'}")
+    print("="*60)
     
     # Run scan for each target sequentially
     try:
@@ -72,8 +92,8 @@ async def main():
             # Initialize engine for this target
             engine = ScanEngine(config, target)
             
-            # Run scan
-            await engine.run(input_file=input_file, urls=urls)
+            # Run scan with new parameters
+            await engine.run(targets_to_scan, discovery_mode=discovery_mode)
             
             if len(targets) > 1 and idx < len(targets):
                 print(f"\n✓ Completed scan {idx}/{len(targets)} for {target}")

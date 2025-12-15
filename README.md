@@ -121,55 +121,116 @@ ast:
 
 ## 📖 Usage
 
-### Basic Scan (Auto-Discovery)
+### Understanding Discovery Mode
+
+JS Scanner now separates **scope definition** (`-t`) from **discovery behavior** (`--discovery`):
+
+- **Scope (`-t`)**: Defines the project name and filters results to matching domains
+- **Discovery Mode (`--discovery`)**: Controls whether to actively discover JS files via Wayback Machine + Live crawling
+
+| Mode              | Flag          | Wayback | Live Crawl | Use Case                            |
+| ----------------- | ------------- | ------- | ---------- | ----------------------------------- |
+| **OFF** (default) | `-i file.txt` | ❌      | ✅         | Fast scanning of known URLs/domains |
+| **ON**            | `--discovery` | ✅      | ✅         | Full discovery from Wayback + Live  |
+
+### Basic Examples
+
+#### 1. Full Discovery for a Single Domain
 
 ```bash
-python -m jsscanner -t example.com
+python -m jsscanner -t example.com --discovery
 ```
 
-This will:
+**Behavior:**
 
-1. Fetch historical JS files from Wayback Machine
-2. Scan the live site with Playwright
-3. Process and beautify all JS files
-4. Scan for secrets with TruffleHog
-5. Extract endpoints, parameters, and wordlists
-6. Send Discord alerts for verified secrets
+- ✅ Fetch all `*.example.com` JavaScript files from Wayback Machine
+- ✅ Crawl live site with Playwright
+- ✅ Scan all discovered JS files
+- ✅ Filter results to match scope `example.com`
 
-### Scan from Input File
+#### 2. Scan Subdomains from httpx (Live Only - Fast! ⚡)
 
 ```bash
-python -m jsscanner -t example.com -i urls.txt
+# Fast scan: Only checks live pages, no Wayback queries
+python -m jsscanner -t example.com -i subdomains.txt
 ```
 
-`urls.txt` format:
+**Input (`subdomains.txt`):**
 
 ```
-https://example.com/app.js
-https://example.com/bundle.js
+https://app.example.com
+https://api.example.com
+https://cdn.example.com
+```
+
+**Behavior:**
+
+- ✅ Open each URL in Playwright
+- ✅ Extract JavaScript files from the live page
+- ❌ **Does NOT** query Wayback Machine (fast!)
+- ❌ **Does NOT** perform additional discovery
+
+#### 3. Scan Subdomains with Full Discovery
+
+```bash
+# Add --discovery to enable Wayback for each subdomain
+python -m jsscanner -t example.com -i subdomains.txt --discovery
+```
+
+**Behavior:**
+
+- ✅ Query Wayback Machine for each subdomain
+- ✅ Crawl each live page
+- ⚠️ Slower but more comprehensive
+
+#### 4. Scan Specific JavaScript URLs Directly
+
+```bash
+python -m jsscanner -t example.com -i js-urls.txt
+```
+
+**Input (`js-urls.txt`):**
+
+```
+https://example.com/static/app.js
+https://example.com/vendor/bundle.min.js
 https://cdn.example.com/main.js
 ```
 
-### Scan Specific URLs
+**Behavior:**
+
+- ✅ Download and scan each JS file directly
+- ❌ No Wayback queries
+- ❌ No live page crawling
+
+#### 5. Scan Specific URLs via Command Line
 
 ```bash
 python -m jsscanner -t example.com -u https://example.com/app.js https://example.com/main.js
 ```
 
+**Behavior:**
+
+- ✅ Download and scan the 2 specified files only
+- ❌ No discovery
+
 ### Advanced Options
 
 ```bash
+# Enable full discovery (Wayback + Live)
+python -m jsscanner -t example.com --discovery
+
 # Custom config file
 python -m jsscanner -t example.com --config prod-config.yaml
 
-# Skip Wayback scanning
-python -m jsscanner -t example.com --no-wayback
+# Skip Wayback scanning (even in discovery mode)
+python -m jsscanner -t example.com --discovery --no-wayback
 
-# Skip live site scanning
-python -m jsscanner -t example.com --no-live
+# Skip live site scanning (use Wayback only)
+python -m jsscanner -t example.com --discovery --no-live
 
 # Disable recursive crawling
-python -m jsscanner -t example.com --no-recursion
+python -m jsscanner -t example.com --discovery --no-recursion
 
 # Override thread count
 python -m jsscanner -t example.com --threads 20
@@ -178,22 +239,52 @@ python -m jsscanner -t example.com --threads 20
 python -m jsscanner -t example.com -v
 ```
 
+### Multi-Domain Scanning
+
+```bash
+# Scan multiple domains with full discovery
+python -m jsscanner -t "bug-bounty-program" -i domains.txt --discovery
+```
+
+**Input (`domains.txt`):**
+
+```
+google.com
+youtube.com
+gmail.com
+```
+
+**Behavior:**
+
+- Uses "bug-bounty-program" as the scope/project name
+- Performs full discovery (Wayback + Live) for each domain
+- Results organized under `results/bug-bounty-program/`
+
 ## 🔧 How It Works
 
-### 1. Discovery Phase
+### 1. Input Processing
+
+JS Scanner determines what to scan based on your input:
+
+- **Direct JS URLs**: `.js` files are downloaded and scanned immediately
+- **Domains/Page URLs**: JavaScript files are extracted via:
+  - **Live Crawl** (always enabled unless `--no-live`)
+  - **Wayback Machine** (only if `--discovery` flag is set)
+
+### 2. Discovery Phase (When `--discovery` is enabled)
 
 - **Wayback Machine**: Queries the CDX API for historical JavaScript files
 - **Live Site**: Uses Playwright to render the page and extract `<script>` tags
-- **Recursive Crawling**: Parses JS imports/requires to find linked files
+- **Recursive Crawling**: Parses JS imports/requires to find linked files (if enabled)
 
-### 2. Processing Phase
+### 3. Processing Phase
 
 - **Deduplication**: Calculates SHA256 hash and checks `history.json`
 - **Source Map Extraction**: Extracts inline or referenced source maps
 - **Beautification**: Uses jsbeautifier to format minified code
 - **File Storage**: Saves both original and processed versions
 
-### 3. Analysis Phase
+### 4. Analysis Phase
 
 - **Secret Scanning**: Streams TruffleHog output line-by-line
   - Only alerts on **verified** secrets
@@ -204,10 +295,23 @@ python -m jsscanner -t example.com -v
   - External domains (for subdomain takeover checks)
   - Custom wordlists (identifiers for fuzzing)
 
-### 4. Alerting Phase
+### 5. Alerting Phase
 
 - **Rate-Limited Queue**: Max 30 Discord messages/minute
 - **Rich Embeds**: Color-coded with detector info, file location, and timestamps
+
+## 🎯 Discovery Mode Quick Reference
+
+| Command                                  | Discovery | Wayback | Live   | Best For                      |
+| ---------------------------------------- | --------- | ------- | ------ | ----------------------------- |
+| `-t domain.com --discovery`              | ON        | ✅      | ✅     | Initial comprehensive scan    |
+| `-t domain.com -i httpx.txt`             | OFF       | ❌      | ✅     | Fast live-only subdomain scan |
+| `-t domain.com -i httpx.txt --discovery` | ON        | ✅      | ✅     | Deep subdomain discovery      |
+| `-t domain.com -i urls.txt`              | OFF       | ❌      | Direct | Direct JS file scanning       |
+| `-t domain.com -u url1 url2`             | OFF       | ❌      | Direct | Quick test of specific files  |
+| `-t domain.com` (no input)               | AUTO-ON   | ✅      | ✅     | Auto-discovery mode           |
+
+**💡 Pro Tip:** Use discovery mode OFF (`-i` without `--discovery`) when scanning httpx output for maximum speed!
 
 ## 🔐 State Management
 
