@@ -48,10 +48,10 @@ class Crawler:
             r'import\(["\']([^"\']+)["\']\)',
             # Require statements
             r'require\(["\']([^"\']+)["\']\)',
-            # Script src in strings
-            r'src\s*[:=]\s*["\']([^"\']+\.js)["\']',
-            # Generic .js references
-            r'["\']([^"\']*\.js(?:\?[^"\']*)?)["\']'
+            # Script src in strings (JS, TS, JSX, TSX, CTS, MTS)
+            r'src\s*[:=]\s*["\']([^"\' ]+\.(?:js|ts|jsx|tsx|mjs|cts|mts))["\']',
+            # Generic JS/TS file references
+            r'["\']([^"\' ]*\.(?:js|ts|jsx|tsx|mjs|cts|mts)(?:\?[^"\' ]*)?)["\']'
         ]
         
         for pattern in patterns:

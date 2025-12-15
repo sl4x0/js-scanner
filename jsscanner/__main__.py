@@ -65,6 +65,12 @@ async def main():
         # Read from input file
         with open(args.input, 'r', encoding='utf-8', errors='ignore') as f:
             targets_to_scan = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        
+        # Validate that we got valid targets from the file
+        if not targets_to_scan:
+            print(f"Error: Input file '{args.input}' contains no valid targets.")
+            print("Make sure the file contains at least one URL or domain (non-comment, non-empty line).")
+            sys.exit(1)
     elif args.urls:
         # Use provided URLs
         targets_to_scan = args.urls

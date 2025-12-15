@@ -130,6 +130,11 @@ class ASTAnalyzer:
             self.logger.warning(f"Skipping AST parsing for file >5MB (too large)")
             raise ValueError("File too large for AST parsing")
         
+        # Skip empty or nearly empty files
+        if len(content) < 10:  # Less than 10 bytes
+            self.logger.debug(f"Skipping AST parsing for file <10 bytes (too small)")
+            raise ValueError("File too small for meaningful AST parsing")
+        
         return self.parser.parse(bytes(content, 'utf8'))
     
     def _extract_endpoints_sync(self, node, content: str) -> List[str]:
