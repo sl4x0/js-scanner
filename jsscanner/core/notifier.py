@@ -18,13 +18,14 @@ from datetime import datetime
 class DiscordNotifier:
     """Handles Discord webhook notifications with rate limiting"""
     
-    def __init__(self, webhook_url: str, rate_limit: int = 30):
+    def __init__(self, webhook_url: str, rate_limit: int = 30, logger=None):
         """
         Initialize Discord notifier
         
         Args:
             webhook_url: Discord webhook URL
             rate_limit: Maximum messages per minute (default: 30)
+            logger: Logger instance for error reporting
         """
         self.webhook_url = webhook_url
         self.rate_limit = rate_limit
@@ -32,6 +33,7 @@ class DiscordNotifier:
         self.message_times = deque()
         self.running = False
         self._task = None
+        self.logger = logger
     
     async def start(self):
         """Starts the notification worker"""
@@ -39,9 +41,27 @@ class DiscordNotifier:
             self.running = True
             self._task = asyncio.create_task(self._worker())
     
-    async def stop(self):
-        """Stops the notification worker"""
+    async def stop(self, drain_queue: bool = True):
+        """
+        Stops the notification worker
+        
+        Args:
+            drain_queue: If True, wait for queued messages to send
+        """
         self.running = False
+        
+        # Wait for queue to drain (max 60 seconds)
+        if drain_queue and self.queue:
+            if self.logger:
+                self.logger.info(f"📤 Sending {len(self.queue)} queued Discord messages...")
+            deadline = time.time() + 60
+            
+            while self.queue and time.time() < deadline:
+                await asyncio.sleep(0.5)
+            
+            if self.queue and self.logger:
+                self.logger.warning(f"⚠️  {len(self.queue)} messages not sent (timeout)")
+        
         if self._task:
             await self._task
     
@@ -163,9 +183,21 @@ class DiscordNotifier:
                     # Re-queue the message
                     self.queue.appendleft(embed)
                 elif response.status not in [200, 204]:
-                    print(f"Discord webhook error: {response.status}")
+                    error_text = await response.text()
+                    if self.logger:
+                        self.logger.error(
+                            f"❌ Discord webhook failed!\n"
+                            f"   Status: {response.status}\n"
+                            f"   Error: {error_text[:200]}\n"
+                            f"   Check your webhook URL in config.yaml"
+                        )
+                    else:
+                        print(f"Discord webhook error: {response.status}")
         except Exception as e:
-            print(f"Failed to send Discord notification: {e}")
+            if self.logger:
+                self.logger.error(f"❌ Discord notification error: {e}")
+            else:
+                print(f"Failed to send Discord notification: {e}")
     
     def _create_embed(self, secret_data: Dict[str, Any]) -> Dict[str, Any]:
         """

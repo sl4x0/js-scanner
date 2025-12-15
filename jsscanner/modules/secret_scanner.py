@@ -143,6 +143,13 @@ class SecretScanner:
                         await asyncio.wait_for(process.wait(), timeout=5)
                     except asyncio.TimeoutError:
                         self.logger.error("TruffleHog process did not terminate, forcing kill")
+                        # Force kill on Unix
+                        try:
+                            import signal
+                            process.send_signal(signal.SIGKILL)
+                            await asyncio.wait_for(process.wait(), timeout=2)
+                        except Exception as e:
+                            self.logger.error(f"Failed to force kill process: {e}")
             
             # ✅ OPTIMIZATION: Send batch notification instead of individual alerts
             if file_secrets:

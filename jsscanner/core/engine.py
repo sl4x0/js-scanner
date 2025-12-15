@@ -42,7 +42,7 @@ class ScanEngine:
         # Initialize Discord notifier
         webhook_url = config.get('discord_webhook')
         rate_limit = config.get('discord_rate_limit', 30)
-        self.notifier = DiscordNotifier(webhook_url, rate_limit)
+        self.notifier = DiscordNotifier(webhook_url, rate_limit, self.logger)
         
         # Modules will be initialized when needed
         self.fetcher = None
