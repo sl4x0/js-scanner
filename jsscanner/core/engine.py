@@ -291,31 +291,85 @@ class ScanEngine:
     
     async def _read_input_file(self, filepath: str) -> List[str]:
         """
-        Reads URLs from input file
+        Reads URLs/domains from input file
         
         Args:
             filepath: Path to input file
             
         Returns:
-            List of URLs (filtered for JS files only)
+            List of URLs to scan
         """
         urls = []
+        domains = []
         skipped = 0
         
         with open(filepath, 'r') as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith('#'):
-                    # Only add if it looks like a JS file
+                    # Check if it's a JS URL
                     if '.js' in line.lower() or line.endswith('.mjs'):
                         urls.append(line)
+                    # Check if it's a domain (for discovery)
+                    elif self._is_valid_domain(line):
+                        domains.append(line)
                     else:
                         skipped += 1
         
+        # If we found domains, discover JS from them
+        if domains:
+            self.logger.info(f"Found {len(domains)} domains in input file, discovering JS URLs...")
+            for domain in domains:
+                discovered_urls = await self._discover_urls_for_domain(domain)
+                urls.extend(discovered_urls)
+        
         if skipped > 0:
-            self.logger.info(f"Skipped {skipped} non-JS URLs from input file")
+            self.logger.info(f"Skipped {skipped} invalid lines from input file")
         
         return urls
+    
+    def _is_valid_domain(self, line: str) -> bool:
+        """
+        Check if line is a valid domain
+        
+        Args:
+            line: Line to check
+            
+        Returns:
+            True if valid domain
+        """
+        # Simple domain validation
+        if line.startswith(('http://', 'https://')):
+            return False  # This is a URL, not a domain
+        
+        # Check for domain pattern
+        import re
+        domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
+        return bool(re.match(domain_pattern, line))
+    
+    async def _discover_urls_for_domain(self, domain: str) -> List[str]:
+        """
+        Discover JS URLs for a specific domain
+        
+        Args:
+            domain: Domain to discover
+            
+        Returns:
+            List of discovered JS URLs
+        """
+        urls = []
+        
+        # Fetch from Wayback (unless --no-wayback)
+        if not self.config.get('skip_wayback', False):
+            wayback_urls = await self.fetcher.fetch_wayback(domain)
+            urls.extend(wayback_urls)
+        
+        # Fetch from live site (unless --no-live)
+        if not self.config.get('skip_live', False):
+            live_urls = await self.fetcher.fetch_live(domain)
+            urls.extend(live_urls)
+        
+        return list(set(urls))  # Remove duplicates
     
     async def _cleanup(self):
         """Cleanup resources"""
