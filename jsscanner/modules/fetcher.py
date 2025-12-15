@@ -199,16 +199,22 @@ class Fetcher:
             # Apply rate limiting
             await self.wayback_limiter.acquire()
             
+            # Log the actual query for debugging
+            query_url = f"{cdx_url}?url={params['url']}&matchType={params['matchType']}&fl={params['fl']}&collapse={params['collapse']}&limit={params['limit']}"
+            self.logger.info(f"Wayback query: {query_url}")
+            
             async with aiohttp.ClientSession() as session:
                 async with session.get(cdx_url, params=params, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                    self.logger.info(f"Wayback API response status: {response.status}")
+                    
                     if response.status == 200:
                         text = await response.text()
                         
-                        self.logger.debug(f"Wayback response length: {len(text)} chars")
+                        self.logger.info(f"Wayback response length: {len(text)} chars")
                         
                         # Parse CDX format: each line is a URL
                         lines = text.strip().split('\n')
-                        self.logger.debug(f"Wayback returned {len(lines)} lines")
+                        self.logger.info(f"Wayback returned {len(lines)} lines")
                         
                         for line in lines:
                             line = line.strip()
@@ -229,14 +235,17 @@ class Fetcher:
             if len(js_urls) < 100:  # Only do second query if first didn't find much
                 params['url'] = f'*.{target}/*.js*'  # Include query params
                 
-                self.logger.debug("Running extended Wayback search with query params")
+                self.logger.info("Running extended Wayback search with query params")
+                self.logger.info(f"Extended query URL: {cdx_url}?url={params['url']}")
                 await self.wayback_limiter.acquire()
                 
                 async with aiohttp.ClientSession() as session:
                     async with session.get(cdx_url, params=params, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                        self.logger.info(f"Extended search response status: {response.status}")
+                        
                         if response.status == 200:
                             text = await response.text()
-                            self.logger.debug(f"Extended search response length: {len(text)} chars")
+                            self.logger.info(f"Extended search response length: {len(text)} chars")
                             
                             for line in text.strip().split('\n'):
                                 line = line.strip()
