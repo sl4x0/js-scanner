@@ -253,8 +253,11 @@ class ScanEngine:
             self.state.mark_as_scanned(file_hash, url)
             self.stats['total_files'] += 1
             
+            # Generate readable filename
+            readable_name = self._get_readable_filename(url, file_hash)
+            
             # Save minified version
-            minified_path = Path(self.paths['files_minified']) / f"{file_hash}.js"
+            minified_path = Path(self.paths['files_minified']) / readable_name
             with open(minified_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
@@ -262,9 +265,12 @@ class ScanEngine:
             processed_content = await self.processor.process(content, str(minified_path))
             
             # Save unminified version
-            unminified_path = Path(self.paths['files_unminified']) / f"{file_hash}.js"
+            unminified_path = Path(self.paths['files_unminified']) / readable_name
             with open(unminified_path, 'w', encoding='utf-8') as f:
                 f.write(processed_content)
+            
+            # Save to manifest
+            self._save_file_manifest(url, file_hash, readable_name)
             
             # Scan for secrets (streaming)
             secrets_found = await self.secret_scanner.scan_file(str(unminified_path), url)
@@ -418,3 +424,97 @@ class ScanEngine:
             
         except Exception:
             return False
+    
+    @staticmethod
+    def _get_readable_filename(url: str, file_hash: str) -> str:
+        """
+        Creates human-readable filename from URL and hash
+        
+        Args:
+            url: Source URL
+            file_hash: SHA256 hash
+            
+        Returns:
+            Readable filename like: subdomain.domain.com-filename-abc123.js
+        """
+        from urllib.parse import urlparse
+        import re
+        
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc
+            path = parsed.path
+            
+            # Extract filename from path
+            filename = path.split('/')[-1] if path else 'script'
+            
+            # Remove query string from filename
+            if '?' in filename:
+                filename = filename.split('?')[0]
+            
+            # Remove file extension
+            filename = filename.replace('.js', '').replace('.mjs', '')
+            
+            # Clean filename: keep only alphanumeric, dash, underscore
+            filename = re.sub(r'[^a-zA-Z0-9\-_.]', '-', filename)
+            
+            # Remove consecutive dashes
+            filename = re.sub(r'-+', '-', filename)
+            
+            # Trim to reasonable length
+            if len(filename) > 50:
+                filename = filename[:50]
+            
+            # Remove trailing/leading dashes
+            filename = filename.strip('-')
+            
+            # If filename is empty, use 'script'
+            if not filename:
+                filename = 'script'
+            
+            # Short hash (first 7 chars)
+            short_hash = file_hash[:7]
+            
+            # Build final name: domain-filename-hash.js
+            final_name = f"{domain}-{filename}-{short_hash}.js"
+            
+            # Final cleanup
+            final_name = final_name.replace('..', '.')
+            
+            return final_name
+            
+        except Exception:
+            # Fallback to just hash
+            return f"{file_hash}.js"
+    
+    def _save_file_manifest(self, url: str, file_hash: str, filename: str):
+        """
+        Saves file manifest mapping for easy reference
+        
+        Args:
+            url: Source URL
+            file_hash: SHA256 hash
+            filename: Readable filename
+        """
+        import json
+        from datetime import datetime
+        
+        manifest_file = Path(self.paths['base']) / 'file_manifest.json'
+        
+        # Load existing manifest
+        if manifest_file.exists():
+            with open(manifest_file, 'r') as f:
+                manifest = json.load(f)
+        else:
+            manifest = {}
+        
+        # Add entry
+        manifest[filename] = {
+            'url': url,
+            'hash': file_hash,
+            'timestamp': datetime.utcnow().isoformat() + 'Z'
+        }
+        
+        # Save manifest
+        with open(manifest_file, 'w') as f:
+            json.dump(manifest, f, indent=2, sort_keys=True)
