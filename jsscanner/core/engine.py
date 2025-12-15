@@ -58,20 +58,22 @@ class ScanEngine:
             'errors': []
         }
     
-    async def run(self, input_file: Optional[str] = None, urls: Optional[List[str]] = None):
+    async def run(self, inputs: List[str], discovery_mode: bool = False):
         """
         Main execution method
         
         Args:
-            input_file: Optional file containing URLs (one per line)
-            urls: Optional list of URLs to scan
+            inputs: List of URLs or domains to scan
+            discovery_mode: If True, perform active discovery (Wayback + Live crawling).
+                          If False, scan only the exact URLs/domains provided.
         """
         self.start_time = time.time()
         
         # Update metadata with start time
         from datetime import datetime
         self.state.update_metadata({
-            'start_time': datetime.utcnow().isoformat() + 'Z'
+            'start_time': datetime.utcnow().isoformat() + 'Z',
+            'discovery_mode': discovery_mode
         })
         
         try:
@@ -90,24 +92,41 @@ class ScanEngine:
             # Initialize modules
             await self._initialize_modules()
             
-            # Collect URLs to scan
+            # === NEW: Process inputs based on discovery mode ===
             urls_to_scan = []
             
-            if input_file:
-                urls_to_scan.extend(await self._read_input_file(input_file))
+            for item in inputs:
+                # CASE A: It's already a full JS URL (scan immediately)
+                if self._is_valid_js_url(item):
+                    self.logger.info(f"✓ Direct JS URL: {item}")
+                    urls_to_scan.append(item)
+                    continue
+                
+                # CASE B: It's a Domain/Page URL (needs JS extraction)
+                self.logger.info(f"📍 Processing input: {item}")
+                
+                # Always fetch LIVE JS from this page/domain (unless --no-live)
+                if not self.config.get('skip_live', False):
+                    live_js = await self.fetcher.fetch_live(item)
+                    self.logger.info(f"  ├─ Live scan: Found {len(live_js)} JS files")
+                    urls_to_scan.extend(live_js)
+                
+                # ONLY if Discovery Mode is ON, query Wayback
+                if discovery_mode and not self.config.get('skip_wayback', False):
+                    wb_js = await self.fetcher.fetch_wayback(item)
+                    self.logger.info(f"  └─ Wayback scan: Found {len(wb_js)} JS files")
+                    urls_to_scan.extend(wb_js)
+                elif discovery_mode:
+                    self.logger.info(f"  └─ Wayback scan: Skipped (--no-wayback flag)")
+                else:
+                    self.logger.info(f"  └─ Wayback scan: Skipped (discovery mode OFF)")
             
-            if urls:
-                urls_to_scan.extend(urls)
-            
-            if not urls_to_scan:
-                # No URLs provided, fetch from Wayback and live site
-                self.logger.info("No URLs provided, fetching from Wayback and live site")
-                urls_to_scan = await self._discover_urls()
-            
-            # Deduplicate URLs by normalizing (remove query params for comparison)
+            # Deduplicate URLs
             urls_to_scan = self._deduplicate_urls(urls_to_scan)
             
-            self.logger.info(f"Found {len(urls_to_scan)} URLs to scan")
+            self.logger.info(f"\n{'='*80}")
+            self.logger.info(f"📊 Total unique JavaScript files to scan: {len(urls_to_scan)}")
+            self.logger.info(f"{'='*80}\n")
             
             # Log sample URLs for debugging
             if urls_to_scan and len(urls_to_scan) > 0:
@@ -180,27 +199,6 @@ class ScanEngine:
         self.crawler = Crawler(self.config, self.logger)
         
         await self.fetcher.initialize()
-    
-    async def _discover_urls(self) -> List[str]:
-        """
-        Discovers URLs from Wayback and live site
-        
-        Returns:
-            List of discovered URLs
-        """
-        urls = []
-        
-        # Fetch from Wayback (unless --no-wayback)
-        if not self.config.get('skip_wayback', False):
-            wayback_urls = await self.fetcher.fetch_wayback(self.target)
-            urls.extend(wayback_urls)
-        
-        # Fetch from live site (unless --no-live)
-        if not self.config.get('skip_live', False):
-            live_urls = await self.fetcher.fetch_live(self.target)
-            urls.extend(live_urls)
-        
-        return list(set(urls))  # Remove duplicates
     
     async def _process_url(self, url: str, depth: int = 0):
         """
@@ -328,93 +326,6 @@ class ScanEngine:
             self.stats['errors'].append(f"Unexpected: {str(e)}")
             raise  # Re-raise for debugging
     
-    async def _read_input_file(self, filepath: str) -> List[str]:
-        """
-        Reads URLs/domains from input file
-        
-        Args:
-            filepath: Path to input file
-            
-        Returns:
-            List of URLs to scan
-        """
-        from urllib.parse import urlparse
-        
-        urls = []
-        domains = []
-        skipped = 0
-        out_of_scope = 0
-        
-        try:
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#'):
-                        # Check if it's a JS URL
-                        if '.js' in line.lower() or line.endswith('.mjs'):
-                            # Scope filtering: only accept URLs matching target domain
-                            if self._is_in_scope(line):
-                                urls.append(line)
-                            else:
-                                out_of_scope += 1
-                        # Check if it's a URL with protocol (httpx format)
-                        elif line.startswith(('http://', 'https://')):
-                            # Extract domain from URL for discovery
-                            parsed = urlparse(line)
-                            if parsed.netloc and self._is_in_scope(line):
-                                # Add the base URL for live scanning
-                                domain = parsed.netloc
-                                if domain not in domains:
-                                    domains.append(domain)
-                            else:
-                                out_of_scope += 1
-                        # Check if it's a bare domain (for discovery)
-                        elif self._is_valid_domain(line):
-                            # Scope filtering for domains
-                            if self._domain_matches_target(line):
-                                domains.append(line)
-                            else:
-                                out_of_scope += 1
-                        else:
-                            skipped += 1
-        except (UnicodeDecodeError, IOError) as e:
-            self.logger.error(f"Failed to read input file {filepath}: {e}")
-            return []
-        
-        # If we found domains, discover JS from them
-        if domains:
-            self.logger.info(f"Found {len(domains)} domains in input file (in-scope), discovering JS URLs...")
-            for domain in domains:
-                discovered_urls = await self._discover_urls_for_domain(domain)
-                urls.extend(discovered_urls)
-        
-        if out_of_scope > 0:
-            self.logger.info(f"Filtered out {out_of_scope} out-of-scope URLs (not matching {self.target})")
-        
-        if skipped > 0:
-            self.logger.info(f"Skipped {skipped} invalid lines from input file")
-        
-        return urls
-    
-    def _is_valid_domain(self, line: str) -> bool:
-        """
-        Check if line is a valid domain
-        
-        Args:
-            line: Line to check
-            
-        Returns:
-            True if valid domain
-        """
-        # Simple domain validation
-        if line.startswith(('http://', 'https://')):
-            return False  # This is a URL, not a domain
-        
-        # Check for domain pattern
-        import re
-        domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
-        return bool(re.match(domain_pattern, line))
-    
     def _is_in_scope(self, url: str) -> bool:
         """
         Check if a URL is in scope for the current target
@@ -443,46 +354,6 @@ class ScanEngine:
             return url_domain == target_clean or url_domain.endswith('.' + target_clean)
         except:
             return False
-    
-    def _domain_matches_target(self, domain: str) -> bool:
-        """
-        Check if a bare domain matches the current target
-        
-        Args:
-            domain: Domain to check
-            
-        Returns:
-            True if domain matches target
-        """
-        domain_clean = domain.lower().replace('www.', '')
-        target_clean = self.target.lower().replace('www.', '')
-        
-        # Match if domain equals target or is a subdomain of target
-        return domain_clean == target_clean or domain_clean.endswith('.' + target_clean)
-    
-    async def _discover_urls_for_domain(self, domain: str) -> List[str]:
-        """
-        Discover JS URLs for a specific domain
-        
-        Args:
-            domain: Domain to discover
-            
-        Returns:
-            List of discovered JS URLs
-        """
-        urls = []
-        
-        # Fetch from Wayback (unless --no-wayback)
-        if not self.config.get('skip_wayback', False):
-            wayback_urls = await self.fetcher.fetch_wayback(domain)
-            urls.extend(wayback_urls)
-        
-        # Fetch from live site (unless --no-live)
-        if not self.config.get('skip_live', False):
-            live_urls = await self.fetcher.fetch_live(domain)
-            urls.extend(live_urls)
-        
-        return list(set(urls))  # Remove duplicates
     
     async def _cleanup(self):
         """Cleanup resources"""

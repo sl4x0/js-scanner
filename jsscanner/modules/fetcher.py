@@ -124,7 +124,13 @@ class BrowserManager:
 
 
 class Fetcher:
-    """Fetches JavaScript files from various sources"""
+    """
+    Fetches JavaScript files from various sources
+    
+    This module provides methods for fetching JS URLs from different sources
+    but does NOT make decisions about when to use them. The calling code
+    (ScanEngine) controls discovery behavior based on user configuration.
+    """
     
     def __init__(self, config: dict, logger) -> None:
         """
