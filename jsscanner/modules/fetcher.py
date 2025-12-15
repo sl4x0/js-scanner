@@ -153,15 +153,21 @@ class Fetcher:
         self.wayback_max_results = config.get('wayback', {}).get('max_results', 10000)
     
     async def initialize(self):
-        """Initialize Playwright browser"""
-        self.playwright = await async_playwright().start()
-        self.browser_manager = BrowserManager(
-            self.playwright,
-            max_concurrent=self.max_concurrent,
-            restart_after=self.restart_after,
-            headless=self.headless
-        )
-        self.logger.info("Playwright browser manager initialized")
+        """Initialize Playwright browser only if needed"""
+        # Only initialize if live scanning is enabled
+        skip_live = self.config.get('skip_live', False)
+        
+        if not skip_live:
+            self.playwright = await async_playwright().start()
+            self.browser_manager = BrowserManager(
+                self.playwright,
+                max_concurrent=self.max_concurrent,
+                restart_after=self.restart_after,
+                headless=self.headless
+            )
+            self.logger.info("Playwright browser manager initialized")
+        else:
+            self.logger.info("Playwright initialization skipped (--no-live flag)")
     
     async def cleanup(self):
         """Cleanup Playwright resources"""
