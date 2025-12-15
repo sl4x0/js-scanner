@@ -15,12 +15,20 @@ discord_status_enabled: false # Only send secret alerts, no start/complete notif
 # TruffleHog
 trufflehog_path: "/usr/local/bin/trufflehog"
 trufflehog_timeout: 300 # seconds per file
+trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 
 # Fetching
 threads: 50 # Recommended: 50 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
 timeout: 30 # seconds
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
+
+# Issue #8: Configurable timeouts
+timeouts:
+  http_request: 30
+  wayback_request: 120
+  playwright_page: 60000
+  trufflehog: 300
 
 # Playwright
 playwright:

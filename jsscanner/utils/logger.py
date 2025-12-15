@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 from colorama import Fore, Style, init
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 # Initialize colorama for Windows support
 init(autoreset=True)
@@ -58,12 +59,18 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     
-    # File handler (if specified)
+    # File handler (if specified) - Issue #17: Use rotating file handler
     if log_file:
         # Create logs directory if needed
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
         
-        file_handler = logging.FileHandler(log_file)
+        # Issue #17: Use RotatingFileHandler with 10MB max size and 5 backup files
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
         file_handler.setLevel(logging.DEBUG)
         file_formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',

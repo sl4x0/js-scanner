@@ -27,6 +27,38 @@ class SecretScanner:
         self.state = state_manager
         self.notifier = notifier
         self.trufflehog_path = config.get('trufflehog_path', 'trufflehog')
+        
+        # Rate limit concurrent TruffleHog processes (Issue #2)
+        max_concurrent = config.get('trufflehog_max_concurrent', 5)
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+        
+        # Validate TruffleHog installation (Issue #7)
+        self._validate_trufflehog()
+    
+    def _validate_trufflehog(self):
+        """Validate TruffleHog is installed and executable"""
+        import shutil
+        import subprocess
+        
+        if not shutil.which(self.trufflehog_path):
+            self.logger.error(
+                f"❌ TruffleHog not found at: {self.trufflehog_path}\n"
+                f"   Install: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin\n"
+                f"   Or update 'trufflehog_path' in config.yaml"
+            )
+            raise FileNotFoundError(f"TruffleHog not found: {self.trufflehog_path}")
+        
+        try:
+            result = subprocess.run(
+                [self.trufflehog_path, '--version'],
+                capture_output=True,
+                timeout=5
+            )
+            version = result.stdout.decode().strip()
+            self.logger.info(f"✅ TruffleHog validated: {version}")
+        except Exception as e:
+            self.logger.error(f"❌ TruffleHog is not executable: {e}")
+            raise
     
     async def scan_file(self, file_path: str, source_url: str) -> int:
         """
@@ -39,6 +71,12 @@ class SecretScanner:
         Returns:
             Number of verified secrets found
         """
+        # Rate limit concurrent TruffleHog processes (Issue #2)
+        async with self.semaphore:
+            return await self._scan_file_impl(file_path, source_url)
+    
+    async def _scan_file_impl(self, file_path: str, source_url: str) -> int:
+        """Internal implementation of file scanning"""
         self.logger.info(f"Scanning for secrets: {file_path}")
         
         secrets_found = 0

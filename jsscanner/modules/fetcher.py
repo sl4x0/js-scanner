@@ -49,7 +49,7 @@ class WaybackRateLimiter:
 class BrowserManager:
     """Manages Playwright browser instances with memory leak prevention"""
     
-    def __init__(self, playwright_instance, max_concurrent: int = 3, restart_after: int = 100, headless: bool = True):
+    def __init__(self, playwright_instance, max_concurrent: int = 3, restart_after: int = 100, headless: bool = True, logger=None):
         self.playwright = playwright_instance
         self.browser = None
         self.semaphore = asyncio.Semaphore(max_concurrent)
@@ -57,14 +57,20 @@ class BrowserManager:
         self.restart_after = restart_after
         self.headless = headless
         self.lock = asyncio.Lock()
+        self.logger = logger
     
     async def _ensure_browser(self):
         """Ensures browser is running, restarts if needed"""
         async with self.lock:
-            if self.browser is None or self.page_count >= self.restart_after:
+            should_restart = self.browser is None or self.page_count >= self.restart_after
+            
+            if should_restart:
                 if self.browser:
+                    if self.logger:
+                        self.logger.debug(f"Restarting browser (pages: {self.page_count})")
                     await self.browser.close()
                     self.page_count = 0
+                    await asyncio.sleep(1)  # Wait for cleanup (Issue #5)
                 
                 self.browser = await self.playwright.chromium.launch(
                     headless=self.headless,
@@ -73,7 +79,10 @@ class BrowserManager:
                         '--disable-dev-shm-usage',
                         '--disable-gpu',
                         '--disable-software-rasterizer',
-                        '--disable-dev-tools'
+                        '--disable-dev-tools',
+                        '--disable-background-timer-throttling',
+                        '--disable-backgrounding-occluded-windows',
+                        '--disable-renderer-backgrounding'
                     ]
                 )
     
@@ -229,7 +238,8 @@ class Fetcher:
                 self.playwright,
                 max_concurrent=self.max_concurrent,
                 restart_after=self.restart_after,
-                headless=self.headless
+                headless=self.headless,
+                logger=self.logger  # Issue #5: Pass logger for debug output
             )
             self.logger.info("Playwright browser manager initialized")
         else:
@@ -337,7 +347,59 @@ class Fetcher:
         if len(js_urls) > len(filtered_urls):
             self.logger.info(f"Filtered {len(js_urls) - len(filtered_urls)} out-of-scope URLs from Wayback")
         
-        return filtered_urls
+        # Issue #3: Warn when large result sets are detected
+        if len(filtered_urls) > 5000:
+            self.logger.warning(
+                f"⚠️  Wayback returned {len(filtered_urls)} JS files!\n"
+                f"   This may take a long time to scan.\n"
+                f"   Consider using --no-wayback for faster scanning."
+            )
+        
+        # Issue #11: Validate URLs before returning
+        validated_urls = []
+        for url in filtered_urls:
+            if self._validate_wayback_url(url):
+                validated_urls.append(url)
+            else:
+                self.logger.debug(f"[WAYBACK] Rejected malformed URL: {url[:100]}")
+        
+        if len(filtered_urls) > len(validated_urls):
+            self.logger.info(f"Filtered {len(filtered_urls) - len(validated_urls)} malformed URLs from Wayback")
+        
+        return validated_urls
+    
+    def _validate_wayback_url(self, url: str) -> bool:
+        """
+        Validate Wayback URL for safety (Issue #11)
+        
+        Args:
+            url: URL to validate
+            
+        Returns:
+            True if URL is safe, False otherwise
+        """
+        # Check URL length (max 2048 characters)
+        if len(url) > 2048:
+            return False
+        
+        # Check for null bytes
+        if '\x00' in url:
+            return False
+        
+        # Check for XSS attempts
+        url_lower = url.lower()
+        if '<script' in url_lower or 'javascript:' in url_lower:
+            return False
+        
+        # Validate character set (printable ASCII only)
+        try:
+            url.encode('ascii')
+            if not all(32 <= ord(c) <= 126 or c in '\r\n' for c in url):
+                return False
+        except UnicodeEncodeError:
+            return False
+        
+        return True
     
     async def fetch_live(self, target: str) -> List[str]:
         """
@@ -487,22 +549,47 @@ class Fetcher:
         
         return js_urls
     
-    async def fetch_content(self, url: str) -> Optional[str]:
+    async def fetch_content(self, url: str, retry_count: int = 0) -> Optional[str]:
         """
         Fetches the content of a JavaScript file
         Uses streaming to prevent loading large files into memory at once
         
         Args:
             url: URL of the JavaScript file
+            retry_count: Current retry attempt (for exponential backoff)
             
         Returns:
             Content of the file, or None if failed
         """
         max_size = self.config.get('max_file_size', 10485760)  # 10MB default
+        max_retries = 3
         
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                    # Issue #15: Handle rate limiting with exponential backoff
+                    if response.status in [429, 503]:
+                        if retry_count < max_retries:
+                            # Check for Retry-After header
+                            retry_after = response.headers.get('Retry-After')
+                            if retry_after:
+                                try:
+                                    wait_time = int(retry_after)
+                                except ValueError:
+                                    wait_time = 2 ** retry_count
+                            else:
+                                wait_time = 2 ** retry_count  # Exponential backoff: 1, 2, 4 seconds
+                            
+                            self.logger.warning(
+                                f"[RATE LIMITED] {url} (status {response.status})\n"
+                                f"  Retrying in {wait_time}s (attempt {retry_count + 1}/{max_retries})"
+                            )
+                            await asyncio.sleep(wait_time)
+                            return await self.fetch_content(url, retry_count + 1)
+                        else:
+                            self.logger.warning(f"[RATE LIMITED] {url}: Max retries exceeded")
+                            return None
+                    
                     if response.status == 200:
                         # Check content length header first
                         content_length = response.headers.get('Content-Length')
