@@ -116,7 +116,6 @@ class ASTAnalyzer:
                 # Also check for template literals with endpoints
                 elif '${' in text or text.startswith('/'):
                     # Extract potential endpoint parts
-                    import re
                     parts = re.split(r'\$\{[^}]+\}', text)
                     for part in parts:
                         if self._is_endpoint(part):
