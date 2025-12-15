@@ -250,10 +250,13 @@ class Fetcher:
         """
         self.logger.info(f"Fetching from Wayback Machine: {target}")
         
+        # Strip www. prefix to avoid *.www.domain.com pattern
+        clean_target = target.replace('http://', '').replace('https://', '').replace('www.', '')
+        
         # Get original URLs directly from Wayback CDX API
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
-            'url': f'*.{target}',
+            'url': f'*.{clean_target}',
             'matchType': 'domain',
             'fl': 'original',
             'collapse': 'digest',
@@ -370,6 +373,15 @@ class Fetcher:
                 
                 # Skip third-party scripts immediately
                 if not self._is_in_scope(url, target):
+                    return
+                
+                # Validate URL format before adding
+                if not url.startswith(('http://', 'https://')):
+                    return
+                
+                # Check for obvious corruption (spaces, invalid characters)
+                if ' ' in url or any(ord(c) < 32 or ord(c) > 126 for c in url[:100]):
+                    self.logger.debug(f"Skipping malformed URL: {url[:100]}")
                     return
                 
                 # Detect JS files by resource type OR file extension
