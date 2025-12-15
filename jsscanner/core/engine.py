@@ -338,9 +338,12 @@ class ScanEngine:
         Returns:
             List of URLs to scan
         """
+        from urllib.parse import urlparse
+        
         urls = []
         domains = []
         skipped = 0
+        out_of_scope = 0
         
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -349,10 +352,29 @@ class ScanEngine:
                     if line and not line.startswith('#'):
                         # Check if it's a JS URL
                         if '.js' in line.lower() or line.endswith('.mjs'):
-                            urls.append(line)
-                        # Check if it's a domain (for discovery)
+                            # Scope filtering: only accept URLs matching target domain
+                            if self._is_in_scope(line):
+                                urls.append(line)
+                            else:
+                                out_of_scope += 1
+                        # Check if it's a URL with protocol (httpx format)
+                        elif line.startswith(('http://', 'https://')):
+                            # Extract domain from URL for discovery
+                            parsed = urlparse(line)
+                            if parsed.netloc and self._is_in_scope(line):
+                                # Add the base URL for live scanning
+                                domain = parsed.netloc
+                                if domain not in domains:
+                                    domains.append(domain)
+                            else:
+                                out_of_scope += 1
+                        # Check if it's a bare domain (for discovery)
                         elif self._is_valid_domain(line):
-                            domains.append(line)
+                            # Scope filtering for domains
+                            if self._domain_matches_target(line):
+                                domains.append(line)
+                            else:
+                                out_of_scope += 1
                         else:
                             skipped += 1
         except (UnicodeDecodeError, IOError) as e:
@@ -361,10 +383,13 @@ class ScanEngine:
         
         # If we found domains, discover JS from them
         if domains:
-            self.logger.info(f"Found {len(domains)} domains in input file, discovering JS URLs...")
+            self.logger.info(f"Found {len(domains)} domains in input file (in-scope), discovering JS URLs...")
             for domain in domains:
                 discovered_urls = await self._discover_urls_for_domain(domain)
                 urls.extend(discovered_urls)
+        
+        if out_of_scope > 0:
+            self.logger.info(f"Filtered out {out_of_scope} out-of-scope URLs (not matching {self.target})")
         
         if skipped > 0:
             self.logger.info(f"Skipped {skipped} invalid lines from input file")
@@ -389,6 +414,51 @@ class ScanEngine:
         import re
         domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
         return bool(re.match(domain_pattern, line))
+    
+    def _is_in_scope(self, url: str) -> bool:
+        """
+        Check if a URL is in scope for the current target
+        
+        Args:
+            url: URL to check
+            
+        Returns:
+            True if URL matches target domain
+        """
+        from urllib.parse import urlparse
+        
+        try:
+            parsed = urlparse(url)
+            url_domain = parsed.netloc.lower()
+            
+            # Remove port if present
+            if ':' in url_domain:
+                url_domain = url_domain.split(':')[0]
+            
+            # Remove www. prefix for comparison
+            url_domain = url_domain.replace('www.', '')
+            target_clean = self.target.lower().replace('www.', '')
+            
+            # Match if URL domain ends with target (supports subdomains)
+            return url_domain == target_clean or url_domain.endswith('.' + target_clean)
+        except:
+            return False
+    
+    def _domain_matches_target(self, domain: str) -> bool:
+        """
+        Check if a bare domain matches the current target
+        
+        Args:
+            domain: Domain to check
+            
+        Returns:
+            True if domain matches target
+        """
+        domain_clean = domain.lower().replace('www.', '')
+        target_clean = self.target.lower().replace('www.', '')
+        
+        # Match if domain equals target or is a subdomain of target
+        return domain_clean == target_clean or domain_clean.endswith('.' + target_clean)
     
     async def _discover_urls_for_domain(self, domain: str) -> List[str]:
         """

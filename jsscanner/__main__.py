@@ -50,16 +50,42 @@ async def main():
     if args.no_live:
         config['skip_live'] = True
     
-    # Initialize engine
-    engine = ScanEngine(config, args.target)
+    # Parse multiple targets (comma-separated)
+    targets = [t.strip() for t in args.target.split(',') if t.strip()]
+    
+    if len(targets) > 1:
+        print(f"\n🎯 Targets detected: {len(targets)}")
+        print("="*60)
     
     # Prepare scan parameters
     input_file = args.input
     urls = args.urls
     
-    # Run scan
+    # Run scan for each target sequentially
     try:
-        await engine.run(input_file=input_file, urls=urls)
+        for idx, target in enumerate(targets, 1):
+            if len(targets) > 1:
+                print(f"\n{'='*60}")
+                print(f"🚀 STARTING SCAN {idx}/{len(targets)}: {target}")
+                print("="*60)
+            
+            # Initialize engine for this target
+            engine = ScanEngine(config, target)
+            
+            # Run scan
+            await engine.run(input_file=input_file, urls=urls)
+            
+            if len(targets) > 1 and idx < len(targets):
+                print(f"\n✓ Completed scan {idx}/{len(targets)} for {target}")
+                print(f"\n{'='*60}")
+                print(f"Preparing next target...")
+                await asyncio.sleep(1)  # Brief pause between scans
+        
+        if len(targets) > 1:
+            print(f"\n{'='*60}")
+            print(f"✅ ALL SCANS COMPLETED ({len(targets)} targets)")
+            print("="*60)
+            
     except KeyboardInterrupt:
         print("\n\nScan interrupted by user")
         sys.exit(0)
