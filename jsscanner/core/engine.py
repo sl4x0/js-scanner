@@ -204,6 +204,17 @@ class ScanEngine:
         if depth >= max_depth:
             self.logger.debug(f"Max depth {max_depth} reached for {url}")
             return
+        
+        # Skip third-party domains
+        if not self._is_target_domain(url):
+            self.logger.debug(f"Skipping third-party domain: {url}")
+            return
+        
+        # Validate URL
+        if not self._is_valid_js_url(url):
+            self.logger.debug(f"Invalid JS URL: {url}")
+            return
+        
         try:
             self.logger.info(f"Processing: {url}")
             
@@ -280,14 +291,24 @@ class ScanEngine:
             filepath: Path to input file
             
         Returns:
-            List of URLs
+            List of URLs (filtered for JS files only)
         """
         urls = []
+        skipped = 0
+        
         with open(filepath, 'r') as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith('#'):
-                    urls.append(line)
+                    # Only add if it looks like a JS file
+                    if '.js' in line.lower() or line.endswith('.mjs'):
+                        urls.append(line)
+                    else:
+                        skipped += 1
+        
+        if skipped > 0:
+            self.logger.info(f"Skipped {skipped} non-JS URLs from input file")
+        
         return urls
     
     async def _cleanup(self):
@@ -314,3 +335,86 @@ class ScanEngine:
         for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
             target = target.replace(char, '_')
         return target
+    
+    def _is_target_domain(self, url: str) -> bool:
+        """
+        Checks if URL belongs to target domain or subdomain
+        
+        Args:
+            url: URL to check
+            
+        Returns:
+            True if URL is from target domain/subdomain
+        """
+        from urllib.parse import urlparse
+        
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            # Remove port if present
+            if ':' in domain:
+                domain = domain.split(':')[0]
+            
+            # Check if exact match or subdomain
+            target_lower = self.target.lower()
+            
+            # Remove protocol from target if present
+            target_lower = target_lower.replace('https://', '').replace('http://', '')
+            
+            # Check if it's the target domain or a subdomain
+            if domain == target_lower:
+                return True
+            if domain.endswith('.' + target_lower):
+                return True
+                
+            return False
+            
+        except Exception:
+            return False
+    
+    @staticmethod
+    def _is_valid_js_url(url: str) -> bool:
+        """
+        Validates if URL is a valid JS file
+        
+        Args:
+            url: URL to validate
+            
+        Returns:
+            True if valid JS URL
+        """
+        from urllib.parse import urlparse
+        
+        try:
+            # Must start with http/https
+            if not url.startswith(('http://', 'https://')):
+                return False
+            
+            parsed = urlparse(url)
+            
+            # Must have domain
+            if not parsed.netloc:
+                return False
+            
+            # Must have path
+            if not parsed.path or parsed.path == '/':
+                return False
+            
+            # Check for obvious invalid patterns
+            if ' ' in url:  # Spaces in URL
+                return False
+            if parsed.path.endswith('/.js'):  # Empty filename
+                return False
+            if parsed.path == '/.js':
+                return False
+                
+            # Must be JS file
+            path_lower = parsed.path.lower()
+            if not ('.js' in path_lower or parsed.path.endswith('.mjs')):
+                return False
+                
+            return True
+            
+        except Exception:
+            return False
