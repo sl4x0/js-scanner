@@ -4,6 +4,7 @@ Main orchestrator that routes input to appropriate modules
 """
 import asyncio
 import aiohttp
+import json
 import time
 from pathlib import Path
 from typing import Optional, List
@@ -140,8 +141,11 @@ class ScanEngine:
             # Process each URL with progress indicator
             total_urls = len(urls_to_scan)
             for idx, url in enumerate(urls_to_scan, 1):
+                # Calculate progress percentage
+                progress = (idx / total_urls) * 100
+                
                 self.logger.info(f"\n{'='*80}")
-                self.logger.info(f"📍 [{idx}/{total_urls}] Processing: {url}")
+                self.logger.info(f"📍 [{idx}/{total_urls}] ({progress:.1f}%) Processing: {url}")
                 self.logger.info(f"{'='*80}")
                 await self._process_url(url)
             
@@ -159,6 +163,26 @@ class ScanEngine:
             
             # Log and send final stats
             log_stats(self.logger, self.stats)
+            
+            # Export results as JSON
+            results_json = {
+                'target': self.target,
+                'scan_date': datetime.utcnow().isoformat() + 'Z',
+                'statistics': self.stats,
+                'files_scanned': urls_to_scan,
+                'secrets_found': self.state.get_total_secrets(),
+                'extracts': {
+                    'endpoints': self._read_extract_file('endpoints.txt'),
+                    'params': self._read_extract_file('params.txt'),
+                    'domains': self._read_extract_file('domains.txt')
+                }
+            }
+            
+            json_output = Path(self.paths['base']) / 'scan_results.json'
+            with open(json_output, 'w') as f:
+                json.dump(results_json, f, indent=2)
+            
+            self.logger.info(f"📄 Results exported to: {json_output}")
             
             # Only send completion status if enabled
             if self.config.get('discord_status_enabled', False):
@@ -355,6 +379,25 @@ class ScanEngine:
         except:
             return False
     
+    def _read_extract_file(self, filename: str) -> List[str]:
+        """Read lines from an extract file
+        
+        Args:
+            filename: Name of the extract file (e.g., 'endpoints.txt')
+            
+        Returns:
+            List of lines from the file, or empty list if file doesn't exist
+        """
+        extract_path = Path(self.paths['extracts']) / filename
+        if extract_path.exists():
+            try:
+                with open(extract_path, 'r', encoding='utf-8') as f:
+                    return [line.strip() for line in f if line.strip()]
+            except Exception as e:
+                self.logger.debug(f"Could not read {filename}: {e}")
+                return []
+        return []
+    
     async def _cleanup(self):
         """Cleanup resources"""
         if self.fetcher:
@@ -422,6 +465,38 @@ class ScanEngine:
         return deduplicated
     
     @staticmethod
+    def _extract_root_domain(domain: str) -> str:
+        """
+        Extract root domain handling multi-part TLDs
+        
+        Args:
+            domain: Domain to extract from
+            
+        Returns:
+            Root domain
+        """
+        # Known multi-part TLDs
+        multi_part_tlds = [
+            'co.uk', 'com.au', 'co.jp', 'co.za', 'com.br',
+            'co.in', 'co.nz', 'com.mx', 'co.il', 'com.ar'
+        ]
+        
+        parts = domain.split('.')
+        
+        # Check for multi-part TLD
+        if len(parts) >= 3:
+            potential_tld = '.'.join(parts[-2:])
+            if potential_tld in multi_part_tlds:
+                # Return last 3 parts (subdomain.domain.co.uk)
+                return '.'.join(parts[-3:])
+        
+        # Standard TLD
+        if len(parts) >= 2:
+            return '.'.join(parts[-2:])
+        
+        return domain
+    
+    @staticmethod
     def _sanitize_target_name(target: str) -> str:
         """
         Sanitizes target name for use as directory name
@@ -471,24 +546,16 @@ class ScanEngine:
             if ':' in domain:
                 domain = domain.split(':')[0]
             
-            # Extract root domain (last 2 parts)
-            # e.g., subdomain.powerschool.com -> powerschool.com
-            domain_parts = domain.split('.')
-            if len(domain_parts) >= 2:
-                root_domain = '.'.join(domain_parts[-2:])
-            else:
-                root_domain = domain
+            # Extract root domain using helper method (handles multi-part TLDs)
+            root_domain = self._extract_root_domain(domain)
             
             # Get target root domain
             target_lower = self.target.lower()
             target_lower = target_lower.replace('https://', '').replace('http://', '')
             target_lower = target_lower.replace('www.', '')
             
-            target_parts = target_lower.split('.')
-            if len(target_parts) >= 2:
-                target_root = '.'.join(target_parts[-2:])
-            else:
-                target_root = target_lower
+            # Extract target root domain using helper method
+            target_root = self._extract_root_domain(target_lower)
             
             # Strict match: root domains must be identical
             if root_domain == target_root:

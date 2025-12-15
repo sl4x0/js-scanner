@@ -36,6 +36,10 @@ class WaybackRateLimiter:
             # Wait if no tokens available
             if self.tokens < 1:
                 wait_time = (1 - self.tokens) / self.rate
+                # Log rate limiting activity
+                import logging
+                logger = logging.getLogger('jsscanner')
+                logger.debug(f"⏳ Wayback rate limit: waiting {wait_time:.2f}s")
                 await asyncio.sleep(wait_time)
                 self.tokens = 1
             
@@ -445,7 +449,30 @@ class Fetcher:
             self.logger.warning(f"[TIMEOUT] Live scan timed out after {self.page_timeout/1000}s for {target}")
             return list(js_urls)  # Return what we found so far
         except Exception as e:
-            self.logger.warning(f"[ERROR] Live scan failed for {target}: {str(e)[:100]}")
+            error_msg = str(e)
+            
+            # Detect specific error types and provide helpful messages
+            if "Download is starting" in error_msg or "download" in error_msg.lower():
+                self.logger.info(f"⚠️  URL triggers a download (not a page): {target}")
+                self.logger.info(f"   This is expected for API endpoints or direct file downloads")
+                # If the URL itself looks like a JS file, we could try fetching it directly
+                if target.endswith('.js') or target.endswith('.mjs') or '.js?' in target:
+                    self.logger.info(f"   URL appears to be a JS file - it will be fetched directly later")
+                    js_urls.add(target)
+            elif "net::ERR_NAME_NOT_RESOLVED" in error_msg or "NS_ERROR_UNKNOWN_HOST" in error_msg:
+                self.logger.warning(f"[DNS ERROR] Could not resolve domain: {target}")
+            elif "net::ERR_CONNECTION_REFUSED" in error_msg or "ERR_CONNECTION_CLOSED" in error_msg:
+                self.logger.warning(f"[CONNECTION REFUSED] Server rejected connection: {target}")
+            elif "net::ERR_CERT" in error_msg or "SSL" in error_msg or "certificate" in error_msg.lower():
+                self.logger.warning(f"[SSL ERROR] Certificate validation failed: {target}")
+            elif "net::ERR_ABORTED" in error_msg:
+                self.logger.info(f"⚠️  Navigation aborted (redirect or client-side routing): {target}")
+            elif "Target closed" in error_msg or "Protocol error" in error_msg:
+                self.logger.warning(f"[BROWSER ERROR] Browser/page closed unexpectedly: {target}")
+            else:
+                # Generic error for unexpected cases
+                self.logger.warning(f"[ERROR] Live scan failed for {target}: {error_msg[:150]}")
+            
             return list(js_urls)  # Return what we found so far
         finally:
             if page:
