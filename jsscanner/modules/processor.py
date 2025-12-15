@@ -12,7 +12,7 @@ from typing import Optional
 class Processor:
     """Processes JavaScript files (beautify, extract source maps)"""
     
-    def __init__(self, logger):
+    def __init__(self, logger) -> None:
         """
         Initialize processor
         
@@ -53,12 +53,18 @@ class Processor:
             
         Returns:
             Beautified JavaScript
+            
+        Raises:
+            ValueError: If content is invalid
         """
         try:
             beautified = jsbeautifier.beautify(content, self.beautifier_options)
             return beautified
+        except (ValueError, TypeError) as e:
+            self.logger.warning(f"Failed to beautify (invalid content): {e}")
+            return content
         except Exception as e:
-            self.logger.warning(f"Failed to beautify: {e}")
+            self.logger.error(f"Unexpected error during beautification: {e}", exc_info=True)
             return content
     
     async def _extract_source_map(self, content: str, file_path: str) -> Optional[str]:
@@ -91,8 +97,12 @@ class Processor:
                     )
                     return combined_source
                 
+            except json.JSONDecodeError as e:
+                self.logger.warning(f"Failed to parse source map JSON: {e}")
+            except (KeyError, ValueError) as e:
+                self.logger.warning(f"Invalid source map structure: {e}")
             except Exception as e:
-                self.logger.warning(f"Failed to extract inline source map: {e}")
+                self.logger.error(f"Unexpected error extracting source map: {e}", exc_info=True)
         
         # Look for external source map reference
         external_pattern = r'//# sourceMappingURL=(.+\.map)'

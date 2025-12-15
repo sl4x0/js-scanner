@@ -13,7 +13,7 @@ from ..utils.file_ops import FileOps
 class ASTAnalyzer:
     """Analyzes JavaScript using AST parsing"""
     
-    def __init__(self, config: dict, logger, paths: dict):
+    def __init__(self, config: dict, logger, paths: dict) -> None:
         """
         Initialize AST analyzer
         
@@ -125,6 +125,11 @@ class ASTAnalyzer:
     
     def _parse_content(self, content: str):
         """Synchronous tree-sitter parsing (CPU-bound)"""
+        # Prevent memory issues with very large files
+        if len(content) > 5 * 1024 * 1024:  # 5MB
+            self.logger.warning(f"Skipping AST parsing for file >5MB (too large)")
+            raise ValueError("File too large for AST parsing")
+        
         return self.parser.parse(bytes(content, 'utf8'))
     
     def _extract_endpoints_sync(self, node, content: str) -> List[str]:
@@ -319,10 +324,16 @@ class ASTAnalyzer:
         if not (text.startswith('/') or text.startswith('http')):
             return False
         
-        # Common API patterns
+        # Expanded API patterns for better detection
         api_indicators = [
             '/api/', '/v1/', '/v2/', '/v3/', '/graphql', '/rest/', '/ajax/',
-            '/ws/', '/wss/', '/socket', '/endpoint', '/service'
+            '/ws/', '/wss/', '/socket', '/endpoint', '/service',
+            # REST and RPC patterns
+            '/data/', '/query/', '/mutation/', '/rpc/', '/jsonrpc',
+            # Admin/access patterns
+            '/admin/', '/internal/', '/private/', '/public/',
+            # Subdomain patterns
+            'api.', 'gateway.', 'service.'
         ]
         
         text_lower = text.lower()

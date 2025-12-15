@@ -65,6 +65,7 @@ class SecretScanner:
             # Read output line by line (streaming) with total timeout
             # Create async task for reading
             start_time = time.time()
+            file_secrets = []  # ✅ OPTIMIZATION: Collect secrets for batch notification
             try:
                 while True:
                     # Check timeout
@@ -117,8 +118,8 @@ class SecretScanner:
                             # Save to state
                             self.state.add_secret(secret_data)
                             
-                            # Queue Discord alert (instant notification)
-                            await self.notifier.queue_alert(secret_data)
+                            # ✅ OPTIMIZATION: Collect secrets for batch notification
+                            file_secrets.append(secret_data)
                             
                             self.logger.warning(
                                 f"🔐 VERIFIED SECRET: {secret_data.get('DetectorName', 'Unknown')} "
@@ -134,11 +135,18 @@ class SecretScanner:
             
             except Exception as e:
                 self.logger.error(f"Error reading TruffleHog output: {e}")
-                process.kill()
-                await process.wait()
+            finally:
+                # Always clean up the process to prevent zombies
+                if process and process.returncode is None:
+                    process.kill()
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=5)
+                    except asyncio.TimeoutError:
+                        self.logger.error("TruffleHog process did not terminate, forcing kill")
             
-            # Wait for process to complete
-            await process.wait()
+            # ✅ OPTIMIZATION: Send batch notification instead of individual alerts
+            if file_secrets:
+                await self.notifier.queue_batch_alert(file_secrets, file_path)
             
             if secrets_found > 0:
                 self.logger.info(f"Found {secrets_found} verified secrets in {file_path}")

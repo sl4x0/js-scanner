@@ -20,7 +20,7 @@ class WaybackRateLimiter:
         self.last_update = time.time()
         self.lock = asyncio.Lock()
     
-    async def acquire(self):
+    async def acquire(self) -> None:
         """Acquire a token, waiting if necessary"""
         async with self.lock:
             now = time.time()
@@ -126,7 +126,7 @@ class BrowserManager:
 class Fetcher:
     """Fetches JavaScript files from various sources"""
     
-    def __init__(self, config: dict, logger):
+    def __init__(self, config: dict, logger) -> None:
         """
         Initialize fetcher
         
@@ -203,8 +203,13 @@ class Fetcher:
         except Exception:
             return False
     
-    async def initialize(self):
-        """Initialize Playwright browser only if needed"""
+    async def initialize(self) -> None:
+        """
+        Initialize Playwright browser only if needed
+        
+        Raises:
+            Exception: If Playwright initialization fails
+        """
         # Only initialize if live scanning is enabled
         skip_live = self.config.get('skip_live', False)
         
@@ -220,8 +225,13 @@ class Fetcher:
         else:
             self.logger.info("Playwright initialization skipped (--no-live flag)")
     
-    async def cleanup(self):
-        """Cleanup Playwright resources"""
+    async def cleanup(self) -> None:
+        """
+        Cleanup Playwright resources
+        
+        Raises:
+            Exception: If cleanup fails
+        """
         if self.browser_manager:
             await self.browser_manager.close()
         if self.playwright:
@@ -244,9 +254,11 @@ class Fetcher:
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
             'url': f'*.{target}',
+            'matchType': 'domain',
             'fl': 'original',
-            'collapse': 'urlkey',
-            'filter': ['statuscode:200', 'mimetype:application/javascript']
+            'collapse': 'digest',
+            'filter': ['statuscode:200', 'mimetype:application/javascript'],
+            'limit': self.wayback_max_results
         }
         
         js_urls = set()  # Use set for automatic deduplication
@@ -337,9 +349,19 @@ class Fetcher:
         try:
             self.logger.info(f"Opening page in headless browser...")
             await self.browser_manager._ensure_browser()
-            context = await self.browser_manager.browser.new_context()
+            
+            # Create stealth context to bypass anti-bot measures
+            context = await self.browser_manager.browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                ignore_https_errors=True,
+                java_script_enabled=True,
+                bypass_csp=True
+            )
+            
             page = await context.new_page()
-            page.set_default_timeout(self.page_timeout)
+            # Increase timeout to 60 seconds for sites with anti-bot protection
+            page.set_default_timeout(60000)
             
             # Track all JS requests (with strict domain filtering)
             async def handle_request(request):
@@ -423,6 +445,7 @@ class Fetcher:
     async def fetch_content(self, url: str) -> Optional[str]:
         """
         Fetches the content of a JavaScript file
+        Uses streaming to prevent loading large files into memory at once
         
         Args:
             url: URL of the JavaScript file
@@ -445,7 +468,7 @@ class Fetcher:
                             )
                             return None
                         
-                        # Stream and check size incrementally
+                        # ✅ OPTIMIZATION: Stream and check size incrementally (prevents memory overflow)
                         chunks = []
                         total_size = 0
                         
@@ -461,12 +484,16 @@ class Fetcher:
                         content = b''.join(chunks).decode('utf-8', errors='ignore')
                         
                         # Detect soft 404s - HTML error pages with 200 status
-                        if content.strip().startswith('<!DOCTYPE html') or '<html' in content[:100].lower():
-                            self.logger.warning(f"Skipping {url}: Content appears to be HTML, not JS")
+                        content_start = content.strip()[:500].lower()
+                        if ('<!doctype html' in content_start or 
+                            '<html' in content_start or
+                            '<head>' in content_start or
+                            content_start.startswith('<!')):
+                            self.logger.debug(f"Skipping {url}: Content is HTML, not JS")
                             return None
                         
-                        # Check if content is actually empty or whitespace only
-                        if not content or len(content.strip()) < 10:
+                        # Check if content is actually empty or whitespace only (allow minified JS)
+                        if not content or len(content.strip()) < 50:
                             self.logger.debug(f"Skipping {url}: Content is empty or too short")
                             return None
                         
@@ -479,16 +506,32 @@ class Fetcher:
                             self.logger.debug(f"Skipping {url}: status {response.status}")
                         return None
         except asyncio.TimeoutError:
-            self.logger.debug(f"[TIMEOUT] {url}")
+            self.logger.warning(
+                f"[TIMEOUT] {url}\n"
+                f"  Error: Request exceeded 30 second timeout\n"
+                f"  Possible causes: Slow server, network congestion, or firewall blocking"
+            )
             return None
         except aiohttp.ClientConnectorError as e:
-            self.logger.debug(f"[DNS/CONN] Cannot reach {url}: {str(e)[:50]}")
+            self.logger.warning(
+                f"[CONNECTION FAILED] {url}\n"
+                f"  Error: {str(e)[:100]}\n"
+                f"  Possible causes: DNS failure, network block, or invalid domain"
+            )
             return None
         except aiohttp.ClientError as e:
-            self.logger.debug(f"[HTTP] Failed {url}: {str(e)[:50]}")
+            self.logger.warning(
+                f"[HTTP ERROR] {url}\n"
+                f"  Error: {str(e)[:100]}\n"
+                f"  Possible causes: Invalid response, connection reset, or server error"
+            )
             return None
         except Exception as e:
-            self.logger.debug(f"[ERROR] {url}: {str(e)[:50]}")
+            self.logger.warning(
+                f"[UNEXPECTED ERROR] {url}\n"
+                f"  Error: {str(e)[:100]}\n"
+                f"  Type: {type(e).__name__}"
+            )
             return None
     
     async def fetch_with_playwright(self, url: str) -> Optional[str]:
@@ -515,8 +558,11 @@ class Fetcher:
             
             return content
             
+        except asyncio.TimeoutError as e:
+            self.logger.error(f"Playwright timeout for {url}: {e}")
+            return None
         except Exception as e:
-            self.logger.error(f"Error fetching with Playwright {url}: {e}")
+            self.logger.error(f"Unexpected error fetching with Playwright {url}: {e}", exc_info=True)
             return None
         finally:
             # CRITICAL: Always close
