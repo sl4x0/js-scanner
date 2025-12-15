@@ -442,44 +442,65 @@ class ScanEngine:
     
     def _is_target_domain(self, url: str) -> bool:
         """
-        Checks if URL belongs to target domain or subdomain
+        Strictly checks if URL belongs to target domain or subdomain
+        Rejects all third-party domains, blob URLs, data URLs, etc.
         
         Args:
             url: URL to check
             
         Returns:
-            True if URL is from target domain/subdomain
+            True if URL is from target domain/subdomain ONLY
         """
         from urllib.parse import urlparse
         
         try:
+            # Reject non-HTTP schemes immediately
+            if not url.startswith(('http://', 'https://')):
+                self.logger.debug(f"[SCOPE] Rejected non-HTTP URL: {url}")
+                return False
+            
             parsed = urlparse(url)
             domain = parsed.netloc.lower()
+            
+            # Must have a domain
+            if not domain:
+                return False
             
             # Remove port if present
             if ':' in domain:
                 domain = domain.split(':')[0]
             
-            # Remove www. prefix for comparison
-            domain = domain.replace('www.', '')
+            # Extract root domain (last 2 parts)
+            # e.g., subdomain.powerschool.com -> powerschool.com
+            domain_parts = domain.split('.')
+            if len(domain_parts) >= 2:
+                root_domain = '.'.join(domain_parts[-2:])
+            else:
+                root_domain = domain
             
-            # Check if exact match or subdomain
+            # Get target root domain
             target_lower = self.target.lower()
-            
-            # Remove protocol from target if present
             target_lower = target_lower.replace('https://', '').replace('http://', '')
-            # Remove www. prefix from target
             target_lower = target_lower.replace('www.', '')
             
-            # Check if it's the target domain or a subdomain
-            if domain == target_lower:
+            target_parts = target_lower.split('.')
+            if len(target_parts) >= 2:
+                target_root = '.'.join(target_parts[-2:])
+            else:
+                target_root = target_lower
+            
+            # Strict match: root domains must be identical
+            if root_domain == target_root:
                 return True
-            if domain.endswith('.' + target_lower):
-                return True
-                
+            
+            # Log rejection for visibility
+            if root_domain != target_root:
+                self.logger.debug(f"[SCOPE] Rejected third-party: {domain} (target: {target_root})")
+            
             return False
             
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"[SCOPE] Parse error for {url}: {e}")
             return False
     
     @staticmethod
