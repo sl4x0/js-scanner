@@ -674,7 +674,7 @@ class ScanEngine:
                 '.mjs#' in full_url_lower or
                 '.cts?' in full_url_lower or
                 '.cts#' in full_url_lower or
-                '.mjs?' in full_url_lower or
+                '.mts?' in full_url_lower or
                 '.mts#' in full_url_lower):
                 return True
             
