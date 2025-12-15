@@ -537,10 +537,18 @@ class Fetcher:
             
             return list(js_urls)  # Return what we found so far
         finally:
-            if page:
-                await page.close()
-            if context:
-                await context.close()
+            # Graceful cleanup - handle already-closed browser/context
+            try:
+                if page:
+                    await page.close()
+            except Exception:
+                pass  # Page already closed, ignore
+            
+            try:
+                if context:
+                    await context.close()
+            except Exception:
+                pass  # Context already closed, ignore
         
         # Convert set to list (deduplication already done)
         js_urls = list(js_urls)

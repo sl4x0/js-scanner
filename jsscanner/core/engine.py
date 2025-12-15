@@ -6,6 +6,7 @@ import asyncio
 import aiohttp
 import json
 import time
+import signal
 from pathlib import Path
 from typing import Optional, List
 from ..utils.file_ops import FileOps
@@ -51,6 +52,9 @@ class ScanEngine:
         self.ast_analyzer = None
         self.crawler = None
         
+        # Shutdown flag for graceful exit
+        self.shutdown_requested = False
+        
         # Statistics
         self.start_time = None
         self.stats = {
@@ -77,6 +81,15 @@ class ScanEngine:
             'discovery_mode': discovery_mode
         })
         
+        # Setup signal handlers for graceful shutdown
+        def signal_handler(signum, frame):
+            if not self.shutdown_requested:
+                self.shutdown_requested = True
+                self.logger.warning("\n⚠️  Shutdown requested (Ctrl+C). Cleaning up...")
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
         try:
             # Start Discord notifier
             await self.notifier.start()
@@ -97,6 +110,11 @@ class ScanEngine:
             urls_to_scan = []
             
             for item in inputs:
+                # Check if shutdown was requested
+                if self.shutdown_requested:
+                    self.logger.warning("Shutdown requested, stopping input processing")
+                    break
+                
                 # CASE A: It's already a full JS URL (scan immediately)
                 if self._is_valid_js_url(item):
                     self.logger.info(f"✓ Direct JS URL: {item}")
