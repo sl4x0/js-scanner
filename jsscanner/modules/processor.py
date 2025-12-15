@@ -57,9 +57,19 @@ class Processor:
         Raises:
             ValueError: If content is invalid
         """
+        import asyncio
+        
         try:
-            beautified = jsbeautifier.beautify(content, self.beautifier_options)
+            # Issue #14: Wrap beautification in timeout to prevent hanging on large files
+            loop = asyncio.get_event_loop()
+            beautified = await asyncio.wait_for(
+                loop.run_in_executor(None, jsbeautifier.beautify, content, self.beautifier_options),
+                timeout=30.0
+            )
             return beautified
+        except asyncio.TimeoutError:
+            self.logger.warning(f"Beautification timed out after 30s, using original content")
+            return content
         except (ValueError, TypeError) as e:
             self.logger.warning(f"Failed to beautify (invalid content): {e}")
             return content

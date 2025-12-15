@@ -30,27 +30,25 @@ class ASTAnalyzer:
         # Initialize Tree-sitter parser
         try:
             import tree_sitter_javascript as tsjavascript
+            import tree_sitter
             
             # Get the language
             language = tsjavascript.language()
             
-            # Try new API first (v0.22+)
-            try:
+            # Issue #12: Check tree-sitter version explicitly
+            ts_version = tuple(map(int, tree_sitter.__version__.split('.')[:2]))
+            
+            if ts_version >= (0, 22):
+                # New API (v0.22+)
                 self.parser = Parser()
-                if hasattr(self.parser, 'set_language'):
-                    self.parser.set_language(language)
-                else:
-                    # Old API (v0.20-0.21) - requires Language wrapper
-                    from tree_sitter import Language
-                    js_lang = Language(language)
-                    self.parser = Parser(js_lang)
-            except Exception:
-                # Fallback: try old API with Language wrapper
+                self.parser.set_language(language)
+            else:
+                # Old API (v0.20-0.21) - requires Language wrapper
                 from tree_sitter import Language
                 js_lang = Language(language)
                 self.parser = Parser(js_lang)
             
-            self.logger.info("Tree-sitter parser initialized")
+            self.logger.info(f"Tree-sitter parser initialized (v{tree_sitter.__version__})")
         except Exception as e:
             self.logger.warning(f"Failed to initialize Tree-sitter: {e}")
             self.parser = None
@@ -122,6 +120,12 @@ class ASTAnalyzer:
         except Exception as e:
             self.logger.error(f"AST analysis failed: {e}")
             await self._analyze_with_regex(content, source_url)
+        finally:
+            # Issue #6: Explicit cleanup to prevent memory leaks
+            if 'tree' in locals():
+                del tree
+            if 'root_node' in locals():
+                del root_node
     
     def _parse_content(self, content: str):
         """Synchronous tree-sitter parsing (CPU-bound)"""
@@ -135,7 +139,13 @@ class ASTAnalyzer:
             self.logger.debug(f"Skipping AST parsing for file <10 bytes (too small)")
             raise ValueError("File too small for meaningful AST parsing")
         
-        return self.parser.parse(bytes(content, 'utf8'))
+        tree = self.parser.parse(bytes(content, 'utf8'))
+        
+        # Issue #6: Validate parsed tree
+        if not tree or not tree.root_node:
+            raise ValueError("Failed to parse JavaScript")
+        
+        return tree
     
     def _extract_endpoints_sync(self, node, content: str) -> List[str]:
         """Extracts API endpoints from AST (synchronous for executor)"""

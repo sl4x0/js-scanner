@@ -123,11 +123,18 @@ Performance Tips:
         help='Enable verbose output'
     )
     
+    # Issue #16: Enhanced --version with dependency versions
     parser.add_argument(
         '--version',
-        action='version',
-        version='JS Scanner v1.0.0'
+        action='store_true',
+        help='Show version information including dependencies'
     )
+    
+    # Parse args, but check for --version first
+    if '--version' in sys.argv:
+        # Return early with version flag set, skip validation
+        args = argparse.Namespace(version=True)
+        return args
     
     args = parser.parse_args()
     

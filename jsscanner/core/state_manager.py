@@ -3,10 +3,16 @@ State Manager
 Handles JSON file operations with file locking for thread-safe access
 """
 import json
-import fcntl
 import os
+import sys
 from typing import List, Dict, Any
 from pathlib import Path
+
+# Platform-specific imports for file locking
+if sys.platform == 'win32':
+    import msvcrt
+else:
+    import fcntl
 
 
 class StateManager:
@@ -24,6 +30,28 @@ class StateManager:
         self.secrets_file = self.target_path / 'secrets.json'
         self.metadata_file = self.target_path / 'metadata.json'
     
+    def _lock_file(self, file_obj, exclusive=True):
+        """Cross-platform file locking"""
+        if sys.platform == 'win32':
+            # Windows file locking
+            try:
+                msvcrt.locking(file_obj.fileno(), msvcrt.LK_LOCK if exclusive else msvcrt.LK_NBLCK, 1)
+            except:
+                pass  # Ignore locking errors on Windows
+        else:
+            # Unix file locking
+            fcntl.flock(file_obj.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+    
+    def _unlock_file(self, file_obj):
+        """Cross-platform file unlocking"""
+        if sys.platform == 'win32':
+            try:
+                msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 1)
+            except:
+                pass  # Ignore unlocking errors on Windows
+        else:
+            fcntl.flock(file_obj.fileno(), fcntl.LOCK_UN)
+    
     def is_scanned(self, file_hash: str) -> bool:
         """
         Checks if a file hash has already been scanned
@@ -36,13 +64,13 @@ class StateManager:
         """
         with open(self.history_file, 'r+') as f:
             # Acquire shared lock for reading
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            self._lock_file(f, exclusive=False)
             try:
                 data = json.load(f)
                 scanned_hashes = data.get('scanned_hashes', [])
                 return file_hash in scanned_hashes
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
     
     def mark_as_scanned(self, file_hash: str, url: str = None):
         """
@@ -54,7 +82,7 @@ class StateManager:
         """
         with open(self.history_file, 'r+') as f:
             # Acquire exclusive lock for writing
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            self._lock_file(f, exclusive=True)
             try:
                 f.seek(0)
                 data = json.load(f)
@@ -75,7 +103,7 @@ class StateManager:
                     f.truncate()
                     json.dump(data, f, indent=2)
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
     
     def mark_as_scanned_if_new(self, file_hash: str, url: str = None) -> bool:
         """
@@ -90,7 +118,7 @@ class StateManager:
             True if newly marked (should process), False if already exists (skip)
         """
         with open(self.history_file, 'r+') as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            self._lock_file(f, exclusive=True)
             try:
                 f.seek(0)
                 data = json.load(f)
@@ -115,7 +143,7 @@ class StateManager:
                 json.dump(data, f, indent=2)
                 return True  # Newly added
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
     
     def add_secret(self, secret_data: Dict[str, Any]):
         """
@@ -126,7 +154,7 @@ class StateManager:
         """
         with open(self.secrets_file, 'r+') as f:
             # Acquire exclusive lock
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            self._lock_file(f, exclusive=True)
             try:
                 f.seek(0)
                 secrets = json.load(f)
@@ -141,7 +169,7 @@ class StateManager:
                 f.truncate()
                 json.dump(secrets, f, indent=2)
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
     
     def update_metadata(self, updates: Dict[str, Any]):
         """
@@ -152,7 +180,7 @@ class StateManager:
         """
         with open(self.metadata_file, 'r+') as f:
             # Acquire exclusive lock
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            self._lock_file(f, exclusive=True)
             try:
                 f.seek(0)
                 metadata = json.load(f)
@@ -175,7 +203,7 @@ class StateManager:
                 f.truncate()
                 json.dump(metadata, f, indent=2)
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
     
     def get_metadata(self) -> Dict[str, Any]:
         """
@@ -185,11 +213,11 @@ class StateManager:
             Dictionary containing metadata
         """
         with open(self.metadata_file, 'r') as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            self._lock_file(f, exclusive=False)
             try:
                 return json.load(f)
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
     
     def get_total_secrets(self) -> int:
         """
@@ -199,12 +227,12 @@ class StateManager:
             Count of secrets
         """
         with open(self.secrets_file, 'r') as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            self._lock_file(f, exclusive=False)
             try:
                 secrets = json.load(f)
                 return len(secrets)
             finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                self._unlock_file(f)
     
     @staticmethod
     def _get_timestamp() -> str:

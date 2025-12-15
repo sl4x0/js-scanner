@@ -3,16 +3,25 @@
 # Get your webhook from: Discord Server > Settings > Integrations > Webhooks
 discord_webhook: "YOUR_DISCORD_WEBHOOK_URL_HERE"
 discord_rate_limit: 30  # messages per minute
+discord_status_enabled: false  # Only send secret alerts, no start/complete notifications
 
 # TruffleHog
 trufflehog_path: "/usr/local/bin/trufflehog"
 trufflehog_timeout: 300  # seconds per file
+trufflehog_max_concurrent: 5  # Limit concurrent TruffleHog processes (Issue #2)
 
 # Fetching
 threads: 25  # Recommended: 10 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
 timeout: 30  # seconds
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 10485760  # 10MB max per JS file
+
+# Timeouts (Issue #8)
+timeouts:
+  http_request: 30
+  wayback_request: 120
+  playwright_page: 60000
+  trufflehog: 300
 
 # Playwright
 playwright:
