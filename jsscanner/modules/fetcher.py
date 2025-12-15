@@ -260,7 +260,7 @@ class Fetcher:
             'matchType': 'domain',
             'fl': 'original',
             'collapse': 'digest',
-            'filter': ['statuscode:200', 'mimetype:application/javascript'],
+            'filter': 'statuscode:200',
             'limit': self.wayback_max_results
         }
         
@@ -440,7 +440,7 @@ class Fetcher:
             return list(js_urls)  # Return what we found so far
         except Exception as e:
             self.logger.warning(f"[ERROR] Live scan failed for {target}: {str(e)[:100]}")
-            return []
+            return list(js_urls)  # Return what we found so far
         finally:
             if page:
                 await page.close()
