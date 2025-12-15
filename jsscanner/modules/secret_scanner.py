@@ -5,6 +5,7 @@ Integrates with TruffleHog for streaming secret detection
 import subprocess
 import json
 import asyncio
+import time
 from typing import Optional
 
 
@@ -63,11 +64,11 @@ class SecretScanner:
             
             # Read output line by line (streaming) with total timeout
             # Create async task for reading
-            start_time = asyncio.get_event_loop().time()
+            start_time = time.time()
             try:
                 while True:
                     # Check timeout
-                    elapsed = asyncio.get_event_loop().time() - start_time
+                    elapsed = time.time() - start_time
                     if elapsed >= timeout:
                         self.logger.warning(f"TruffleHog scan timeout for {file_path}")
                         process.kill()
