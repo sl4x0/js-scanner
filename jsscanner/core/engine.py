@@ -466,11 +466,11 @@ class ScanEngine:
                         
             except Exception as e:
                 # If parsing fails, skip the URL
-                self.logger.debug(f\"Failed to parse URL {url[:100]}: {e}\")
+                self.logger.debug(f"Failed to parse URL {url[:100]}: {e}")
                 invalid_urls.append(url)
         
         if invalid_urls:
-            self.logger.warning(f\"Filtered out {len(invalid_urls)} invalid URLs\")
+            self.logger.warning(f"Filtered out {len(invalid_urls)} invalid URLs")
         
         original_count = len(urls)
         deduplicated = list(unique_urls.values())
