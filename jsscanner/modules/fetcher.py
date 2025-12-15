@@ -350,7 +350,11 @@ class Fetcher:
                         content = b''.join(chunks).decode('utf-8')
                         return content
                     else:
-                        self.logger.warning(f"Failed to fetch {url}: status {response.status}")
+                        # Only log WARNING for unexpected status codes
+                        if response.status not in [403, 404, 503]:
+                            self.logger.warning(f"Failed to fetch {url}: status {response.status}")
+                        else:
+                            self.logger.debug(f"Skipping {url}: status {response.status}")
                         return None
         except asyncio.TimeoutError:
             self.logger.warning(f"Timeout fetching {url}")

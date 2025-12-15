@@ -54,12 +54,11 @@ class SecretScanner:
                 '--no-update'
             ]
             
-            # Start TruffleHog process with line buffering
+            # Start TruffleHog process (unbuffered for Linux compatibility)
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                bufsize=1  # Line buffered
+                stderr=asyncio.subprocess.PIPE
             )
             
             # Read output line by line (streaming) with total timeout
