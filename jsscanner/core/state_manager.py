@@ -77,6 +77,46 @@ class StateManager:
             finally:
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     
+    def mark_as_scanned_if_new(self, file_hash: str, url: str = None) -> bool:
+        """
+        Atomically checks if hash is new and marks it as scanned
+        Prevents race condition between is_scanned() and mark_as_scanned()
+        
+        Args:
+            file_hash: SHA256 hash of the file
+            url: Optional URL where the file was found
+            
+        Returns:
+            True if newly marked (should process), False if already exists (skip)
+        """
+        with open(self.history_file, 'r+') as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                f.seek(0)
+                data = json.load(f)
+                
+                # Check if already scanned (atomic)
+                if file_hash in data['scanned_hashes']:
+                    return False  # Already exists
+                
+                # Mark as scanned
+                data['scanned_hashes'].append(file_hash)
+                
+                if 'scan_metadata' not in data:
+                    data['scan_metadata'] = {}
+                
+                data['scan_metadata'][file_hash] = {
+                    'url': url,
+                    'timestamp': self._get_timestamp()
+                }
+                
+                f.seek(0)
+                f.truncate()
+                json.dump(data, f, indent=2)
+                return True  # Newly added
+            finally:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    
     def add_secret(self, secret_data: Dict[str, Any]):
         """
         Adds a verified secret to secrets.json

@@ -1,6 +1,11 @@
 """
 Discord Notifier
 Rate-limited Discord webhook alerting system
+
+Optimizations:
+- Batch notifications: Groups multiple secrets from same file into single message
+- Rate limiting: Prevents hitting Discord's API limits (30 msgs/min default)
+- Queuing system: Ensures no alerts are lost during high-volume scans
 """
 import asyncio
 import aiohttp
@@ -48,6 +53,64 @@ class DiscordNotifier:
             secret_data: Dictionary containing secret information
         """
         embed = self._create_embed(secret_data)
+        self.queue.append(embed)
+    
+    async def queue_batch_alert(self, secrets: list, file_path: str):
+        """
+        Queue multiple secrets from same file as single notification
+        This reduces Discord spam and improves notification efficiency
+        
+        Args:
+            secrets: List of secret data dictionaries
+            file_path: Path to the file containing the secrets
+        """
+        from pathlib import Path
+        
+        # If only one secret, use regular alert
+        if len(secrets) == 1:
+            await self.queue_alert(secrets[0])
+            return
+        
+        # Determine if any are verified
+        has_verified = any(s.get('Verified', s.get('verified', False)) for s in secrets)
+        color = 0xFF0000 if has_verified else 0xFFA500  # Red if any verified, orange otherwise
+        
+        # Create batch embed
+        filename = Path(file_path).name
+        
+        # Build fields (max 25 fields per Discord embed, limit to 10 for readability)
+        fields = []
+        for i, secret in enumerate(secrets[:10], 1):
+            detector_name = secret.get('DetectorName', secret.get('type', 'Unknown'))
+            verified = secret.get('Verified', secret.get('verified', False))
+            
+            fields.append({
+                'name': f'Secret #{i}: {detector_name}',
+                'value': f'Verified: {"✅ YES" if verified else "❌ NO"}',
+                'inline': True
+            })
+        
+        # Add overflow message if more than 10
+        if len(secrets) > 10:
+            fields.append({
+                'name': '⚠️ More Secrets',
+                'value': f'+ {len(secrets) - 10} additional secrets (check logs)',
+                'inline': False
+            })
+        
+        embed = {
+            'embeds': [{
+                'title': f'🚨 {len(secrets)} Secrets Found in {filename}',
+                'description': f'Multiple secrets detected in the same file',
+                'color': color,
+                'fields': fields,
+                'footer': {
+                    'text': f'File: {file_path}'
+                },
+                'timestamp': datetime.utcnow().isoformat()
+            }]
+        }
+        
         self.queue.append(embed)
     
     async def _worker(self):

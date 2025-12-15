@@ -23,9 +23,15 @@ async def main():
     try:
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
-    except Exception as e:
-        print(f"Error loading config: {e}")
+    except FileNotFoundError:
+        print(f"Error: Config file not found: {args.config}")
         sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"Error: Invalid YAML in config file: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error loading config: {e}", file=sys.stderr)
+        raise
     
     # Apply CLI overrides
     if args.threads:

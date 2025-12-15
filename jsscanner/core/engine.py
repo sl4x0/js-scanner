@@ -3,6 +3,7 @@ Engine
 Main orchestrator that routes input to appropriate modules
 """
 import asyncio
+import aiohttp
 import time
 from pathlib import Path
 from typing import Optional, List
@@ -15,7 +16,7 @@ from .notifier import DiscordNotifier
 class ScanEngine:
     """Main scanning engine that orchestrates all modules"""
     
-    def __init__(self, config: dict, target: str):
+    def __init__(self, config: dict, target: str) -> None:
         """
         Initialize the scan engine
         
@@ -113,8 +114,12 @@ class ScanEngine:
                 'source_urls': urls_to_scan[:100]  # Store first 100 to avoid bloat
             })
             
-            # Process each URL
-            for url in urls_to_scan:
+            # Process each URL with progress indicator
+            total_urls = len(urls_to_scan)
+            for idx, url in enumerate(urls_to_scan, 1):
+                self.logger.info(f"\n{'='*80}")
+                self.logger.info(f"📍 [{idx}/{total_urls}] Processing: {url}")
+                self.logger.info(f"{'='*80}")
                 await self._process_url(url)
             
             # Final statistics
@@ -219,8 +224,6 @@ class ScanEngine:
             return
         
         try:
-            self.logger.info(f"Processing: {url}")
-            
             # Fetch content with retry logic
             max_retries = 3
             content = None
@@ -229,9 +232,34 @@ class ScanEngine:
                 try:
                     content = await self.fetcher.fetch_content(url)
                     if content:
+                        if attempt > 0:
+                            self.logger.info(f"✓ Fetch successful on attempt {attempt + 1}/{max_retries}")
+                        else:
+                            self.logger.info(f"✓ Fetch successful")
                         break
+                except asyncio.TimeoutError as e:
+                    self.logger.warning(
+                        f"⚠️  Attempt {attempt + 1}/{max_retries} timed out\n"
+                        f"   URL: {url}\n"
+                        f"   Error: {str(e)[:100]}"
+                    )
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)
+                except (aiohttp.ClientError, aiohttp.ClientConnectorError) as e:
+                    self.logger.warning(
+                        f"⚠️  Attempt {attempt + 1}/{max_retries} failed\n"
+                        f"   Error: {str(e)[:100]}\n"
+                        f"   Type: {type(e).__name__}"
+                    )
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)
                 except Exception as e:
-                    self.logger.warning(f"Fetch attempt {attempt + 1}/{max_retries} failed for {url}: {e}")
+                    self.logger.error(
+                        f"⚠️  Unexpected error on attempt {attempt + 1}/{max_retries}\n"
+                        f"   Error: {str(e)[:100]}\n"
+                        f"   Type: {type(e).__name__}",
+                        exc_info=True
+                    )
                     if attempt < max_retries - 1:
                         await asyncio.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
                     else:
@@ -247,13 +275,10 @@ class ScanEngine:
             from ..utils.hashing import calculate_hash
             file_hash = await calculate_hash(content)
             
-            # Check if already scanned
-            if self.state.is_scanned(file_hash):
+            # Check if already scanned (atomic operation to prevent race condition)
+            if not self.state.mark_as_scanned_if_new(file_hash, url):
                 self.logger.debug(f"Skipping duplicate: {url}")
                 return
-            
-            # Mark as scanned
-            self.state.mark_as_scanned(file_hash, url)
             self.stats['total_files'] += 1
             
             # Generate readable filename
@@ -288,9 +313,16 @@ class ScanEngine:
                 for linked_url in linked_urls:
                     await self._process_url(linked_url, depth + 1)
             
+        except ValueError as e:
+            self.logger.error(f"Invalid data while processing {url}: {e}", exc_info=True)
+            self.stats['errors'].append(f"ValueError: {str(e)}")
+        except IOError as e:
+            self.logger.error(f"File I/O error processing {url}: {e}", exc_info=True)
+            self.stats['errors'].append(f"IOError: {str(e)}")
         except Exception as e:
-            self.logger.error(f"Error processing {url}: {e}")
-            self.stats['errors'].append(str(e))
+            self.logger.error(f"Unexpected error processing {url}: {e}", exc_info=True)
+            self.stats['errors'].append(f"Unexpected: {str(e)}")
+            raise  # Re-raise for debugging
     
     async def _read_input_file(self, filepath: str) -> List[str]:
         """
@@ -306,18 +338,22 @@ class ScanEngine:
         domains = []
         skipped = 0
         
-        with open(filepath, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    # Check if it's a JS URL
-                    if '.js' in line.lower() or line.endswith('.mjs'):
-                        urls.append(line)
-                    # Check if it's a domain (for discovery)
-                    elif self._is_valid_domain(line):
-                        domains.append(line)
-                    else:
-                        skipped += 1
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        # Check if it's a JS URL
+                        if '.js' in line.lower() or line.endswith('.mjs'):
+                            urls.append(line)
+                        # Check if it's a domain (for discovery)
+                        elif self._is_valid_domain(line):
+                            domains.append(line)
+                        else:
+                            skipped += 1
+        except (UnicodeDecodeError, IOError) as e:
+            self.logger.error(f"Failed to read input file {filepath}: {e}")
+            return []
         
         # If we found domains, discover JS from them
         if domains:
@@ -539,12 +575,17 @@ class ScanEngine:
             if parsed.path == '/.js':
                 return False
                 
-            # Must be JS file
+            # Must be JS file (.js, .mjs, or .js with query params)
             path_lower = parsed.path.lower()
-            if not ('.js' in path_lower or parsed.path.endswith('.mjs')):
-                return False
-                
-            return True
+            full_url_lower = url.lower()
+            
+            if (path_lower.endswith('.js') or 
+                path_lower.endswith('.mjs') or 
+                '.js?' in full_url_lower or
+                '.js#' in full_url_lower):
+                return True
+            
+            return False
             
         except Exception:
             return False
@@ -642,3 +683,23 @@ class ScanEngine:
         # Save manifest
         with open(manifest_file, 'w') as f:
             json.dump(manifest, f, indent=2, sort_keys=True)
+    
+    def get_url_from_filename(self, filename: str) -> Optional[str]:
+        """
+        Get original URL from readable filename
+        
+        Args:
+            filename: Readable filename
+            
+        Returns:
+            Original URL or None if not found
+        """
+        import json
+        
+        manifest_file = Path(self.paths['base']) / 'file_manifest.json'
+        if manifest_file.exists():
+            with open(manifest_file, 'r') as f:
+                manifest = json.load(f)
+                entry = manifest.get(filename, {})
+                return entry.get('url')
+        return None

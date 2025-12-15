@@ -27,7 +27,7 @@ playwright:
   headless: true
   max_concurrent: 3
   restart_after: 100 # Restart browser after N pages
-  page_timeout: 30000 # ms
+  page_timeout: 60000 # ms (increased to 60s for sites with anti-bot protection)
 
 # Wayback
 wayback:
