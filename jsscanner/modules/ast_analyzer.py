@@ -4,7 +4,7 @@ Uses Tree-sitter to parse JavaScript and extract endpoints, parameters, and word
 """
 import asyncio
 import re
-from tree_sitter import Language, Parser
+from tree_sitter import Parser
 from typing import List, Set
 from pathlib import Path
 from ..utils.file_ops import FileOps
@@ -30,16 +30,26 @@ class ASTAnalyzer:
         # Initialize Tree-sitter parser
         try:
             import tree_sitter_javascript as tsjavascript
-            # Support both old (v0.20-0.21) and new (v0.22+) tree-sitter API
-            try:
-                # New API (v0.22+)
-                self.JS_LANGUAGE = tsjavascript.language()
-            except (TypeError, AttributeError):
-                # Old API (v0.20-0.21)
-                from tree_sitter import Language
-                self.JS_LANGUAGE = Language(tsjavascript.language())
             
-            self.parser = Parser(self.JS_LANGUAGE)
+            # Support both old (v0.20-0.21) and new (v0.22+) tree-sitter API
+            language = tsjavascript.language()
+            
+            # Try to determine API version and initialize accordingly
+            if hasattr(language, '__class__') and 'PyCapsule' in str(type(language)):
+                # New API (v0.22+) - language() returns PyCapsule, use directly
+                self.parser = Parser()
+                self.parser.set_language(language)
+            else:
+                # Old API (v0.20-0.21) - need Language wrapper
+                try:
+                    from tree_sitter import Language
+                    self.JS_LANGUAGE = Language(language)
+                    self.parser = Parser(self.JS_LANGUAGE)
+                except:
+                    # Fallback: try direct assignment
+                    self.parser = Parser()
+                    self.parser.set_language(language)
+            
             self.logger.info("Tree-sitter parser initialized")
         except Exception as e:
             self.logger.warning(f"Failed to initialize Tree-sitter: {e}")
