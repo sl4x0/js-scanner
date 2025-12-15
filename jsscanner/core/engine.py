@@ -109,6 +109,10 @@ class ScanEngine:
             
             self.logger.info(f"Found {len(urls_to_scan)} URLs to scan")
             
+            # Log sample URLs for debugging
+            if urls_to_scan and len(urls_to_scan) > 0:
+                self.logger.debug(f"Sample URLs: {urls_to_scan[:3]}")
+            
             # Store source URLs in metadata
             self.state.update_metadata({
                 'source_urls': urls_to_scan[:100]  # Store first 100 to avoid bloat
@@ -220,7 +224,7 @@ class ScanEngine:
         
         # Validate URL
         if not self._is_valid_js_url(url):
-            self.logger.debug(f"Invalid JS URL: {url}")
+            self.logger.warning(f"Invalid JS URL rejected: {url}")
             return
         
         try:
@@ -429,10 +433,26 @@ class ScanEngine:
         from urllib.parse import urlparse, urlunparse
         
         unique_urls = {}  # base_url -> full_url
+        invalid_urls = []
         
         for url in urls:
             try:
+                # Basic validation - reject obviously corrupted URLs
+                if not url.startswith(('http://', 'https://')):
+                    invalid_urls.append(url)
+                    continue
+                
+                # Check for corruption indicators
+                if ' ' in url or len(url) > 2000:
+                    invalid_urls.append(url)
+                    continue
+                
+                # Check if it looks like a valid domain
                 parsed = urlparse(url)
+                if not parsed.netloc or not parsed.path:
+                    invalid_urls.append(url)
+                    continue
+                
                 # Create base URL without query params
                 base_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
                 
@@ -444,9 +464,13 @@ class ScanEngine:
                     if not parsed.query and '?' in unique_urls[base_url]:
                         unique_urls[base_url] = url
                         
-            except Exception:
-                # If parsing fails, keep the URL as-is
-                unique_urls[url] = url
+            except Exception as e:
+                # If parsing fails, skip the URL
+                self.logger.debug(f\"Failed to parse URL {url[:100]}: {e}\")
+                invalid_urls.append(url)
+        
+        if invalid_urls:
+            self.logger.warning(f\"Filtered out {len(invalid_urls)} invalid URLs\")
         
         original_count = len(urls)
         deduplicated = list(unique_urls.values())
