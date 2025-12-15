@@ -244,7 +244,8 @@ class Fetcher:
                 params_extended.pop('collapse', None)  # Remove collapse
                 
                 self.logger.info("Running extended Wayback search without collapse")
-                self.logger.info(f"Extended query URL: {cdx_url}?url={params_extended['url']}")
+                query_parts = '&'.join([f"{k}={v}" for k, v in params_extended.items()])
+                self.logger.info(f"Extended query URL: {cdx_url}?{query_parts}")
                 await self.wayback_limiter.acquire()
                 
                 async with aiohttp.ClientSession() as session:
@@ -255,7 +256,12 @@ class Fetcher:
                             text = await response.text()
                             self.logger.info(f"Extended search response length: {len(text)} chars")
                             
-                            for line in text.strip().split('\n'):
+                            # Debug: Log first few lines to see format
+                            lines = text.strip().split('\n')
+                            if lines:
+                                self.logger.info(f"Extended search first line sample: {lines[0][:200]}")
+                            
+                            for line in lines:
                                 line = line.strip()
                                 if line:
                                     # Parse timestamp and original URL (same format as main query)
