@@ -76,10 +76,13 @@ class ScanEngine:
         try:
             # Start Discord notifier
             await self.notifier.start()
-            await self.notifier.send_status(
-                f"🚀 Starting scan for **{self.target}**",
-                status_type='info'
-            )
+            
+            # Only send status if enabled in config
+            if self.config.get('discord_status_enabled', False):
+                await self.notifier.send_status(
+                    f"🚀 Starting scan for **{self.target}**",
+                    status_type='info'
+                )
             
             self.logger.info(f"Starting scan for target: {self.target}")
             
@@ -125,20 +128,26 @@ class ScanEngine:
             
             # Log and send final stats
             log_stats(self.logger, self.stats)
-            await self.notifier.send_status(
-                f"✅ Scan completed for **{self.target}**\n"
-                f"Files: {self.stats['total_files']} | "
-                f"Secrets: {self.stats['total_secrets']} | "
-                f"Duration: {duration:.2f}s",
-                status_type='success'
-            )
+            
+            # Only send completion status if enabled
+            if self.config.get('discord_status_enabled', False):
+                await self.notifier.send_status(
+                    f"✅ Scan completed for **{self.target}**\n"
+                    f"Files: {self.stats['total_files']} | "
+                    f"Secrets: {self.stats['total_secrets']} | "
+                    f"Duration: {duration:.2f}s",
+                    status_type='success'
+                )
             
         except Exception as e:
             self.logger.error(f"Scan failed: {e}", exc_info=True)
-            await self.notifier.send_status(
-                f"❌ Scan failed for **{self.target}**: {str(e)}",
-                status_type='error'
-            )
+            
+            # Only send error status if enabled
+            if self.config.get('discord_status_enabled', False):
+                await self.notifier.send_status(
+                    f"❌ Scan failed for **{self.target}**: {str(e)}",
+                    status_type='error'
+                )
         finally:
             # Cleanup
             await self._cleanup()

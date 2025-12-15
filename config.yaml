@@ -10,6 +10,7 @@
 # ⚠️ Consider using environment variable: DISCORD_WEBHOOK
 discord_webhook: "https://discord.com/api/webhooks/1450082381934362726/IAgRuWMbRnzpHaAezmqVPJdg05L3yYe9nG48RCV5Io6ob9ekytIqpCYxQDg6z-ljO7M3"
 discord_rate_limit: 30 # messages per minute
+discord_status_enabled: false # Only send secret alerts, no start/complete notifications
 
 # TruffleHog
 trufflehog_path: "/usr/local/bin/trufflehog"

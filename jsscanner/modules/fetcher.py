@@ -224,6 +224,7 @@ class Fetcher:
     async def fetch_live(self, target: str) -> List[str]:
         """
         Fetch JavaScript URLs from live site using Playwright
+        Enhanced to detect scripts on modern SPAs
         
         Args:
             target: Target URL
@@ -236,49 +237,77 @@ class Fetcher:
         if not target.startswith('http'):
             target = f'https://{target}'
         
+        js_urls = set()
+        context = None
+        page = None
+        
         try:
-            # Use BrowserManager for proper resource management
-            js_urls = await self.browser_manager.fetch_with_context(
-                target,
-                self.page_timeout
-            )
+            await self.browser_manager._ensure_browser()
+            context = await self.browser_manager.browser.new_context()
+            page = await context.new_page()
+            page.set_default_timeout(self.page_timeout)
             
-            # Also extract from page source
-            context = None
-            page = None
+            # Track all JS requests
+            async def handle_request(request):
+                url = request.url
+                if url.endswith('.js') or 'javascript' in request.resource_type:
+                    js_urls.add(url)
+                    self.logger.debug(f"Found JS: {url}")
             
-            try:
-                await self.browser_manager._ensure_browser()
-                context = await self.browser_manager.browser.new_context()
-                page = await context.new_page()
-                page.set_default_timeout(self.page_timeout)
-                
-                await page.goto(target, wait_until='networkidle')
-                
-                # Extract script tags
-                scripts = await page.query_selector_all('script[src]')
-                for script in scripts:
-                    src = await script.get_attribute('src')
-                    if src:
-                        absolute_url = urljoin(target, src)
-                        if absolute_url.endswith('.js'):
-                            js_urls.append(absolute_url)
-                
-            finally:
-                if page:
-                    await page.close()
-                if context:
-                    await context.close()
+            page.on('request', handle_request)
             
-            # Remove duplicates
-            js_urls = list(set(js_urls))
-            self.logger.info(f"Found {len(js_urls)} scripts on live site")
+            # Navigate and wait longer for SPAs
+            await page.goto(target, wait_until='networkidle')
+            
+            # Wait extra time for dynamic content
+            await asyncio.sleep(3)
+            
+            # Scroll to trigger lazy-loaded scripts
+            await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            await asyncio.sleep(2)
+            
+            # Also extract from DOM
+            scripts = await page.query_selector_all('script[src]')
+            for script in scripts:
+                src = await script.get_attribute('src')
+                if src:
+                    absolute_url = urljoin(target, src)
+                    if '.js' in absolute_url:  # More flexible matching
+                        js_urls.add(absolute_url)
+            
+            # Look for inline script content with URLs
+            inline_scripts = await page.query_selector_all('script:not([src])')
+            for script in inline_scripts:
+                try:
+                    content = await script.inner_text()
+                    # Find JS URLs in inline scripts
+                    import re
+                    urls_in_script = re.findall(r'["\']([^"\']*\.js[^"\']*)["\']', content)
+                    for url in urls_in_script:
+                        absolute_url = urljoin(target, url)
+                        js_urls.add(absolute_url)
+                except:
+                    pass  # Skip if inner_text fails
             
         except Exception as e:
             self.logger.error(f"Error fetching live site: {e}")
             return []
+        finally:
+            if page:
+                await page.close()
+            if context:
+                await context.close()
         
-        return js_urls
+        # Remove duplicates and filter
+        js_urls = [url for url in js_urls if '.js' in url]
+        
+        self.logger.info(f"Found {len(js_urls)} scripts on live site")
+        
+        # Log first few for debugging
+        if js_urls and len(js_urls) > 0:
+            self.logger.debug(f"Sample URLs: {js_urls[:3]}")
+        
+        return list(js_urls)
     
     async def fetch_content(self, url: str) -> Optional[str]:
         """
