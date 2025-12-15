@@ -96,6 +96,15 @@ Examples:
     
     args = parser.parse_args()
     
+    # Check if user accidentally used file path with -t flag
+    if args.target and (args.target.startswith('/') or args.target.startswith('./') or args.target.startswith('~')):
+        parser.error(
+            f"Error: -t flag expects a DOMAIN, not a file path.\n"
+            f"You provided: {args.target}\n\n"
+            f"Did you mean to use -i flag instead?\n"
+            f"Example: python -m jsscanner -t example.com -i {args.target}"
+        )
+    
     # Validation
     if args.input and not Path(args.input).exists():
         parser.error(f"Input file not found: {args.input}")
