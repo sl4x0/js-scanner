@@ -394,6 +394,11 @@ class Fetcher:
                             self.logger.warning(f"Skipping {url}: Content appears to be HTML, not JS")
                             return None
                         
+                        # Check if content is actually empty or whitespace only
+                        if not content or len(content.strip()) < 10:
+                            self.logger.debug(f"Skipping {url}: Content is empty or too short")
+                            return None
+                        
                         return content
                     else:
                         # Only log WARNING for unexpected status codes

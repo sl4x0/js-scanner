@@ -103,6 +103,9 @@ class ScanEngine:
                 self.logger.info("No URLs provided, fetching from Wayback and live site")
                 urls_to_scan = await self._discover_urls()
             
+            # Deduplicate URLs by normalizing (remove query params for comparison)
+            urls_to_scan = self._deduplicate_urls(urls_to_scan)
+            
             self.logger.info(f"Found {len(urls_to_scan)} URLs to scan")
             
             # Store source URLs in metadata
@@ -375,6 +378,47 @@ class ScanEngine:
         """Cleanup resources"""
         if self.fetcher:
             await self.fetcher.cleanup()
+    
+    def _deduplicate_urls(self, urls: List[str]) -> List[str]:
+        """
+        Deduplicate URLs by base path (ignore query parameters)
+        Keeps the shortest URL for each unique base path
+        
+        Args:
+            urls: List of URLs
+            
+        Returns:
+            Deduplicated list of URLs
+        """
+        from urllib.parse import urlparse, urlunparse
+        
+        unique_urls = {}  # base_url -> full_url
+        
+        for url in urls:
+            try:
+                parsed = urlparse(url)
+                # Create base URL without query params
+                base_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
+                
+                # Keep the URL, prefer one without query params
+                if base_url not in unique_urls:
+                    unique_urls[base_url] = url
+                else:
+                    # If current URL has no query params, prefer it
+                    if not parsed.query and '?' in unique_urls[base_url]:
+                        unique_urls[base_url] = url
+                        
+            except Exception:
+                # If parsing fails, keep the URL as-is
+                unique_urls[url] = url
+        
+        original_count = len(urls)
+        deduplicated = list(unique_urls.values())
+        
+        if original_count > len(deduplicated):
+            self.logger.info(f"Deduplicated {original_count} URLs to {len(deduplicated)} unique files (removed {original_count - len(deduplicated)} duplicates)")
+        
+        return deduplicated
     
     @staticmethod
     def _sanitize_target_name(target: str) -> str:
