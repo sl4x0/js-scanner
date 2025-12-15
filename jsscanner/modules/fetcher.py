@@ -183,70 +183,65 @@ class Fetcher:
         """
         self.logger.info(f"Fetching from Wayback Machine: {target}")
         
-        # Simple format: just get original URLs, filter for .js, fetch from latest Wayback snapshot
+        # Get original URLs directly from Wayback CDX API
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
             'url': f'*.{target}',
             'fl': 'original',
             'collapse': 'urlkey',
-            'filter': ['statuscode:200', 'mimetype:application/javascript']  # Only successful JS files
+            'filter': ['statuscode:200', 'mimetype:application/javascript']
         }
         
-        js_urls = set()  # Use set to avoid duplicates
-        max_retries = 3
+        js_urls = set()  # Use set for automatic deduplication
         
-        for attempt in range(max_retries):
-            try:
-                # Apply rate limiting
-                await self.wayback_limiter.acquire()
-                
-                # Log the actual query for debugging
-                query_url = f"{cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}"
-                self.logger.info(f"Wayback query (attempt {attempt + 1}/{max_retries}): {query_url}")
-                
-                async with aiohttp.ClientSession() as session:
-                    # Longer timeout to wait for full response
-                    timeout = aiohttp.ClientTimeout(total=600, sock_read=300)
-                    async with session.get(cdx_url, params=params, timeout=timeout) as response:
-                        self.logger.info(f"Wayback API response status: {response.status}")
+        try:
+            # Apply rate limiting
+            await self.wayback_limiter.acquire()
+            
+            self.logger.info(f"Wayback query: {cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}")
+            
+            async with aiohttp.ClientSession() as session:
+                timeout = aiohttp.ClientTimeout(total=600, sock_read=300)
+                async with session.get(cdx_url, params=params, timeout=timeout) as response:
+                    self.logger.info(f"Wayback API response status: {response.status}")
+                    
+                    if response.status == 200:
+                        # Get full response
+                        text = await response.text()
+                        lines = text.strip().split('\n')
                         
-                        if response.status == 200:
-                            # Stream the response line by line
-                            line_count = 0
-                            async for line in response.content:
-                                line_count += 1
-                                original_url = line.decode('utf-8', errors='ignore').strip()
-                                
-                                if original_url:
-                                    # Filter for JS files only
-                                    if '.js' in original_url.lower() or original_url.endswith('.mjs'):
-                                        # Construct Wayback archive URL (latest snapshot)
-                                        wayback_url = f"https://web.archive.org/web/{original_url}"
-                                        js_urls.add(wayback_url)
+                        self.logger.info(f"Wayback returned {len(lines)} URLs")
+                        
+                        # Filter for .js files and deduplicate
+                        for line in lines:
+                            original_url = line.strip()
                             
-                            self.logger.info(f"Wayback processed {line_count} lines, found {len(js_urls)} JS URLs")
-                            break  # Success, exit retry loop
-                            
-                        elif response.status == 504:
-                            self.logger.warning(f"Wayback returned 504 Gateway Timeout (attempt {attempt + 1}/{max_retries})")
-                            if attempt < max_retries - 1:
-                                wait_time = 5 * (attempt + 1)  # Exponential backoff
-                                self.logger.info(f"Waiting {wait_time}s before retry...")
-                                await asyncio.sleep(wait_time)
+                            if not original_url:
                                 continue
-                        else:
-                            self.logger.warning(f"Wayback returned status {response.status}")
-                            break
                             
-            except Exception as e:
-                self.logger.error(f"Error fetching from Wayback (attempt {attempt + 1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(5)
-                    continue
-                else:
-                    self.logger.error(f"All retry attempts failed", exc_info=True)
+                            # Check if it's a valid .js URL using urlparse
+                            try:
+                                from urllib.parse import urlparse
+                                parsed = urlparse(original_url)
+                                
+                                # Must have proper scheme and domain
+                                if not parsed.scheme or not parsed.netloc:
+                                    continue
+                                
+                                # Check if path ends with .js or .mjs
+                                if parsed.path.endswith('.js') or parsed.path.endswith('.mjs'):
+                                    # Add original URL directly (no web.archive.org wrapper)
+                                    js_urls.add(original_url)
+                            except:
+                                continue
+                        
+                        self.logger.info(f"Found {len(js_urls)} unique .js URLs after deduplication")
+                    else:
+                        self.logger.warning(f"Wayback returned status {response.status}")
+                        
+        except Exception as e:
+            self.logger.error(f"Error fetching from Wayback: {e}")
         
-        self.logger.info(f"Found {len(js_urls)} URLs from Wayback")
         return list(js_urls)
     
     async def fetch_live(self, target: str) -> List[str]:
