@@ -449,7 +449,7 @@ class ScanEngine:
                 
                 # Check if it looks like a valid domain
                 parsed = urlparse(url)
-                if not parsed.netloc or not parsed.path:
+                if not parsed.netloc:
                     invalid_urls.append(url)
                     continue
                 
