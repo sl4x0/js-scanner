@@ -35,8 +35,14 @@ class ASTAnalyzer:
             # Get the language
             language = tsjavascript.language()
             
-            # Issue #12: Check tree-sitter version explicitly
-            ts_version = tuple(map(int, tree_sitter.__version__.split('.')[:2]))
+            # Issue #12: Check tree-sitter version explicitly with fallback
+            try:
+                ts_version = tuple(map(int, tree_sitter.__version__.split('.')[:2]))
+                version_str = tree_sitter.__version__
+            except AttributeError:
+                # Fallback: Try to detect API by checking if set_language exists
+                ts_version = (0, 22)  # Assume new API if no version
+                version_str = "unknown"
             
             if ts_version >= (0, 22):
                 # New API (v0.22+)
@@ -48,7 +54,7 @@ class ASTAnalyzer:
                 js_lang = Language(language)
                 self.parser = Parser(js_lang)
             
-            self.logger.info(f"Tree-sitter parser initialized (v{tree_sitter.__version__})")
+            self.logger.info(f"Tree-sitter parser initialized (v{version_str})")
         except Exception as e:
             self.logger.warning(f"Failed to initialize Tree-sitter: {e}")
             self.parser = None
