@@ -188,8 +188,8 @@ class Fetcher:
         params = {
             'url': f'*.{target}',
             'fl': 'original',
-            'collapse': 'urlkey'
-            # No matchType, no limit - use exact same params as manual query
+            'collapse': 'urlkey',
+            'limit': str(self.wayback_max_results)  # Prevent overwhelming responses
         }
         
         js_urls = set()  # Use set to avoid duplicates
@@ -199,34 +199,34 @@ class Fetcher:
             await self.wayback_limiter.acquire()
             
             # Log the actual query for debugging
-            query_url = f"{cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}"
+            query_url = f"{cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}&limit={params['limit']}"
             self.logger.info(f"Wayback query: {query_url}")
             
             async with aiohttp.ClientSession() as session:
-                async with session.get(cdx_url, params=params, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                # Increase timeout for large responses and use streaming
+                timeout = aiohttp.ClientTimeout(total=300, sock_read=120)
+                async with session.get(cdx_url, params=params, timeout=timeout) as response:
                     self.logger.info(f"Wayback API response status: {response.status}")
                     
                     if response.status == 200:
-                        text = await response.text()
-                        
-                        self.logger.info(f"Wayback response length: {len(text)} chars")
-                        
-                        # Parse CDX format: each line is a URL
-                        lines = text.strip().split('\n')
-                        self.logger.info(f"Wayback returned {len(lines)} lines")
-                        
-                        for line in lines:
-                            line = line.strip()
-                            if line:
+                        # Stream the response to avoid loading huge responses into memory
+                        line_count = 0
+                        async for line in response.content:
+                            line_count += 1
+                            line_text = line.decode('utf-8', errors='ignore').strip()
+                            
+                            if line_text:
                                 # Filter for JS files only
-                                if not ('.js' in line.lower() or line.endswith('.mjs')):
+                                if not ('.js' in line_text.lower() or line_text.endswith('.mjs')):
                                     continue
                                 
                                 # Ensure URL has protocol
-                                if not line.startswith(('http://', 'https://')):
-                                    line = f"https://{line}"
+                                if not line_text.startswith(('http://', 'https://')):
+                                    line_text = f"https://{line_text}"
                                 
-                                js_urls.add(line)
+                                js_urls.add(line_text)
+                        
+                        self.logger.info(f"Wayback processed {line_count} lines, found {len(js_urls)} JS URLs")
                         
                         self.logger.info(f"Found {len(js_urls)} URLs from Wayback")
                     else:
