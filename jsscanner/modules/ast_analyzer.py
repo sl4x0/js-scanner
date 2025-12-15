@@ -2,6 +2,7 @@
 AST Analyzer Module
 Uses Tree-sitter to parse JavaScript and extract endpoints, parameters, and wordlists
 """
+import asyncio
 import re
 from tree_sitter import Language, Parser
 from typing import List, Set
@@ -29,7 +30,15 @@ class ASTAnalyzer:
         # Initialize Tree-sitter parser
         try:
             import tree_sitter_javascript as tsjavascript
-            self.JS_LANGUAGE = Language(tsjavascript.language())
+            # Support both old (v0.20-0.21) and new (v0.22+) tree-sitter API
+            try:
+                # New API (v0.22+)
+                self.JS_LANGUAGE = tsjavascript.language()
+            except (TypeError, AttributeError):
+                # Old API (v0.20-0.21)
+                from tree_sitter import Language
+                self.JS_LANGUAGE = Language(tsjavascript.language())
+            
             self.parser = Parser(self.JS_LANGUAGE)
             self.logger.info("Tree-sitter parser initialized")
         except Exception as e:
@@ -50,16 +59,17 @@ class ASTAnalyzer:
             return
         
         try:
-            # Parse content
-            tree = self.parser.parse(bytes(content, 'utf8'))
+            # Parse content in executor to avoid blocking event loop (CPU-bound)
+            loop = asyncio.get_event_loop()
+            tree = await loop.run_in_executor(None, self._parse_content, content)
             root_node = tree.root_node
             
-            # Extract various elements
-            endpoints = await self._extract_endpoints(root_node, content)
-            params = await self._extract_params(root_node, content)
+            # Extract various elements (run in executor since they traverse large ASTs)
+            endpoints = await loop.run_in_executor(None, self._extract_endpoints_sync, root_node, content)
+            params = await loop.run_in_executor(None, self._extract_params_sync, root_node, content)
             links = await self._extract_links(content)
             domains = await self._extract_domains(content)
-            wordlist = await self._generate_wordlist(root_node, content)
+            wordlist = await loop.run_in_executor(None, self._generate_wordlist_sync, root_node, content)
             
             # Save extracts
             extracts_path = Path(self.paths['extracts'])
@@ -103,8 +113,12 @@ class ASTAnalyzer:
             self.logger.error(f"AST analysis failed: {e}")
             await self._analyze_with_regex(content, source_url)
     
-    async def _extract_endpoints(self, node, content: str) -> List[str]:
-        """Extracts API endpoints from AST"""
+    def _parse_content(self, content: str):
+        """Synchronous tree-sitter parsing (CPU-bound)"""
+        return self.parser.parse(bytes(content, 'utf8'))
+    
+    def _extract_endpoints_sync(self, node, content: str) -> List[str]:
+        """Extracts API endpoints from AST (synchronous for executor)"""
         endpoints = set()
         
         # Look for string literals that look like endpoints
@@ -137,8 +151,8 @@ class ASTAnalyzer:
         traverse(node)
         return list(endpoints)
     
-    async def _extract_params(self, node, content: str) -> List[str]:
-        """Extracts parameter names from AST"""
+    def _extract_params_sync(self, node, content: str) -> List[str]:
+        """Extracts parameter names from AST (synchronous for executor)"""
         params = set()
         
         # Look for object properties and query parameters
@@ -189,8 +203,8 @@ class ASTAnalyzer:
         
         return list(domains)
     
-    async def _generate_wordlist(self, node, content: str) -> List[str]:
-        """Generates custom wordlist from identifiers"""
+    def _generate_wordlist_sync(self, node, content: str) -> List[str]:
+        """Generates custom wordlist from identifiers (synchronous for executor)"""
         words = set()
         
         def traverse(n):
