@@ -179,111 +179,74 @@ class Fetcher:
             target: Target domain
             
         Returns:
-            List of JavaScript URLs
+            List of JavaScript URLs (as Wayback archive URLs)
         """
         self.logger.info(f"Fetching from Wayback Machine: {target}")
         
-        # Wayback CDX API - get timestamp and original URL to construct archive URLs
+        # Simple format: just get original URLs, filter for .js, fetch from latest Wayback snapshot
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
             'url': f'*.{target}',
-            'fl': 'timestamp,original',  # Need timestamp to construct archive URLs
+            'fl': 'original',
             'collapse': 'urlkey',
-            'limit': '5000'  # Reduced to avoid 504 timeouts on popular domains
+            'filter': ['statuscode:200', 'mimetype:application/javascript']  # Only successful JS files
         }
         
         js_urls = set()  # Use set to avoid duplicates
+        max_retries = 3
         
-        try:
-            # Apply rate limiting
-            await self.wayback_limiter.acquire()
-            
-            # Log the actual query for debugging
-            query_url = f"{cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}&limit={params['limit']}"
-            self.logger.info(f"Wayback query: {query_url}")
-            
-            async with aiohttp.ClientSession() as session:
-                # Increase timeout for large responses and use streaming
-                timeout = aiohttp.ClientTimeout(total=300, sock_read=120)
-                async with session.get(cdx_url, params=params, timeout=timeout) as response:
-                    self.logger.info(f"Wayback API response status: {response.status}")
-                    
-                    if response.status == 200:
-                        # Stream the response to avoid loading huge responses into memory
-                        line_count = 0
-                        async for line in response.content:
-                            line_count += 1
-                            line_text = line.decode('utf-8', errors='ignore').strip()
-                            
-                            if line_text:
-                                # CDX format with fl=timestamp,original: "timestamp original_url"
-                                parts = line_text.split(' ', 1)
-                                if len(parts) != 2:
-                                    continue
-                                
-                                timestamp, original_url = parts
-                                
-                                # Filter for JS files only
-                                if not ('.js' in original_url.lower() or original_url.endswith('.mjs')):
-                                    continue
-                                
-                                # Construct Wayback archive URL: https://web.archive.org/web/{timestamp}/{original_url}
-                                wayback_url = f"https://web.archive.org/web/{timestamp}/{original_url}"
-                                js_urls.add(wayback_url)
-                        
-                        self.logger.info(f"Wayback processed {line_count} lines, found {len(js_urls)} JS URLs")
-                        
-                        self.logger.info(f"Found {len(js_urls)} URLs from Wayback")
-                    else:
-                        self.logger.warning(f"Wayback returned status {response.status}")
-                        
-            # Also try with extended search if first query didn't find much
-            if len(js_urls) < 100:  # Only do second query if first didn't find much
-                # Try without collapse to get more results
-                params_extended = params.copy()
-                params_extended.pop('collapse', None)  # Remove collapse
-                
-                self.logger.info("Running extended Wayback search without collapse")
-                query_parts = '&'.join([f"{k}={v}" for k, v in params_extended.items()])
-                self.logger.info(f"Extended query URL: {cdx_url}?{query_parts}")
+        for attempt in range(max_retries):
+            try:
+                # Apply rate limiting
                 await self.wayback_limiter.acquire()
                 
+                # Log the actual query for debugging
+                query_url = f"{cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}"
+                self.logger.info(f"Wayback query (attempt {attempt + 1}/{max_retries}): {query_url}")
+                
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(cdx_url, params=params_extended, timeout=aiohttp.ClientTimeout(total=60)) as response:
-                        self.logger.info(f"Extended search response status: {response.status}")
+                    # Longer timeout to wait for full response
+                    timeout = aiohttp.ClientTimeout(total=600, sock_read=300)
+                    async with session.get(cdx_url, params=params, timeout=timeout) as response:
+                        self.logger.info(f"Wayback API response status: {response.status}")
                         
                         if response.status == 200:
-                            text = await response.text()
-                            self.logger.info(f"Extended search response length: {len(text)} chars")
+                            # Stream the response line by line
+                            line_count = 0
+                            async for line in response.content:
+                                line_count += 1
+                                original_url = line.decode('utf-8', errors='ignore').strip()
+                                
+                                if original_url:
+                                    # Filter for JS files only
+                                    if '.js' in original_url.lower() or original_url.endswith('.mjs'):
+                                        # Construct Wayback archive URL (latest snapshot)
+                                        wayback_url = f"https://web.archive.org/web/{original_url}"
+                                        js_urls.add(wayback_url)
                             
-                            # Debug: Log first few lines to see format
-                            lines = text.strip().split('\n')
-                            if lines:
-                                self.logger.info(f"Extended search first line sample: {lines[0][:200]}")
+                            self.logger.info(f"Wayback processed {line_count} lines, found {len(js_urls)} JS URLs")
+                            break  # Success, exit retry loop
                             
-                            for line in lines:
-                                line = line.strip()
-                                if line:
-                                    # Parse timestamp and original URL (same format as main query)
-                                    parts = line.split(' ', 1)
-                                    if len(parts) != 2:
-                                        continue
-                                    
-                                    timestamp, original_url = parts
-                                    
-                                    # Filter for JS files
-                                    if not ('.js' in original_url.lower() or original_url.endswith('.mjs')):
-                                        continue
-                                    
-                                    # Construct Wayback archive URL
-                                    wayback_url = f"https://web.archive.org/web/{timestamp}/{original_url}"
-                                    js_urls.add(wayback_url)
+                        elif response.status == 504:
+                            self.logger.warning(f"Wayback returned 504 Gateway Timeout (attempt {attempt + 1}/{max_retries})")
+                            if attempt < max_retries - 1:
+                                wait_time = 5 * (attempt + 1)  # Exponential backoff
+                                self.logger.info(f"Waiting {wait_time}s before retry...")
+                                await asyncio.sleep(wait_time)
+                                continue
+                        else:
+                            self.logger.warning(f"Wayback returned status {response.status}")
+                            break
                             
-                            self.logger.info(f"Total {len(js_urls)} URLs from Wayback after extended search")
-                            
-        except Exception as e:
-            self.logger.error(f"Error fetching from Wayback: {e}", exc_info=True)
+            except Exception as e:
+                self.logger.error(f"Error fetching from Wayback (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5)
+                    continue
+                else:
+                    self.logger.error(f"All retry attempts failed", exc_info=True)
         
+        self.logger.info(f"Found {len(js_urls)} URLs from Wayback")
         return list(js_urls)
     
     async def fetch_live(self, target: str) -> List[str]:
@@ -315,7 +278,10 @@ class Fetcher:
             # Track all JS requests
             async def handle_request(request):
                 url = request.url
-                if url.endswith('.js') or 'javascript' in request.resource_type:
+                parsed = urlparse(url)
+                # Proper .js detection using path, not substring
+                if (parsed.path.endswith('.js') or parsed.path.endswith('.mjs') or 
+                    'javascript' in request.resource_type):
                     js_urls.add(url)
                     self.logger.debug(f"Found JS: {url}")
             
@@ -337,7 +303,8 @@ class Fetcher:
                 src = await script.get_attribute('src')
                 if src:
                     absolute_url = urljoin(target, src)
-                    if '.js' in absolute_url:  # More flexible matching
+                    parsed = urlparse(absolute_url)
+                    if parsed.path.endswith('.js') or parsed.path.endswith('.mjs'):
                         js_urls.add(absolute_url)
             
             # Look for inline script content with URLs
@@ -363,8 +330,16 @@ class Fetcher:
             if context:
                 await context.close()
         
-        # Remove duplicates and filter
-        js_urls = [url for url in js_urls if '.js' in url]
+        # Remove duplicates and filter with proper path checking
+        filtered_urls = []
+        for url in js_urls:
+            try:
+                parsed = urlparse(url)
+                if parsed.path.endswith('.js') or parsed.path.endswith('.mjs'):
+                    filtered_urls.append(url)
+            except:
+                pass
+        js_urls = filtered_urls
         
         self.logger.info(f"Found {len(js_urls)} scripts on live site")
         
@@ -412,7 +387,13 @@ class Fetcher:
                                 return None
                             chunks.append(chunk)
                         
-                        content = b''.join(chunks).decode('utf-8')
+                        content = b''.join(chunks).decode('utf-8', errors='ignore')
+                        
+                        # Detect soft 404s - HTML error pages with 200 status
+                        if content.strip().startswith('<!DOCTYPE html') or '<html' in content[:100].lower():
+                            self.logger.warning(f"Skipping {url}: Content appears to be HTML, not JS")
+                            return None
+                        
                         return content
                     else:
                         # Only log WARNING for unexpected status codes

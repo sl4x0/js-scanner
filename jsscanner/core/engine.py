@@ -409,6 +409,25 @@ class ScanEngine:
         from urllib.parse import urlparse
         
         try:
+            # Handle Wayback Machine URLs - extract original URL
+            if 'web.archive.org/web/' in url:
+                # Format: https://web.archive.org/web/{timestamp}/{original_url}
+                # or: https://web.archive.org/web/{original_url}
+                parts = url.split('web.archive.org/web/', 1)
+                if len(parts) > 1:
+                    original_url = parts[1]
+                    # Remove leading slash
+                    if original_url.startswith('/'):
+                        original_url = original_url.lstrip('/')
+                    # Check if starts with timestamp (14 digits) or direct URL
+                    if original_url and not (original_url.startswith('http://') or original_url.startswith('https://')):
+                        # Has timestamp, extract URL after it
+                        url_parts = original_url.split('/', 1)
+                        if len(url_parts) > 1:
+                            original_url = url_parts[1]
+                    # Now use the extracted original URL
+                    url = original_url
+            
             parsed = urlparse(url)
             domain = parsed.netloc.lower()
             
@@ -416,11 +435,16 @@ class ScanEngine:
             if ':' in domain:
                 domain = domain.split(':')[0]
             
+            # Remove www. prefix for comparison
+            domain = domain.replace('www.', '')
+            
             # Check if exact match or subdomain
             target_lower = self.target.lower()
             
             # Remove protocol from target if present
             target_lower = target_lower.replace('https://', '').replace('http://', '')
+            # Remove www. prefix from target
+            target_lower = target_lower.replace('www.', '')
             
             # Check if it's the target domain or a subdomain
             if domain == target_lower:
