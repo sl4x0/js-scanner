@@ -131,6 +131,13 @@ Performance Tips:
     
     args = parser.parse_args()
     
+    # Validate conflicting flags
+    if args.no_wayback and args.no_live:
+        parser.error(
+            "Error: Cannot use both --no-wayback and --no-live together.\n"
+            "This would disable all scanning methods. Please use only one or neither."
+        )
+    
     # Check if user accidentally used file path with -t flag
     if args.target and (args.target.startswith('/') or args.target.startswith('./') or args.target.startswith('~')):
         parser.error(

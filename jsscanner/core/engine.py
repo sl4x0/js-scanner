@@ -138,14 +138,33 @@ class ScanEngine:
                 'source_urls': urls_to_scan[:100]  # Store first 100 to avoid bloat
             })
             
-            # Process each URL with progress indicator
+            # Process each URL with progress indicator and ETA
             total_urls = len(urls_to_scan)
+            file_start_time = time.time()
+            
             for idx, url in enumerate(urls_to_scan, 1):
                 # Calculate progress percentage
                 progress = (idx / total_urls) * 100
                 
+                # Calculate ETA (after processing at least 3 files)
+                eta_str = ""
+                if idx > 3:
+                    elapsed = time.time() - file_start_time
+                    avg_time_per_file = elapsed / (idx - 1)
+                    remaining_files = total_urls - idx
+                    eta_seconds = avg_time_per_file * remaining_files
+                    
+                    if eta_seconds < 60:
+                        eta_str = f" | ETA: {int(eta_seconds)}s"
+                    elif eta_seconds < 3600:
+                        eta_str = f" | ETA: {int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
+                    else:
+                        hours = int(eta_seconds / 3600)
+                        minutes = int((eta_seconds % 3600) / 60)
+                        eta_str = f" | ETA: {hours}h {minutes}m"
+                
                 self.logger.info(f"\n{'='*80}")
-                self.logger.info(f"📍 [{idx}/{total_urls}] ({progress:.1f}%) Processing: {url}")
+                self.logger.info(f"📍 [{idx}/{total_urls}] ({progress:.1f}%){eta_str} Processing: {url}")
                 self.logger.info(f"{'='*80}")
                 await self._process_url(url)
             
@@ -163,6 +182,23 @@ class ScanEngine:
             
             # Log and send final stats
             log_stats(self.logger, self.stats)
+            
+            # Log error summary if there were errors
+            if self.stats.get('errors'):
+                error_count = len(self.stats['errors'])
+                self.logger.warning(f"\n{'='*80}")
+                self.logger.warning(f"⚠️  Error Summary: {error_count} error(s) occurred during scan")
+                self.logger.warning(f"{'='*80}")
+                
+                # Show first 5 errors
+                for i, error in enumerate(self.stats['errors'][:5], 1):
+                    self.logger.warning(f"  {i}. {error}")
+                
+                # Indicate if there are more errors
+                if error_count > 5:
+                    self.logger.warning(f"  ... and {error_count - 5} more error(s)")
+                
+                self.logger.warning(f"{'='*80}\n")
             
             # Export results as JSON
             results_json = {
@@ -469,28 +505,35 @@ class ScanEngine:
         """
         Extract root domain handling multi-part TLDs
         
+        Examples:
+            'example.com' -> 'example.com'
+            'api.example.com' -> 'example.com'
+            'api.cdn.example.co.uk' -> 'example.co.uk'
+        
         Args:
             domain: Domain to extract from
             
         Returns:
-            Root domain
+            Root domain (e.g., example.co.uk for multi-part TLDs, example.com for standard TLDs)
         """
-        # Known multi-part TLDs
-        multi_part_tlds = [
+        # Known multi-part TLDs (set for O(1) lookup performance)
+        multi_part_tlds = {
             'co.uk', 'com.au', 'co.jp', 'co.za', 'com.br',
-            'co.in', 'co.nz', 'com.mx', 'co.il', 'com.ar'
-        ]
+            'co.in', 'co.nz', 'com.mx', 'co.il', 'com.ar',
+            'com.tr', 'net.tr', 'co.kr', 'ne.kr'
+        }
         
         parts = domain.split('.')
         
-        # Check for multi-part TLD
+        # Check for multi-part TLD (e.g., co.uk, com.au)
         if len(parts) >= 3:
             potential_tld = '.'.join(parts[-2:])
             if potential_tld in multi_part_tlds:
-                # Return last 3 parts (subdomain.domain.co.uk)
+                # Return domain + multi-part TLD (last 3 parts)
+                # e.g., 'example.co.uk' from 'api.cdn.example.co.uk'
                 return '.'.join(parts[-3:])
         
-        # Standard TLD
+        # Standard single-part TLD (e.g., .com, .org)
         if len(parts) >= 2:
             return '.'.join(parts[-2:])
         
@@ -574,13 +617,13 @@ class ScanEngine:
     @staticmethod
     def _is_valid_js_url(url: str) -> bool:
         """
-        Validates if URL is a valid JS file
+        Validates if URL is a valid JS/TS file
         
         Args:
             url: URL to validate
             
         Returns:
-            True if valid JS URL
+            True if valid JS/TS/JSX URL
         """
         from urllib.parse import urlparse
         
@@ -602,19 +645,37 @@ class ScanEngine:
             # Check for obvious invalid patterns
             if ' ' in url:  # Spaces in URL
                 return False
-            if parsed.path.endswith('/.js'):  # Empty filename
+            if parsed.path.endswith(('/.js', '/.ts', '/.jsx', '/.tsx', '/.mjs', '/.cts', '/.mts')):  # Empty filename
                 return False
-            if parsed.path == '/.js':
+            if parsed.path in ('/.js', '/.ts', '/.jsx', '/.tsx', '/.mjs', '/.cts', '/.mts'):
                 return False
                 
-            # Must be JS file (.js, .mjs, or .js with query params)
+            # Must be JS/TS file (.js, .mjs, .ts, .tsx, .jsx, or with query params)
             path_lower = parsed.path.lower()
             full_url_lower = url.lower()
             
+            # Check for supported extensions
             if (path_lower.endswith('.js') or 
-                path_lower.endswith('.mjs') or 
+                path_lower.endswith('.mjs') or
+                path_lower.endswith('.ts') or
+                path_lower.endswith('.tsx') or
+                path_lower.endswith('.jsx') or
+                path_lower.endswith('.cts') or
+                path_lower.endswith('.mts') or
                 '.js?' in full_url_lower or
-                '.js#' in full_url_lower):
+                '.js#' in full_url_lower or
+                '.ts?' in full_url_lower or
+                '.ts#' in full_url_lower or
+                '.tsx?' in full_url_lower or
+                '.tsx#' in full_url_lower or
+                '.jsx?' in full_url_lower or
+                '.jsx#' in full_url_lower or
+                '.mjs?' in full_url_lower or
+                '.mjs#' in full_url_lower or
+                '.cts?' in full_url_lower or
+                '.cts#' in full_url_lower or
+                '.mjs?' in full_url_lower or
+                '.mts#' in full_url_lower):
                 return True
             
             return False
@@ -649,8 +710,11 @@ class ScanEngine:
             if '?' in filename:
                 filename = filename.split('?')[0]
             
-            # Remove file extension
-            filename = filename.replace('.js', '').replace('.mjs', '')
+            # Remove all supported file extensions
+            for ext in ['.js', '.mjs', '.ts', '.tsx', '.jsx', '.cts', '.mts']:
+                if filename.endswith(ext):
+                    filename = filename[:-len(ext)]
+                    break
             
             # Clean filename: keep only alphanumeric, dash, underscore
             filename = re.sub(r'[^a-zA-Z0-9\-_.]', '-', filename)
