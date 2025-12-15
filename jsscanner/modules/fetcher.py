@@ -183,14 +183,13 @@ class Fetcher:
         """
         self.logger.info(f"Fetching from Wayback Machine: {target}")
         
-        # Wayback CDX API - simple query, filter by URL pattern
+        # Wayback CDX API - match the exact working query format
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
-            'url': f'*.{target}',  # Get ALL URLs for domain
-            'matchType': 'domain',
-            'fl': 'original',  # Only need original URL
-            'collapse': 'urlkey',  # One result per unique URL
-            'limit': self.wayback_max_results
+            'url': f'*.{target}',
+            'fl': 'original',
+            'collapse': 'urlkey'
+            # No matchType, no limit - use exact same params as manual query
         }
         
         js_urls = set()  # Use set to avoid duplicates
