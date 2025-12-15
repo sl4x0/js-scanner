@@ -186,7 +186,7 @@ class Fetcher:
         # Wayback CDX API - simple query, filter by URL pattern
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
-            'url': f'*.{target}/*.js',  # Match .js URLs directly
+            'url': f'*.{target}',  # Get ALL URLs for domain
             'matchType': 'domain',
             'fl': 'original',  # Only need original URL
             'collapse': 'urlkey',  # One result per unique URL
@@ -219,28 +219,32 @@ class Fetcher:
                         for line in lines:
                             line = line.strip()
                             if line:
+                                # Filter for JS files only
+                                if not ('.js' in line.lower() or line.endswith('.mjs')):
+                                    continue
+                                
                                 # Ensure URL has protocol
                                 if not line.startswith(('http://', 'https://')):
                                     line = f"https://{line}"
                                 
-                                # Validate it looks like a JS URL
-                                if '.js' in line:
-                                    js_urls.add(line)
+                                js_urls.add(line)
                         
                         self.logger.info(f"Found {len(js_urls)} URLs from Wayback")
                     else:
                         self.logger.warning(f"Wayback returned status {response.status}")
                         
-            # Also try with query params pattern (some JS have ?v=123)
+            # Also try with extended search if first query didn't find much
             if len(js_urls) < 100:  # Only do second query if first didn't find much
-                params['url'] = f'*.{target}/*.js*'  # Include query params
+                # Try without collapse to get more results
+                params_extended = params.copy()
+                params_extended.pop('collapse', None)  # Remove collapse
                 
-                self.logger.info("Running extended Wayback search with query params")
-                self.logger.info(f"Extended query URL: {cdx_url}?url={params['url']}")
+                self.logger.info("Running extended Wayback search without collapse")
+                self.logger.info(f"Extended query URL: {cdx_url}?url={params_extended['url']}")
                 await self.wayback_limiter.acquire()
                 
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(cdx_url, params=params, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                    async with session.get(cdx_url, params=params_extended, timeout=aiohttp.ClientTimeout(total=60)) as response:
                         self.logger.info(f"Extended search response status: {response.status}")
                         
                         if response.status == 200:
@@ -250,11 +254,14 @@ class Fetcher:
                             for line in text.strip().split('\n'):
                                 line = line.strip()
                                 if line:
+                                    # Filter for JS files
+                                    if not ('.js' in line.lower() or line.endswith('.mjs')):
+                                        continue
+                                    
                                     if not line.startswith(('http://', 'https://')):
                                         line = f"https://{line}"
                                     
-                                    if '.js' in line:
-                                        js_urls.add(line)
+                                    js_urls.add(line)
                             
                             self.logger.info(f"Total {len(js_urls)} URLs from Wayback after extended search")
                             
