@@ -199,7 +199,7 @@ class Fetcher:
             await self.wayback_limiter.acquire()
             
             # Log the actual query for debugging
-            query_url = f"{cdx_url}?url={params['url']}&matchType={params['matchType']}&fl={params['fl']}&collapse={params['collapse']}&limit={params['limit']}"
+            query_url = f"{cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}"
             self.logger.info(f"Wayback query: {query_url}")
             
             async with aiohttp.ClientSession() as session:
