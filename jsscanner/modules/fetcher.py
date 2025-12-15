@@ -261,7 +261,7 @@ class Fetcher:
         Returns:
             List of JavaScript URLs
         """
-        self.logger.info(f"Fetching from live site: {target}")
+        self.logger.info(f"🌐 Launching browser to scan live site: {target}")
         
         if not target.startswith('http'):
             target = f'https://{target}'
@@ -271,6 +271,7 @@ class Fetcher:
         page = None
         
         try:
+            self.logger.info(f"Opening page in headless browser...")
             await self.browser_manager._ensure_browser()
             context = await self.browser_manager.browser.new_context()
             page = await context.new_page()
@@ -284,23 +285,26 @@ class Fetcher:
                 # Detect JS files by resource type OR file extension
                 if resource_type == 'script':
                     js_urls.add(url)
-                    self.logger.debug(f"Found JS (script): {url}")
+                    self.logger.info(f"✓ Found JS: {url}")
                 elif '.js' in url.lower():
                     # Fallback: check if URL contains .js
                     parsed = urlparse(url)
                     if parsed.path.endswith('.js') or parsed.path.endswith('.mjs') or '.js?' in url.lower():
                         js_urls.add(url)
-                        self.logger.debug(f"Found JS (extension): {url}")
+                        self.logger.info(f"✓ Found JS: {url}")
             
             page.on('request', handle_request)
             
             # Navigate and wait longer for SPAs
+            self.logger.info(f"Navigating to {target}...")
             await page.goto(target, wait_until='networkidle')
+            self.logger.info(f"Page loaded, waiting for dynamic content...")
             
             # Wait extra time for dynamic content
             await asyncio.sleep(3)
             
             # Scroll to trigger lazy-loaded scripts
+            self.logger.info(f"Scrolling to trigger lazy-loaded scripts...")
             await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
             await asyncio.sleep(2)
             
@@ -341,13 +345,9 @@ class Fetcher:
         # Convert set to list (deduplication already done)
         js_urls = list(js_urls)
         
-        self.logger.info(f"Found {len(js_urls)} scripts on live site")
+        self.logger.info(f"🎯 Live scan complete: Found {len(js_urls)} JavaScript files")
         
-        # Log first few for debugging
-        if js_urls and len(js_urls) > 0:
-            self.logger.debug(f"Sample URLs: {js_urls[:3]}")
-        
-        return list(js_urls)
+        return js_urls
     
     async def fetch_content(self, url: str) -> Optional[str]:
         """
