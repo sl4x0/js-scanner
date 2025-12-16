@@ -24,63 +24,65 @@ class SubJSFetcher:
         self.timeout = config.get('subjs', {}).get('timeout', 60)
         self.enabled = config.get('subjs', {}).get('enabled', True)
         
-    def fetch_urls(self, domain: str, scope_domains: Optional[Set[str]] = None) -> List[str]:
-        """
-        Fetch JS URLs for a domain using SubJS
-        
-        Args:
-            domain: Target domain (e.g., 'example.com')
-            scope_domains: Set of in-scope domains for filtering
-            
-        Returns:
-            List of JS URLs
-        """
+    def fetch_urls(self, target: str, scope_domains: Optional[Set[str]] = None) -> List[str]:
+        """Fetch JS URLs for a target using SubJS"""
         if not self.enabled:
             self.logger.debug("SubJS is disabled in configuration")
             return []
             
         try:
-            self.logger.info(f"🔍 Fetching JS URLs with SubJS for {domain}")
+            # Ensure full URL with protocol
+            if not target.startswith(('http://', 'https://')):
+                target = 'https://' + target
             
-            # Clean domain (remove protocol and www prefix)
-            clean_domain = domain.replace('http://', '').replace('https://', '').replace('www.', '').split('/')[0]
+            self.logger.info(f"🔍 Fetching JS URLs with SubJS for {target}")
             
-            # Run SubJS
+            # Run SubJS with full URL
             result = subprocess.run(
-                ['subjs', '-d', clean_domain],
+                ['subjs'],
+                input=target + '\n',
                 capture_output=True,
                 text=True,
                 timeout=self.timeout
             )
             
             if result.returncode != 0:
-                self.logger.warning(f"SubJS failed for {clean_domain}: {result.stderr}")
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                self.logger.warning(f"SubJS failed for {target}: {error_msg}")
                 return []
             
-            # Parse output - one URL per line
+            # Parse output
             urls = []
             for line in result.stdout.strip().split('\n'):
                 url = line.strip()
-                if url and (url.startswith('http://') or url.startswith('https://')):
+                if url and self._is_valid_url(url):
                     urls.append(url)
             
-            self.logger.info(f"✓ SubJS found {len(urls)} URLs for {clean_domain}")
+            self.logger.info(f"✓ SubJS found {len(urls)} URLs for {target}")
             
-            # Filter by scope if provided
-            if scope_domains:
-                urls = self._filter_by_scope(urls, scope_domains)
-                self.logger.info(f"✓ Filtered to {len(urls)} in-scope URLs")
+            # Apply scope filtering if requested
+            if scope_domains is not None:
+                filtered_urls = self._filter_by_scope(urls, scope_domains)
+                if len(filtered_urls) < len(urls):
+                    self.logger.info(
+                        f"✓ Filtered to {len(filtered_urls)} in-scope URLs "
+                        f"(removed {len(urls) - len(filtered_urls)} out-of-scope)"
+                    )
+                return filtered_urls
             
             return urls
             
         except subprocess.TimeoutExpired:
-            self.logger.warning(f"⏰ SubJS timeout for {domain} after {self.timeout}s")
+            self.logger.warning(f"⏰ SubJS timeout for {target} after {self.timeout}s")
             return []
         except FileNotFoundError:
-            self.logger.error("❌ SubJS not installed. Install: go install -v github.com/lc/subjs@latest")
+            self.logger.error(
+                "❌ SubJS not installed. Install with:\n"
+                "   go install -v github.com/lc/subjs@latest"
+            )
             return []
         except Exception as e:
-            self.logger.error(f"❌ SubJS error for {domain}: {str(e)}")
+            self.logger.error(f"❌ SubJS error for {target}: {str(e)}")
             return []
     
     def fetch_from_file(self, filepath: str, scope_domains: Optional[Set[str]] = None) -> List[str]:
@@ -148,6 +150,10 @@ class SubJSFetcher:
         except Exception as e:
             self.logger.error(f"❌ SubJS error: {str(e)}")
             return []
+    
+    def _is_valid_url(self, url: str) -> bool:
+        """Check if URL is valid and starts with http(s)"""
+        return url and (url.startswith('http://') or url.startswith('https://'))
     
     def _filter_by_scope(self, urls: List[str], scope_domains: Set[str]) -> List[str]:
         """

@@ -1110,16 +1110,21 @@ class ScanEngine:
             json.dump(manifest, f, indent=2, sort_keys=True)
     
     def _get_scope_domains(self) -> set:
-        """
-        Get set of in-scope domains for filtering
-        
-        Returns:
-            Set of domain names that are in scope
-        """
+        """Get set of in-scope domains for filtering"""
         domains = set()
         
-        # Add allowed domains that were already tracked
-        domains.update(self.allowed_domains)
+        # Extract domains from allowed_domains
+        for domain in self.allowed_domains:
+            # Remove protocol
+            clean = domain.replace('http://', '').replace('https://', '')
+            # Remove path
+            clean = clean.split('/')[0]
+            # Remove port
+            clean = clean.split(':')[0]
+            # Remove www
+            if clean.startswith('www.'):
+                clean = clean[4:]
+            domains.add(clean.lower())
         
         return domains if domains else None
     

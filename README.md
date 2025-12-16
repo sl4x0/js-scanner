@@ -71,6 +71,7 @@ subjs -h
 ```
 
 If `subjs` is not found, add Go's bin directory to your PATH:
+
 - Windows: `C:\Users\<YourUsername>\go\bin`
 - Linux/Mac: `~/go/bin`
 
@@ -142,12 +143,12 @@ python -m jsscanner -t myproject -u https://example.com -v
 
 ### Discovery Modes
 
-| Mode | Speed | Coverage | Use Case |
-|------|-------|----------|----------|
-| **Default** (no flags) | Medium | Low-Medium | Direct URL scanning |
-| **--subjs** | Fast | High | Recommended for most scans |
-| **--subjs-only** | Fastest | High | Quick scans, many domains |
-| **--no-scope-filter** | Any | Maximum | Include all JS (CDN, 3rd party) |
+| Mode                   | Speed   | Coverage   | Use Case                        |
+| ---------------------- | ------- | ---------- | ------------------------------- |
+| **Default** (no flags) | Medium  | Low-Medium | Direct URL scanning             |
+| **--subjs**            | Fast    | High       | Recommended for most scans      |
+| **--subjs-only**       | Fastest | High       | Quick scans, many domains       |
+| **--no-scope-filter**  | Any     | Maximum    | Include all JS (CDN, 3rd party) |
 
 ## ⚙️ Configuration
 
@@ -156,43 +157,43 @@ Edit `config.yaml` for advanced settings:
 ```yaml
 # Discord Integration
 discord_webhook: "https://discord.com/api/webhooks/..."
-discord_rate_limit: 30  # Messages per minute
-discord_status_enabled: false  # Only send secret alerts, not status updates
+discord_rate_limit: 30 # Messages per minute
+discord_status_enabled: false # Only send secret alerts, not status updates
 
 # Performance Tuning
-threads: 50  # Concurrent downloads (10-50 recommended based on RAM)
-max_concurrent_domains: 10  # Parallel domain processing
-trufflehog_max_concurrent: 5  # Limit concurrent TruffleHog processes
+threads: 50 # Concurrent downloads (10-50 recommended based on RAM)
+max_concurrent_domains: 10 # Parallel domain processing
+trufflehog_max_concurrent: 5 # Limit concurrent TruffleHog processes
 
 # Discovery Options
-skip_live: false  # Skip live site crawling
-verbose: false  # Show all HTTP errors and debug info
-no_scope_filter: false  # Include CDN and third-party JS files
+skip_live: false # Skip live site crawling
+verbose: false # Show all HTTP errors and debug info
+no_scope_filter: false # Include CDN and third-party JS files
 
 # Timeouts
-timeout: 30  # HTTP request timeout (seconds)
-trufflehog_timeout: 300  # Secret scanning timeout per file (seconds)
-max_file_size: 10485760  # 10MB max per JS file
+timeout: 30 # HTTP request timeout (seconds)
+trufflehog_timeout: 300 # Secret scanning timeout per file (seconds)
+max_file_size: 10485760 # 10MB max per JS file
 
 # Playwright Browser
 playwright:
-  headless: true  # Run browser in headless mode
-  max_concurrent: 3  # Max concurrent browser instances
-  page_timeout: 30000  # Page load timeout (milliseconds)
+  headless: true # Run browser in headless mode
+  max_concurrent: 3 # Max concurrent browser instances
+  page_timeout: 30000 # Page load timeout (milliseconds)
 
 # SubJS Configuration
 subjs:
-  enabled: true  # Enable SubJS for URL discovery
-  timeout: 60  # Timeout per domain (seconds)
+  enabled: true # Enable SubJS for URL discovery
+  timeout: 60 # Timeout per domain (seconds)
 
 # AST Analysis
 ast:
-  enabled: true  # Enable Tree-sitter AST parsing
-  min_word_length: 4  # Minimum word length for wordlist extraction
+  enabled: true # Enable Tree-sitter AST parsing
+  min_word_length: 4 # Minimum word length for wordlist extraction
 
 # Batch Processing
 batch_processing:
-  cleanup_minified: true  # Delete minified files after beautification
+  cleanup_minified: true # Delete minified files after beautification
 ```
 
 ## 📁 Output Structure
@@ -226,6 +227,7 @@ results/<project-name>/
 ```
 
 **New Features:**
+
 - **Domain-specific organization**: Extracts and secrets are now organized by domain for easier analysis
 - **Backward compatibility**: Legacy flat files (endpoints.txt, params.txt) are still created
 - **Enhanced metadata**: scan_results.json includes domain_summary and secrets_summary fields
@@ -388,16 +390,17 @@ The scanner will work without SubJS using live browser scanning only.
 Reduce concurrency settings in `config.yaml`:
 
 ```yaml
-threads: 10  # Lower for 2GB RAM systems
-max_concurrent_domains: 3  # Lower for slower connections
-trufflehog_max_concurrent: 2  # Reduce if TruffleHog crashes
+threads: 10 # Lower for 2GB RAM systems
+max_concurrent_domains: 3 # Lower for slower connections
+trufflehog_max_concurrent: 2 # Reduce if TruffleHog crashes
 playwright:
-  max_concurrent: 1  # Single browser instance
+  max_concurrent: 1 # Single browser instance
 ```
 
 ### TruffleHog not found
 
 The scanner auto-detects TruffleHog in this order:
+
 1. Path specified in `trufflehog_path` config
 2. Project root directory (trufflehog.exe on Windows, trufflehog on Linux)
 3. System PATH
@@ -407,12 +410,14 @@ Download from: https://github.com/trufflesecurity/trufflehog/releases
 ### No files downloaded
 
 Common causes:
+
 - **Invalid URLs**: Ensure URLs point to .js files or pages containing JS
 - **CORS/403 errors**: Some sites block automated requests (normal)
 - **Scope filtering**: Scanner only downloads files from target domains
 - **Duplicates**: Files already scanned are skipped (check history.json)
 
 Use `--verbose` flag to see detailed error messages:
+
 ```powershell
 python -m jsscanner -t test -u https://example.com --verbose
 ```
@@ -423,13 +428,14 @@ python -m jsscanner -t test -u https://example.com --verbose
 
 ```yaml
 # config.yaml - Optimized for bulk scanning
-threads: 50  # High concurrency
-max_concurrent_domains: 20  # Process many domains in parallel
+threads: 50 # High concurrency
+max_concurrent_domains: 20 # Process many domains in parallel
 batch_processing:
-  cleanup_minified: true  # Save disk space
+  cleanup_minified: true # Save disk space
 ```
 
 **Command:**
+
 ```powershell
 python -m jsscanner -t bulk-scan --subjs-only -i domains.txt --threads 50
 ```
@@ -438,13 +444,14 @@ python -m jsscanner -t bulk-scan --subjs-only -i domains.txt --threads 50
 
 ```yaml
 # config.yaml - Optimized for thorough analysis
-threads: 25  # Moderate concurrency
-max_concurrent_domains: 3  # Focus on quality
+threads: 25 # Moderate concurrency
+max_concurrent_domains: 3 # Focus on quality
 recursion:
-  max_depth: 5  # Deeper crawling
+  max_depth: 5 # Deeper crawling
 ```
 
 **Command:**
+
 ```powershell
 python -m jsscanner -t deep-scan --subjs -u https://example.com
 ```
@@ -453,13 +460,13 @@ python -m jsscanner -t deep-scan --subjs -u https://example.com
 
 ```yaml
 # config.yaml - Optimized for 1-2GB RAM
-threads: 10  # Low concurrency
-max_concurrent_domains: 2  # Process few domains at once
-trufflehog_max_concurrent: 2  # Limit secret scanning
+threads: 10 # Low concurrency
+max_concurrent_domains: 2 # Process few domains at once
+trufflehog_max_concurrent: 2 # Limit secret scanning
 playwright:
-  max_concurrent: 1  # Single browser
+  max_concurrent: 1 # Single browser
 batch_processing:
-  cleanup_minified: true  # Save disk space
+  cleanup_minified: true # Save disk space
 ```
 
 ### Command-Line Quick Tips
