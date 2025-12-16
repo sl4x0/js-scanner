@@ -59,21 +59,23 @@ class Processor:
         """
         import asyncio
         
-        # Skip beautification for very large files (>2MB) - too slow
+        # Skip beautification for very large files (>20MB) - too slow and memory-intensive
         content_size_mb = len(content) / (1024 * 1024)
-        if content_size_mb > 2.0:
-            self.logger.warning(f"Skipping beautification for large file ({content_size_mb:.1f}MB, limit: 2MB)")
+        if content_size_mb > 20.0:
+            self.logger.warning(f"Skipping beautification for large file ({content_size_mb:.1f}MB, limit: 20MB)")
             return content
         
         try:
-            # Issue #14 & #3: Increased timeout thresholds
-            # Small files (<0.5MB): 60s, Medium (<1MB): 120s, Large: 180s
-            if content_size_mb < 0.5:
-                timeout = 60.0  # Increased from 30s
-            elif content_size_mb < 1.0:
-                timeout = 120.0  # Increased from 60s
+            # Issue #14 & #3: Practical timeout thresholds to prevent extreme scan times
+            # Small files (<1MB): 60s, Medium (<5MB): 180s (3min), Large (<10MB): 600s (10min), Very Large (20MB): 1800s (30min)
+            if content_size_mb < 1.0:
+                timeout = 60.0
+            elif content_size_mb < 5.0:
+                timeout = 180.0  # 3 minutes
+            elif content_size_mb < 10.0:
+                timeout = 600.0  # 10 minutes
             else:
-                timeout = 180.0  # Increased from 120s
+                timeout = 1800.0  # 30 minutes max for 10-20MB files
             
             loop = asyncio.get_event_loop()
             beautified = await asyncio.wait_for(

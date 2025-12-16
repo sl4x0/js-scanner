@@ -405,11 +405,11 @@ class ASTAnalyzer:
             # Any path starting with / (relative paths)
             r'["\']/([\w\-/]+\.(?:js|json|xml|html|php|asp))["\']',
             # href properties and assignments
-            r'href\s*:\s*["\']([^"\'\']+)["\']',
-            r'href\s*=\s*["\']([^"\'\']+)["\']',
+            r'href\s*:\s*["\']([^"\']+)["\']',
+            r'href\s*=\s*["\']([^"\']+)["\']',
             # URL assignments and window.location
-            r'(?:url|path|endpoint)\s*:\s*["\']([/][^"\'\']+)["\']',
-            r'window\.location(?:\.href)?\s*=\s*["\']([/][^"\'\']+)["\']',
+            r'(?:url|path|endpoint)\s*:\s*["\']([/][^"\']+)["\']',
+            r'window\.location(?:\.href)?\s*=\s*["\']([/][^"\']+)["\']',
         ]
         
         endpoints = []

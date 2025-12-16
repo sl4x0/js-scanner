@@ -36,7 +36,7 @@ timeouts:
 # Playwright
 playwright:
   headless: true
-  max_concurrent: 3
+  max_concurrent: 6 # Max concurrent browser instances
   restart_after: 100 # Restart browser after N pages
   page_timeout: 60000 # ms (increased to 60s for sites with anti-bot protection)
 
