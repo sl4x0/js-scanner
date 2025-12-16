@@ -423,7 +423,7 @@ class ASTAnalyzer:
         return any(indicator in text_lower for indicator in api_indicators)
     
     def get_extracts_with_sources(self) -> dict:
-        \"\"\"Export extracts database with source information\"\"\"
+        """Export extracts database with source information"""
         result = {
             'endpoints': [],
             'params': [],
