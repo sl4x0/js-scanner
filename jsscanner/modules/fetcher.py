@@ -1,6 +1,6 @@
 """
 Fetcher Module
-Handles fetching JavaScript files from Wayback Machine and live sites using Playwright
+Handles fetching JavaScript files from live sites using Playwright
 """
 import asyncio
 import aiohttp
@@ -9,41 +9,6 @@ from playwright.async_api import async_playwright, Browser, BrowserContext
 from typing import List, Optional
 from urllib.parse import urljoin, urlparse
 import re
-
-
-class WaybackRateLimiter:
-    """Rate limiter for Wayback Machine API (15 requests/second)"""
-    
-    def __init__(self, requests_per_second: int = 15):
-        self.rate = requests_per_second
-        self.tokens = float(self.rate)
-        self.last_update = time.time()
-        self.lock = asyncio.Lock()
-    
-    async def acquire(self) -> None:
-        """Acquire a token, waiting if necessary"""
-        async with self.lock:
-            now = time.time()
-            elapsed = now - self.last_update
-            
-            # Refill tokens
-            self.tokens = min(
-                self.rate,
-                self.tokens + elapsed * self.rate
-            )
-            self.last_update = now
-            
-            # Wait if no tokens available
-            if self.tokens < 1:
-                wait_time = (1 - self.tokens) / self.rate
-                # Log rate limiting activity
-                import logging
-                logger = logging.getLogger('jsscanner')
-                logger.debug(f"⏳ Wayback rate limit: waiting {wait_time:.2f}s")
-                await asyncio.sleep(wait_time)
-                self.tokens = 1
-            
-            self.tokens -= 1
 
 
 class BrowserManager:
@@ -165,18 +130,11 @@ class Fetcher:
         self.last_failure_reason = None  # Track last fetch failure reason
         self.verbose = config.get('verbose', False)  # Verbose mode flag
         
-        # Rate limiters
-        wayback_rate = config.get('wayback', {}).get('rate_limit', 15)
-        self.wayback_limiter = WaybackRateLimiter(wayback_rate)
-        
         # Playwright settings
         self.max_concurrent = config.get('playwright', {}).get('max_concurrent', 3)
         self.restart_after = config.get('playwright', {}).get('restart_after', 100)
         self.page_timeout = config.get('playwright', {}).get('page_timeout', 30000)
         self.headless = config.get('playwright', {}).get('headless', True)
-        
-        # Wayback settings
-        self.wayback_max_results = config.get('wayback', {}).get('max_results', 10000)
     
     def _is_in_scope(self, url: str, target: str) -> bool:
         """
@@ -264,179 +222,6 @@ class Fetcher:
         if self.playwright:
             await self.playwright.stop()
         self.logger.info("Playwright browser closed")
-    
-    async def fetch_wayback(self, target: str) -> List[str]:
-        """
-        Fetch JavaScript URLs from Wayback Machine
-        
-        Args:
-            target: Target domain
-            
-        Returns:
-            List of JavaScript URLs (as Wayback archive URLs)
-        """
-        self.logger.info(f"Fetching from Wayback Machine: {target}")
-        
-        # Strip www. prefix to avoid *.www.domain.com pattern
-        clean_target = target.replace('http://', '').replace('https://', '').replace('www.', '')
-        
-        # Get original URLs directly from Wayback CDX API
-        cdx_url = "http://web.archive.org/cdx/search/cdx"
-        params = {
-            'url': f'*.{clean_target}/*',  # Keep subdomain wildcard for comprehensive coverage
-            'matchType': 'prefix',  # Use prefix for better matching (was 'domain')
-            'fl': 'original',
-            'collapse': 'urlkey',  # More comprehensive results (groups by URL pattern)
-            # REMOVED: 'filter': 'statuscode:200' - Too restrictive, many valid files excluded
-            'limit': self.wayback_max_results
-        }
-        
-        js_urls = set()  # Use set for automatic deduplication
-        
-        # Retry configuration
-        max_retries = 3
-        retry_delay = 5
-        
-        # Log once at the start (before retry loop to avoid spam)
-        self.logger.info(f"⏳ Starting Wayback query for {clean_target} (may take 5+ minutes)...")
-        
-        for attempt in range(max_retries):
-            try:
-                # Apply rate limiting
-                await self.wayback_limiter.acquire()
-                
-                if attempt > 0:
-                    self.logger.info(f"🔄 Wayback retry attempt {attempt + 1}/{max_retries} for {clean_target}")
-                    await asyncio.sleep(retry_delay * attempt)
-                
-                self.logger.info(f"Wayback query: {cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}")
-                
-                async with aiohttp.ClientSession() as session:
-                    timeout = aiohttp.ClientTimeout(total=300, sock_read=120)  # 5 minutes total, 2 minutes socket read
-                    async with session.get(cdx_url, params=params, timeout=timeout) as response:
-                        self.logger.info(f"Wayback API response status: {response.status}")
-                        
-                        if response.status == 200:
-                            # Stream line by line to handle large responses
-                            line_count = 0
-                            async for line in response.content:
-                                line_count += 1
-                                original_url = line.decode('utf-8', errors='ignore').strip()
-                                
-                                if not original_url:
-                                    continue
-                                
-                                # Check if it's a valid .js URL using urlparse
-                                try:
-                                    from urllib.parse import urlparse
-                                    parsed = urlparse(original_url)
-                                    
-                                    # Must have proper scheme and domain
-                                    if not parsed.scheme or not parsed.netloc:
-                                        continue
-                                    
-                                    # Check if path ends with .js or .mjs
-                                    if parsed.path.endswith('.js') or parsed.path.endswith('.mjs'):
-                                        # Add original URL directly (no web.archive.org wrapper)
-                                        js_urls.add(original_url)
-                                except:
-                                    continue
-                                
-                                # Log progress every 1000 lines
-                                if line_count % 1000 == 0:
-                                    self.logger.info(f"Processed {line_count} lines, found {len(js_urls)} JS URLs so far...")
-                            
-                            self.logger.info(f"Wayback returned {line_count} total URLs, found {len(js_urls)} unique .js files")
-                            break  # Success, exit retry loop
-                        elif response.status == 429:
-                            self.logger.warning(f"Wayback rate limit exceeded (429)")
-                            if attempt < max_retries - 1:
-                                await asyncio.sleep(retry_delay * 2)  # Longer wait for rate limit
-                                continue
-                        elif response.status >= 500:
-                            self.logger.warning(f"Wayback server error ({response.status})")
-                            if attempt < max_retries - 1:
-                                continue
-                        else:
-                            self.logger.warning(f"Wayback returned status {response.status}")
-                            break  # Don't retry for client errors
-                            
-            except asyncio.TimeoutError:
-                self.logger.warning(f"Wayback request timed out after 120s (attempt {attempt + 1}/{max_retries})")
-                if attempt < max_retries - 1:
-                    continue
-            except aiohttp.ClientError as e:
-                self.logger.warning(f"Wayback network error: {e} (attempt {attempt + 1}/{max_retries})")
-                if attempt < max_retries - 1:
-                    continue
-            except Exception as e:
-                self.logger.error(f"Unexpected error fetching from Wayback: {e}")
-                break  # Don't retry for unexpected errors
-        
-        # Filter to only target domain before returning
-        filtered_urls = []
-        for url in js_urls:
-            if self._is_in_scope(url, target):
-                filtered_urls.append(url)
-            else:
-                self.logger.debug(f"[WAYBACK] Filtered out-of-scope URL: {url}")
-        
-        if len(js_urls) > len(filtered_urls):
-            self.logger.info(f"Filtered {len(js_urls) - len(filtered_urls)} out-of-scope URLs from Wayback")
-        
-        # Issue #3: Warn when large result sets are detected
-        if len(filtered_urls) > 5000:
-            self.logger.warning(
-                f"⚠️  Wayback returned {len(filtered_urls)} JS files!\n"
-                f"   This may take a long time to scan.\n"
-                f"   Consider using --no-wayback for faster scanning."
-            )
-        
-        # Issue #11: Validate URLs before returning
-        validated_urls = []
-        for url in filtered_urls:
-            if self._validate_wayback_url(url):
-                validated_urls.append(url)
-            else:
-                self.logger.debug(f"[WAYBACK] Rejected malformed URL: {url[:100]}")
-        
-        if len(filtered_urls) > len(validated_urls):
-            self.logger.info(f"Filtered {len(filtered_urls) - len(validated_urls)} malformed URLs from Wayback")
-        
-        return validated_urls
-    
-    def _validate_wayback_url(self, url: str) -> bool:
-        """
-        Validate Wayback URL for safety (Issue #11)
-        
-        Args:
-            url: URL to validate
-            
-        Returns:
-            True if URL is safe, False otherwise
-        """
-        # Check URL length (max 2048 characters)
-        if len(url) > 2048:
-            return False
-        
-        # Check for null bytes
-        if '\x00' in url:
-            return False
-        
-        # Check for XSS attempts
-        url_lower = url.lower()
-        if '<script' in url_lower or 'javascript:' in url_lower:
-            return False
-        
-        # Validate character set (printable ASCII only)
-        try:
-            url.encode('ascii')
-            if not all(32 <= ord(c) <= 126 or c in '\r\n' for c in url):
-                return False
-        except UnicodeEncodeError:
-            return False
-        
-        return True
     
     async def fetch_live(self, target: str) -> List[str]:
         """

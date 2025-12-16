@@ -5,18 +5,21 @@ A high-performance JavaScript security scanner designed for bug bounty hunters a
 ## 🚀 Features
 
 - **Multi-domain concurrent scanning** - Process 10+ domains simultaneously with asyncio
-- **Live + Wayback Machine discovery** - Find JavaScript files from current sites and historical archives
+- **SubJS integration** - Fast JavaScript URL discovery using SubJS tool
+- **Live browser crawling** - Find JavaScript files from current sites using Playwright
 - **Secret detection** - Integrated TruffleHog scanning for API keys, tokens, and credentials
 - **AST-based analysis** - Extract API endpoints, parameters, and sensitive data
 - **Intelligent beautification** - Dynamic timeouts based on file size (30s/60s/120s)
 - **Discord notifications** - Real-time alerts for verified secrets
 - **State management** - Avoid re-scanning duplicate files with hash-based tracking
+- **Scope filtering** - Automatically filter out-of-scope domains (CDN, third-party JS)
 
 ## 📋 Requirements
 
 - Python 3.12+
 - TruffleHog 3.92.3+
 - Playwright (Chromium)
+- SubJS (optional, for enhanced discovery)
 - 2GB+ RAM recommended
 
 ## 🛠️ Installation
@@ -48,7 +51,30 @@ curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scr
 playwright install chromium
 ```
 
-### 4. Configure settings
+### 4. Install SubJS (Optional, Recommended)
+
+SubJS is a fast JavaScript URL discovery tool. Install it for enhanced scanning capabilities:
+
+**Prerequisites:** Install Go 1.21+ from https://go.dev/dl/
+
+**Installation:**
+
+```powershell
+# Windows/Linux/Mac
+go install -v github.com/lc/subjs@latest
+```
+
+**Verify installation:**
+
+```powershell
+subjs -h
+```
+
+If `subjs` is not found, add Go's bin directory to your PATH:
+- Windows: `C:\Users\<YourUsername>\go\bin`
+- Linux/Mac: `~/go/bin`
+
+### 5. Configure settings
 
 ```powershell
 copy config.yaml.example config.yaml
@@ -65,10 +91,16 @@ copy config.yaml.example config.yaml
 python -m jsscanner -t myproject -u https://example.com/app.js
 ```
 
-**Scan with discovery mode (crawl site + Wayback):**
+**Scan with SubJS discovery (recommended):**
 
 ```powershell
-python -m jsscanner -t myproject --discovery -u https://example.com
+python -m jsscanner -t myproject --subjs -u https://example.com
+```
+
+**Fast scan with SubJS only (no browser):**
+
+```powershell
+python -m jsscanner -t myproject --subjs-only -u https://example.com
 ```
 
 **Scan multiple domains from file:**
@@ -80,7 +112,13 @@ python -m jsscanner -t myproject --discovery -u https://example.com
 #   https://target.com
 #   subdomain.example.com
 
-python -m jsscanner -t myproject --discovery -i domains.txt --threads 25
+python -m jsscanner -t myproject --subjs -i domains.txt --threads 25
+```
+
+**Include all JS files (CDN, third-party):**
+
+```powershell
+python -m jsscanner -t myproject --subjs --no-scope-filter -u https://example.com
 ```
 
 **Verbose output (show all HTTP errors):**
@@ -92,13 +130,24 @@ python -m jsscanner -t myproject -u https://example.com -v
 ### Command-Line Options
 
 ```
--t, --target       Project name (creates results/project-name/)
--u, --url          URL(s) to scan (space-separated)
--i, --input        File containing URLs/domains (one per line)
---discovery        Enable Live + Wayback discovery mode
---threads          Concurrent download threads (default: 50)
--v, --verbose      Show detailed output including HTTP errors
+-t, --target          Project name (creates results/project-name/)
+-u, --url             URL(s) to scan (space-separated)
+-i, --input           File containing URLs/domains (one per line)
+--subjs               Use SubJS for additional URL discovery
+--subjs-only          Use only SubJS (skip live browser, fastest)
+--no-scope-filter     Include CDN and third-party JS files
+--threads             Concurrent download threads (default: 50)
+-v, --verbose         Show detailed output including HTTP errors
 ```
+
+### Discovery Modes
+
+| Mode | Speed | Coverage | Use Case |
+|------|-------|----------|----------|
+| **Default** (no flags) | Medium | Low-Medium | Direct URL scanning |
+| **--subjs** | Fast | High | Recommended for most scans |
+| **--subjs-only** | Fastest | High | Quick scans, many domains |
+| **--no-scope-filter** | Any | Maximum | Include all JS (CDN, 3rd party) |
 
 ## ⚙️ Configuration
 
@@ -116,9 +165,9 @@ max_concurrent_domains: 10  # Parallel domain processing
 trufflehog_max_concurrent: 5  # Limit concurrent TruffleHog processes
 
 # Discovery Options
-skip_wayback: false  # Skip Wayback Machine queries (faster but less coverage)
 skip_live: false  # Skip live site crawling
 verbose: false  # Show all HTTP errors and debug info
+no_scope_filter: false  # Include CDN and third-party JS files
 
 # Timeouts
 timeout: 30  # HTTP request timeout (seconds)
@@ -131,10 +180,10 @@ playwright:
   max_concurrent: 3  # Max concurrent browser instances
   page_timeout: 30000  # Page load timeout (milliseconds)
 
-# Wayback Machine
-wayback:
-  rate_limit: 15  # Requests per second
-  max_results: 10000  # Maximum URLs to fetch from Wayback
+# SubJS Configuration
+subjs:
+  enabled: true  # Enable SubJS for URL discovery
+  timeout: 60  # Timeout per domain (seconds)
 
 # AST Analysis
 ast:
@@ -187,7 +236,7 @@ results/<project-name>/
 
 - **Domain-level parallelism**: Process up to 10 domains simultaneously
 - **File-level parallelism**: Download up to 50 files concurrently per domain
-- **Live + Wayback parallelism**: Scan current site and Wayback archive simultaneously
+- **SubJS integration**: Fast URL discovery without browser overhead
 
 ### Smart Resource Management
 
@@ -195,8 +244,8 @@ results/<project-name>/
   - <0.5MB: 30 seconds
   - 0.5-1MB: 60 seconds
   - 1-2MB: 120 seconds
-  - > 2MB: Skip (too slow)
-- **Retry logic**: Automatic retry for Wayback Machine timeouts (3 attempts)
+  - \> 2MB: Skip (too slow)
+- **Scope filtering**: Automatically filter out-of-scope domains (CDN, third-party)
 - **Memory optimization**: Clean up minified files after beautification
 
 ### Noise Reduction
@@ -277,13 +326,13 @@ python -m jsscanner -t test -u https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6
 
 🎯 Project Scope: myproject
 📂 Input Items: 3
-🔍 Discovery Mode: ON (Wayback + Live)
+🔍 Discovery Mode: Hybrid (SubJS + Live Browser)
 
 📡 PHASE 1: DISCOVERY & URL COLLECTION (CONCURRENT)
 🚀 Processing 3 domains with concurrency level: 10
 [1/3] 📍 Processing: https://example.com
   ├─ Live scan: Found 14 JS files
-  ├─ Wayback scan: Found 23 JS files
+  ├─ Subjs scan: Found 23 JS files
   └─ Total discovered: 37 JS files
 
 ⬇️  PHASE 2: DOWNLOADING ALL FILES
@@ -316,14 +365,16 @@ Scan Statistics:
 
 If you see "Tree-sitter initialization failed", the scanner will use regex fallback (slightly less accurate but functional). This is normal and doesn't affect secret scanning or file processing.
 
-### Wayback timeout
+### SubJS not installed
 
-Wayback Machine can be slow. The scanner automatically retries up to 3 times with exponential backoff. If it consistently times out, you can skip it:
+If you see "SubJS not installed" warnings:
 
-```yaml
-# config.yaml
-skip_wayback: true  # Skip Wayback queries
-```
+1. Install Go from https://go.dev/dl/
+2. Run: `go install -v github.com/lc/subjs@latest`
+3. Add Go's bin directory to your PATH
+4. Verify with: `subjs -h`
+
+The scanner will work without SubJS using live browser scanning only.
 
 ### Discord notifications not working
 
@@ -374,9 +425,13 @@ python -m jsscanner -t test -u https://example.com --verbose
 # config.yaml - Optimized for bulk scanning
 threads: 50  # High concurrency
 max_concurrent_domains: 20  # Process many domains in parallel
-skip_wayback: true  # Skip for speed (can run separately later)
 batch_processing:
   cleanup_minified: true  # Save disk space
+```
+
+**Command:**
+```powershell
+python -m jsscanner -t bulk-scan --subjs-only -i domains.txt --threads 50
 ```
 
 ### For Deep Analysis (Single Target)
@@ -385,11 +440,13 @@ batch_processing:
 # config.yaml - Optimized for thorough analysis
 threads: 25  # Moderate concurrency
 max_concurrent_domains: 3  # Focus on quality
-skip_wayback: false  # Get historical files
-wayback:
-  max_results: 50000  # Increase Wayback coverage
 recursion:
   max_depth: 5  # Deeper crawling
+```
+
+**Command:**
+```powershell
+python -m jsscanner -t deep-scan --subjs -u https://example.com
 ```
 
 ### For Limited Resources (VPS/Low RAM)

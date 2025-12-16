@@ -77,14 +77,14 @@ class ScanEngine:
             }
         }
     
-    async def run(self, inputs: List[str], discovery_mode: bool = False):
+    async def run(self, inputs: List[str], use_subjs: bool = False, subjs_only: bool = False):
         """
         Main execution method with BATCH PROCESSING
         
         Args:
             inputs: List of URLs or domains to scan
-            discovery_mode: If True, perform active discovery (Wayback + Live crawling).
-                          If False, scan only the exact URLs/domains provided.
+            use_subjs: If True, use SubJS for additional URL discovery
+            subjs_only: If True, only use SubJS (skip live browser scan)
         """
         self.start_time = time.time()
         
@@ -92,7 +92,8 @@ class ScanEngine:
         from datetime import datetime
         self.state.update_metadata({
             'start_time': datetime.utcnow().isoformat() + 'Z',
-            'discovery_mode': discovery_mode
+            'use_subjs': use_subjs,
+            'subjs_only': subjs_only
         })
         
         # Setup signal handlers for graceful shutdown
@@ -141,7 +142,7 @@ class ScanEngine:
                     pass
             
             # Process domains concurrently
-            urls_to_scan = await self._discover_all_domains_concurrent(inputs, discovery_mode)
+            urls_to_scan = await self._discover_all_domains_concurrent(inputs, use_subjs, subjs_only)
             
             if not urls_to_scan:
                 self.logger.warning("No JavaScript files found to scan")
@@ -345,18 +346,23 @@ class ScanEngine:
         
         await self.fetcher.initialize()
     
-    async def _discover_all_domains_concurrent(self, inputs: List[str], discovery_mode: bool) -> List[str]:
+    async def _discover_all_domains_concurrent(self, inputs: List[str], use_subjs: bool, subjs_only: bool) -> List[str]:
         """
-        PHASE 1: Concurrent domain discovery with parallel Wayback and Live requests
+        PHASE 1: Concurrent domain discovery with SubJS and/or Live scanning
         
         Args:
             inputs: List of URLs or domains to scan
-            discovery_mode: If True, perform active discovery (Wayback + Live crawling)
+            use_subjs: If True, use SubJS for URL discovery
+            subjs_only: If True, only use SubJS (skip live browser scan)
             
         Returns:
             List of discovered JavaScript URLs
         """
         all_urls = []
+        
+        # Initialize SubJS if enabled
+        from ..modules.subjs_fetcher import SubJSFetcher
+        subjs_fetcher = SubJSFetcher(self.config, self.logger)
         
         # Configure concurrency level
         max_concurrent_domains = self.config.get('max_concurrent_domains', 10)
@@ -383,18 +389,23 @@ class ScanEngine:
                     # CASE B: It's a Domain/Page URL (needs JS extraction)
                     self.logger.info(f"[{index+1}/{len(inputs)}] 📍 Processing: {item}")
                     
-                    # Run live and wayback concurrently for this domain
+                    # Determine which discovery methods to use
                     tasks = []
                     
-                    # Always fetch LIVE JS from this page/domain (unless --no-live)
-                    if not self.config.get('skip_live', False):
+                    # SubJS scan
+                    if use_subjs or subjs_only:
+                        if SubJSFetcher.is_installed():
+                            # Get scope domains for filtering
+                            scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
+                            tasks.append(('subjs', asyncio.to_thread(subjs_fetcher.fetch_urls, item, scope_domains)))
+                        else:
+                            self.logger.warning(f"  ⚠️  SubJS not installed, skipping SubJS scan")
+                    
+                    # Live browser scan (unless subjs_only mode)
+                    if not subjs_only and not self.config.get('skip_live', False):
                         tasks.append(('live', self.fetcher.fetch_live(item)))
                     
-                    # ONLY if Discovery Mode is ON, query Wayback
-                    if discovery_mode and not self.config.get('skip_wayback', False):
-                        tasks.append(('wayback', self.fetcher.fetch_wayback(item)))
-                    
-                    # Execute live and wayback concurrently
+                    # Execute discovery methods concurrently
                     if tasks:
                         results = await asyncio.gather(*[task[1] for task in tasks], return_exceptions=True)
                         
@@ -1097,6 +1108,20 @@ class ScanEngine:
         # Save manifest
         with open(manifest_file, 'w') as f:
             json.dump(manifest, f, indent=2, sort_keys=True)
+    
+    def _get_scope_domains(self) -> set:
+        """
+        Get set of in-scope domains for filtering
+        
+        Returns:
+            Set of domain names that are in scope
+        """
+        domains = set()
+        
+        # Add allowed domains that were already tracked
+        domains.update(self.allowed_domains)
+        
+        return domains if domains else None
     
     def get_url_from_filename(self, filename: str) -> Optional[str]:
         """

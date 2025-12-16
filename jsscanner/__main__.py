@@ -103,9 +103,16 @@ async def main():
     if not validate_config(config):
         sys.exit(1)
     
-    # Apply CLI overrides
-    if args.no_wayback:
-        config['skip_wayback'] = True
+    # Apply CLI overrides for SubJS
+    if args.subjs or args.subjs_only:
+        config.setdefault('subjs', {})['enabled'] = True
+    
+    if args.subjs_only:
+        config['skip_live'] = True
+    
+    if args.no_scope_filter:
+        config['no_scope_filter'] = True
+    
     if args.no_live:
         config['skip_live'] = True
     
@@ -116,9 +123,10 @@ async def main():
         print(f"\n🎯 Targets detected: {len(targets)}")
         print("="*60)
     
-    # === NEW: Determine Input List and Discovery Mode ===
+    # === NEW: Determine Input List ===
     targets_to_scan = []
-    discovery_mode = args.discovery  # Start with user's explicit flag
+    use_subjs = args.subjs or args.subjs_only
+    subjs_only = args.subjs_only
     
     if args.input:
         # Read from input file
@@ -135,15 +143,20 @@ async def main():
         targets_to_scan = args.urls
     else:
         # If no input file or URLs provided, the target(s) ARE the input
-        # Force discovery mode ON in this case
         targets_to_scan = targets
-        discovery_mode = True
     
     # Log the scan configuration
     primary_scope = targets[0] if targets else args.target
     print(f"\n🎯 Project Scope: {args.target}")
     print(f"📂 Input Items: {len(targets_to_scan)}")
-    print(f"🔍 Discovery Mode: {'ON (Wayback + Live)' if discovery_mode else 'OFF (Direct scan only)'}")
+    
+    if subjs_only:
+        print(f"🔍 Discovery Mode: SubJS Only (no browser)")
+    elif use_subjs:
+        print(f"🔍 Discovery Mode: Hybrid (SubJS + Live Browser)")
+    else:
+        print(f"🔍 Discovery Mode: Live Browser Only")
+    
     print("="*60)
     
     # Run scan for each target sequentially
@@ -158,7 +171,7 @@ async def main():
             engine = ScanEngine(config, target)
             
             # Run scan with new parameters
-            await engine.run(targets_to_scan, discovery_mode=discovery_mode)
+            await engine.run(targets_to_scan, use_subjs=use_subjs, subjs_only=subjs_only)
             
             if len(targets) > 1 and idx < len(targets):
                 print(f"\n✓ Completed scan {idx}/{len(targets)} for {target}")

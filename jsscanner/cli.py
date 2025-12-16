@@ -19,46 +19,44 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Full discovery for a single domain (Wayback + Live)
-  python -m jsscanner -t example.com --discovery
+  # Scan with SubJS discovery
+  python -m jsscanner -t example.com --subjs
   
-  # Fast scan: httpx subdomains (live pages only, no Wayback)
-  python -m jsscanner -t example.com -i subdomains.txt
+  # Fast scan: SubJS only (no browser)
+  python -m jsscanner -t example.com --subjs-only
   
-  # Deep scan: httpx subdomains with full discovery
-  python -m jsscanner -t example.com -i subdomains.txt --discovery
+  # Scan from file with SubJS
+  python -m jsscanner -t example.com -i subdomains.txt --subjs
   
-  # Scan multiple domains with discovery
-  python -m jsscanner -t "program-name" -i domains.txt --discovery
+  # Direct scan of specific JavaScript URLs
+  python -m jsscanner -t example.com -u https://example.com/app.js
   
-  # Direct scan of specific JavaScript URLs (no discovery)
-  python -m jsscanner -t example.com -i js-files.txt
-  python -m jsscanner -t example.com -u https://example.com/app.js https://example.com/main.js
+  # Include all JS files (no scope filtering)
+  python -m jsscanner -t example.com --subjs --no-scope-filter
 
-Discovery Mode:
-  --discovery flag controls whether to actively discover JS files:
+Discovery Methods:
+  Default (no flags):
+    - Live browser crawling only
+    - Best for: Single-page apps, exact URLs
   
-  OFF (default with -i/-u):
-    - Scans only the URLs/domains provided in input
-    - Live page crawling only (fast)
-    - No Wayback Machine queries
-    - Best for: httpx output, known URL lists
+  --subjs:
+    - Uses SubJS for additional URL discovery
+    - Combines with live browser scanning
+    - Fast and comprehensive
   
-  ON (with --discovery flag):
-    - Queries Wayback Machine for historical files
-    - Crawls live site with Playwright
-    - Comprehensive discovery
-    - Best for: initial recon, full coverage
+  --subjs-only:
+    - Uses only SubJS (no browser)
+    - Fastest mode
+    - Best for: Quick scans, many domains
   
-  AUTO-ON (no -i or -u):
-    - Discovery automatically enabled when scanning a bare domain
-    - Example: python -m jsscanner -t example.com
+  --no-scope-filter:
+    - Include CDN and third-party JS files
+    - Use with --subjs for complete coverage
 
 Performance Tips:
-  - Use -i without --discovery for fast httpx subdomain scans
-  - Use --discovery for comprehensive initial reconnaissance
-  - Use --no-wayback to skip Wayback (keeps live crawling)
-  - Use --threads to control concurrency (default: 10)
+  - Use --subjs-only for fastest scans
+  - Use --subjs for best coverage
+  - Use --threads to control concurrency (default: 50)
         """
     )
     
@@ -72,7 +70,7 @@ Performance Tips:
     # Optional arguments
     parser.add_argument(
         '-i', '--input',
-        help='Input file containing domains, URLs, or JS files (one per line). Without --discovery, only live pages are scanned'
+        help='Input file containing domains, URLs, or JS files (one per line)'
     )
     
     parser.add_argument(
@@ -88,9 +86,21 @@ Performance Tips:
     )
     
     parser.add_argument(
-        '--no-wayback',
+        '--subjs',
         action='store_true',
-        help='Skip Wayback Machine scanning'
+        help='Use SubJS for additional URL discovery (requires SubJS installed)'
+    )
+    
+    parser.add_argument(
+        '--subjs-only',
+        action='store_true',
+        help='Use only SubJS discovery (skip live browser scan, faster)'
+    )
+    
+    parser.add_argument(
+        '--no-scope-filter',
+        action='store_true',
+        help='Disable scope filtering (include CDN and third-party JS files)'
     )
     
     parser.add_argument(
@@ -103,12 +113,6 @@ Performance Tips:
         '--no-recursion',
         action='store_true',
         help='Disable recursive crawling'
-    )
-    
-    parser.add_argument(
-        '--discovery',
-        action='store_true',
-        help='Enable full discovery mode (Wayback Machine + Live crawling). Default: OFF when using -i or -u, AUTO-ON for bare domains'
     )
     
     parser.add_argument(
@@ -139,10 +143,16 @@ Performance Tips:
     args = parser.parse_args()
     
     # Validate conflicting flags
-    if args.no_wayback and args.no_live:
+    if args.subjs_only and args.subjs:
         parser.error(
-            "Error: Cannot use both --no-wayback and --no-live together.\n"
-            "This would disable all scanning methods. Please use only one or neither."
+            "Error: Cannot use both --subjs and --subjs-only together.\n"
+            "Use --subjs-only for SubJS only, or --subjs to combine with live scanning."
+        )
+    
+    if args.no_live and not args.subjs and not args.subjs_only:
+        parser.error(
+            "Error: --no-live requires either --subjs or --subjs-only.\n"
+            "Cannot disable all scanning methods."
         )
     
     # Check if user accidentally used file path with -t flag

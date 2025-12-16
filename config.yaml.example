@@ -21,14 +21,13 @@ user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 10485760  # 10MB max per JS file
 
 # Discovery Mode Options
-skip_wayback: false  # Set to true to skip Wayback Machine queries
 skip_live: false  # Set to true to skip live site crawling
 verbose: false  # Set to true to show all HTTP errors and debug info
+no_scope_filter: false  # Set to true to include CDN and third-party JS files
 
 # Timeouts (Issue #8)
 timeouts:
   http_request: 30
-  wayback_request: 120
   playwright_page: 60000
   trufflehog: 300
 
@@ -38,11 +37,11 @@ playwright:
   max_concurrent: 3
   restart_after: 100  # Restart browser after N pages
   page_timeout: 30000  # ms
-  
-# Wayback
-wayback:
-  rate_limit: 15  # requests per second
-  max_results: 10000
+
+# SubJS Configuration  
+subjs:
+  enabled: true  # Enable SubJS for URL discovery
+  timeout: 60  # Timeout per domain (seconds)
   
 # Recursive Crawling
 recursion:

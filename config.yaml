@@ -29,7 +29,6 @@ max_file_size: 209715200 # 200 MB perfile size limit
 # Issue #8: Configurable timeouts
 timeouts:
   http_request: 30
-  wayback_request: 120
   playwright_page: 60000
   trufflehog: 300
 
@@ -40,10 +39,10 @@ playwright:
   restart_after: 100 # Restart browser after N pages
   page_timeout: 60000 # ms (increased to 60s for sites with anti-bot protection)
 
-# Wayback
-wayback:
-  rate_limit: 15 # requests per second
-  max_results: 10000
+# SubJS Configuration
+subjs:
+  enabled: true # Enable SubJS by default
+  timeout: 60 # Timeout per domain (seconds)
 
 # Recursive Crawling
 recursion:
