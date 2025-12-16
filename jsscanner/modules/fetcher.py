@@ -278,9 +278,9 @@ class Fetcher:
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
             'url': f'*.{clean_target}',
-            'matchType': 'domain',
+            'matchType': 'domain',  # Better scope control
             'fl': 'original',
-            'collapse': 'digest',
+            'collapse': 'digest',  # ✅ Proper deduplication by content hash
             'filter': 'statuscode:200',
             'limit': self.wayback_max_results
         }
@@ -432,12 +432,12 @@ class Fetcher:
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 ignore_https_errors=True,
                 java_script_enabled=True,
-                bypass_csp=True
+                bypass_csp=True  # ✅ Bypass Content Security Policy
             )
             
             page = await context.new_page()
             # Increase timeout to 60 seconds for sites with anti-bot protection
-            page.set_default_timeout(60000)
+            page.set_default_timeout(60000)  # ✅ 60 seconds instead of 30
             
             # Track all JS requests (with strict domain filtering)
             async def handle_request(request):

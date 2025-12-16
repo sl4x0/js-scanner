@@ -302,7 +302,8 @@ class ScanEngine:
                 'statistics': self.stats,
                 'files_scanned': urls_to_scan,
                 'secrets_found': self.state.get_total_secrets(),
-                'extracts': {
+                'extracts': self.stats.get('extracts_detailed', {}),  # NEW: Detailed extracts with source tracking
+                'extracts_legacy': {  # OLD: For backwards compatibility
                     'endpoints': self._read_extract_file('endpoints.txt'),
                     'params': self._read_extract_file('params.txt'),
                     'domains': self._read_extract_file('domains.txt')
@@ -463,6 +464,10 @@ class ScanEngine:
         
         tasks = [process_one(f) for f in files]
         await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Get extracts with source tracking
+        extracts_with_sources = self.ast_analyzer.get_extracts_with_sources()
+        self.stats['extracts_detailed'] = extracts_with_sources
         
         self.logger.info(f"✅ Processed {len(files)} files")
     

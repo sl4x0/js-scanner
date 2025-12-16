@@ -28,6 +28,14 @@ class ASTAnalyzer:
         self.min_word_length = config.get('ast', {}).get('min_word_length', 4)
         self._tree_sitter_warning_logged = False  # Only warn once
         
+        # Track sources for each extract
+        self.extracts_db = {
+            'endpoints': {},  # {endpoint: {sources: [], total_count: 0, domains: set()}}
+            'params': {},
+            'domains': {},
+            'links': {}
+        }
+        
         # Initialize Tree-sitter parser
         try:
             import tree_sitter_javascript as tsjavascript
@@ -258,144 +266,135 @@ class ASTAnalyzer:
         traverse(node)
         return list(words)
     
-    def _extract_with_regex(self, code: str) -> Dict[str, Any]:
-        """Extract data using improved regex patterns"""
+    def _extract_with_regex(self, code: str, source_url: str, source_domain: str) -> Dict[str, Any]:
+        """Extract data using improved regex patterns with source tracking"""
         
-        # ENDPOINTS - Only real API endpoints
+        # ENDPOINTS - Only paths starting with / or full URLs with /api/, /v1/, etc.
         endpoint_patterns = [
-            r'["\']/(api|v\d+|graphql|rest|endpoint)/[a-zA-Z0-9/_-]+["\']',  # API paths
-            r'["\']https?://[^"\']+?/(api|v\d+|graphql)[^"\']*["\']',  # Full API URLs
-            r'fetch\(["\']([^"\']+)["\']',  # fetch() calls
-            r'axios\.[a-z]+\(["\']([^"\']+)["\']',  # axios calls
-            r'\.get\(["\']([^"\']+)["\']',  # .get() calls
-            r'\.post\(["\']([^"\']+)["\']',  # .post() calls
+            r'["\']/(api|graphql|v\d+|rest|endpoint|ajax|auth|user|admin|cart|checkout|account|payment|order|product|search)/[a-zA-Z0-9/_\-\.]*["\']',
+            r'(?:fetch|axios\.[a-z]+|\.get|\.post|\.put|\.delete|\.patch)\s*\(\s*["\']([/][a-zA-Z0-9/_\-\.]+)["\']',
+            r'["\']https?://[a-zA-Z0-9\.\-]+/(api|v\d+|graphql|rest)/[a-zA-Z0-9/_\-\.]*["\']',
         ]
         
-        endpoints = set()
+        endpoints = []
         for pattern in endpoint_patterns:
             matches = re.findall(pattern, code, re.IGNORECASE)
             for match in matches:
-                endpoint = match[0] if isinstance(match, tuple) else match
-                # Filter out garbage
-                if (len(endpoint) > 5 and 
-                    len(endpoint) < 200 and
-                    not any(x in endpoint.lower() for x in ['graphql{', 'query ', 'mutation ', 'fragment ', '__typename'])):
-                    endpoints.add(endpoint.strip('"\''))
+                if isinstance(match, tuple):
+                    endpoint = match[-1] if match[-1] else (match[0] if len(match) > 0 else '')
+                else:
+                    endpoint = match
+                
+                endpoint = endpoint.strip('"\'')
+                
+                if (endpoint.startswith(('/')) or endpoint.startswith('http')) and \
+                   len(endpoint) > 4 and len(endpoint) < 150 and \
+                   not any(x in endpoint.lower() for x in ['retry-after', 'content-type', 'x-request', 'cf-ray']) and \
+                   not any(x in endpoint.lower() for x in ['swiper-', 'gravity-', '.css', '.scss', '-button']) and \
+                   '/' in endpoint[1:]:
+                    endpoints.append(endpoint)
         
-        # PARAMETERS - Only URL parameters
+        # PARAMETERS
         param_patterns = [
-            r'[?&]([a-zA-Z_][a-zA-Z0-9_]{0,30})=',  # URL params
-            r'params\s*:\s*\{[^}]*["\']([a-zA-Z_][a-zA-Z0-9_]{0,30})["\']',  # params object
-            r'searchParams\.append\(["\']([a-zA-Z_][a-zA-Z0-9_]{0,30})["\']',  # URLSearchParams
+            r'[?&]([a-zA-Z_][a-zA-Z0-9_]{1,30})=',
+            r'\.(?:set|append|get|has)\s*\(\s*["\']([a-zA-Z_][a-zA-Z0-9_]{1,30})["\']',
+            r'params\s*:\s*\{[^}]*["\']([a-zA-Z_][a-zA-Z0-9_]{1,30})["\']',
+            r'FormData\s*\.\s*append\s*\(\s*["\']([a-zA-Z_][a-zA-Z0-9_]{1,30})["\']',
         ]
         
-        params = set()
+        params = []
         for pattern in param_patterns:
             matches = re.findall(pattern, code)
             for match in matches:
-                param = match[0] if isinstance(match, tuple) else match
-                # Filter: only valid parameter names
-                if (len(param) >= 1 and 
-                    len(param) <= 30 and
-                    (param.isalnum() or '_' in param)):
-                    params.add(param)
+                param = match if isinstance(match, str) else match[0]
+                
+                if (len(param) >= 2 and len(param) <= 30 and param[0].isalpha() and
+                    param not in ['null', 'this', 'true', 'false', 'undefined', 'render', 'return', 'import', 'export'] and
+                    not (len(param) == 2 and param[1].isdigit())):
+                    params.append(param)
         
-        # DOMAINS - Only real domains
+        # DOMAINS
         domain_patterns = [
-            r'https?://([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+[a-zA-Z]{2,}',  # Full URLs
-            r'//([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+[a-zA-Z]{2,}',  # Protocol-relative
+            r'https?://([a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+)',
+            r'["\']//([a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+)',
         ]
         
-        domains = set()
+        domains = []
         for pattern in domain_patterns:
             matches = re.findall(pattern, code)
             for match in matches:
-                domain = match[0] if isinstance(match, tuple) else match
-                domain = domain.rstrip('.')
-                # Filter: must be valid domain
-                if ('.' in domain and 
-                    len(domain) > 4 and 
-                    len(domain) < 100 and
-                    not any(x in domain.lower() for x in ['.js', '.css', '.svg', '.png', '.jpg', 'localhost', 'example.com'])):
-                    domains.add(domain)
+                domain = match.strip().split('/')[0].split(':')[0]
+                
+                if ('.' in domain and len(domain) > 4 and len(domain) < 100 and
+                    not domain.endswith(('.js', '.css', '.svg', '.png', '.jpg')) and
+                    domain not in ['localhost', 'example.com', 'test.com'] and
+                    len(domain.split('.')[-1]) >= 2):
+                    domains.append(domain)
         
-        # LINKS - Only external resources
-        link_patterns = [
-            r'<script[^>]+src=["\']([^"\']+)["\']',
-            r'<link[^>]+href=["\']([^"\']+)["\']',
-            r'import\s+.*?from\s+["\']([^"\']+)["\']',
-        ]
+        # Track sources (count occurrences per file)
+        from collections import Counter
         
-        links = set()
-        for pattern in link_patterns:
-            matches = re.findall(pattern, code, re.IGNORECASE)
-            for match in matches:
-                link = match[0] if isinstance(match, tuple) else match
-                if link.startswith(('http://', 'https://', '//')):
-                    links.add(link)
-        
-        # COMMENTS - Extract for context (but limit)
-        comments = []
-        comment_patterns = [
-            r'//\s*TODO:?\s*(.+)',
-            r'//\s*FIXME:?\s*(.+)',
-            r'//\s*API:?\s*(.+)',
-            r'/\*\s*TODO:?\s*(.+?)\*/',
-        ]
-        
-        for pattern in comment_patterns:
-            matches = re.findall(pattern, code, re.DOTALL)
-            comments.extend([m.strip()[:200] for m in matches[:10]])  # Max 10 comments, 200 chars each
-        
-        return {
-            'endpoints': sorted(list(endpoints))[:100],  # Max 100
-            'params': sorted(list(params))[:100],  # Max 100
-            'domains': sorted(list(domains))[:50],  # Max 50
-            'links': sorted(list(links))[:50],  # Max 50
-            'comments': comments[:10],  # Max 10
-            'wordlist': []  # Disabled - usually useless
+        result = {
+            'endpoints': Counter(endpoints),
+            'params': Counter(params),
+            'domains': Counter(domains),
+            'links': Counter([]),
+            'source_url': source_url,
+            'source_domain': source_domain
         }
+        
+        return result
     
     async def _analyze_with_regex(self, content: str, source_url: str):
         """Fallback analysis using regex when Tree-sitter is unavailable"""
+        
+        # Extract domain from source URL
+        from urllib.parse import urlparse
+        try:
+            source_domain = urlparse(source_url).netloc.replace('www.', '')
+        except:
+            source_domain = 'unknown'
+        
+        # Extract with source tracking
+        extracted = self._extract_with_regex(content, source_url, source_domain)
+        
+        # Update global database with source tracking
+        for extract_type in ['endpoints', 'params', 'domains', 'links']:
+            for value, count in extracted[extract_type].items():
+                if value not in self.extracts_db[extract_type]:
+                    self.extracts_db[extract_type][value] = {
+                        'sources': [],
+                        'total_count': 0,
+                        'domains': set()
+                    }
+                
+                self.extracts_db[extract_type][value]['sources'].append({
+                    'file': source_url,
+                    'domain': source_domain,
+                    'occurrences': count
+                })
+                self.extracts_db[extract_type][value]['total_count'] += count
+                self.extracts_db[extract_type][value]['domains'].add(source_domain)
+        
+        # Still save to individual files for backwards compatibility
         extracts_path = Path(self.paths['extracts'])
         
-        # Use improved extraction
-        extracted = self._extract_with_regex(content)
-        
-        # Save endpoints
         if extracted['endpoints']:
             await FileOps.append_unique_lines(
                 str(extracts_path / 'endpoints.txt'),
-                extracted['endpoints']
+                list(extracted['endpoints'].keys())
             )
         
-        # Save parameters
         if extracted['params']:
             await FileOps.append_unique_lines(
                 str(extracts_path / 'params.txt'),
-                extracted['params']
+                list(extracted['params'].keys())
             )
         
-        # Save links
-        if extracted['links']:
-            await FileOps.append_unique_lines(
-                str(extracts_path / 'links.txt'),
-                extracted['links']
-            )
-        
-        # Save domains
         if extracted['domains']:
             await FileOps.append_unique_lines(
                 str(extracts_path / 'domains.txt'),
-                extracted['domains']
-            )
-        
-        # Save comments if any
-        if extracted['comments']:
-            await FileOps.append_unique_lines(
-                str(extracts_path / 'comments.txt'),
-                extracted['comments']
+                list(extracted['domains'].keys())
             )
     
     @staticmethod
@@ -422,3 +421,59 @@ class ASTAnalyzer:
         
         text_lower = text.lower()
         return any(indicator in text_lower for indicator in api_indicators)
+    
+    def get_extracts_with_sources(self) -> dict:
+        \"\"\"Export extracts database with source information\"\"\"
+        result = {
+            'endpoints': [],
+            'params': [],
+            'domains': [],
+            'links': [],
+            'domains_summary': {}
+        }
+        
+        # Convert to list format with source info
+        for extract_type in ['endpoints', 'params', 'domains', 'links']:
+            items = []
+            for value, data in self.extracts_db[extract_type].items():
+                items.append({
+                    'value': value,
+                    'sources': data['sources'],
+                    'total_occurrences': data['total_count'],
+                    'unique_domains': sorted(list(data['domains'])),
+                    'domain_count': len(data['domains'])
+                })
+            
+            # Sort by domain count (most widespread first), then by occurrences
+            items.sort(key=lambda x: (x['domain_count'], x['total_occurrences']), reverse=True)
+            result[extract_type] = items[:100]  # Limit to top 100
+        
+        # Build domains summary
+        domains_summary = {}
+        for extract_type in ['endpoints', 'params']:
+            for item in result[extract_type]:
+                for source in item['sources']:
+                    domain = source['domain']
+                    if domain not in domains_summary:
+                        domains_summary[domain] = {
+                            'endpoints': set(),
+                            'params': set(),
+                            'file_count': set()
+                        }
+                    
+                    if extract_type == 'endpoints':
+                        domains_summary[domain]['endpoints'].add(item['value'])
+                    elif extract_type == 'params':
+                        domains_summary[domain]['params'].add(item['value'])
+                    
+                    domains_summary[domain]['file_count'].add(source['file'])
+        
+        # Convert sets to sorted lists
+        for domain, data in domains_summary.items():
+            result['domains_summary'][domain] = {
+                'endpoints': sorted(list(data['endpoints'])),
+                'params': sorted(list(data['params'])),
+                'file_count': len(data['file_count'])
+            }
+        
+        return result
