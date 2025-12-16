@@ -297,14 +297,14 @@ class ASTAnalyzer:
         def traverse(n):
             if n.type == 'string':
                 text = content[n.start_byte:n.end_byte].strip('"\'')
-                if self._is_endpoint(text):
+                if self._is_endpoint(text) and self._is_valid_endpoint(text):
                     endpoints.add(text)
                 # Also check for template literals with endpoints
                 elif '${' in text or text.startswith('/'):
                     # Extract potential endpoint parts
                     parts = re.split(r'\$\{[^}]+\}', text)
                     for part in parts:
-                        if self._is_endpoint(part):
+                        if self._is_endpoint(part) and self._is_valid_endpoint(part):
                             endpoints.add(part)
             
             # Check template strings
@@ -314,7 +314,7 @@ class ASTAnalyzer:
                 if 'http' in text or text.startswith('/'):
                     # Remove template expressions for pattern matching
                     cleaned = re.sub(r'\$\{[^}]+\}', '', text)
-                    if self._is_endpoint(cleaned) or 'api' in cleaned.lower():
+                    if (self._is_endpoint(cleaned) or 'api' in cleaned.lower()) and self._is_valid_endpoint(cleaned):
                         endpoints.add(text)
             
             for child in n.children:
