@@ -32,6 +32,9 @@ class SecretScanner:
         max_concurrent = config.get('trufflehog_max_concurrent', 5)
         self.semaphore = asyncio.Semaphore(max_concurrent)
         
+        # Track all secrets found for export
+        self.all_secrets = []
+        
         # Validate TruffleHog installation (Issue #7)
         self._validate_trufflehog()
     
@@ -240,6 +243,8 @@ class SecretScanner:
         Returns:
             List of secret findings
         """
+        # Reset all_secrets for this scan
+        self.all_secrets = []
         findings = []
         
         try:
@@ -284,6 +289,9 @@ class SecretScanner:
                     try:
                         finding = json.loads(line)
                         findings.append(finding)
+                        
+                        # Track for export
+                        self.all_secrets.append(finding)
                         
                         # Add to state manager
                         self.state.add_secret(finding)
@@ -334,3 +342,21 @@ class SecretScanner:
                 os.remove(tmp_path)
         
         return secrets_found
+    
+    def export_results(self, output_path: str):
+        """
+        Export all secrets to a JSON file
+        
+        Args:
+            output_path: Path to save the JSON file
+        """
+        from pathlib import Path
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(self.all_secrets, f, indent=2, default=str)
+            if self.all_secrets:
+                self.logger.info(f"Exported {len(self.all_secrets)} secrets to {output_path}")
+            else:
+                self.logger.debug(f"Exported empty secrets list to {output_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to export secrets: {e}")
