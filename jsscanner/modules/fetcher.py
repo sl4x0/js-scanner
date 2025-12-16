@@ -297,6 +297,9 @@ class Fetcher:
         max_retries = 3
         retry_delay = 5
         
+        # Log once at the start (before retry loop to avoid spam)
+        self.logger.info(f"⏳ Starting Wayback query for {clean_target} (may take 5+ minutes)...")
+        
         for attempt in range(max_retries):
             try:
                 # Apply rate limiting
@@ -309,7 +312,7 @@ class Fetcher:
                 self.logger.info(f"Wayback query: {cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}")
                 
                 async with aiohttp.ClientSession() as session:
-                    timeout = aiohttp.ClientTimeout(total=120, sock_read=60)
+                    timeout = aiohttp.ClientTimeout(total=300, sock_read=120)  # 5 minutes total, 2 minutes socket read
                     async with session.get(cdx_url, params=params, timeout=timeout) as response:
                         self.logger.info(f"Wayback API response status: {response.status}")
                         

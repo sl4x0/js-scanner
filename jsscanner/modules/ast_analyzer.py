@@ -389,7 +389,48 @@ class ASTAnalyzer:
                 traverse(child)
         
         traverse(node)
-        return list(words)
+        return list(self._filter_wordlist(words))
+    
+    def _filter_wordlist(self, words: set) -> set:
+        """Filter out low-quality words from extracted wordlist"""
+        filtered = set()
+        
+        for word in words:
+            # Skip very short words (<3 chars)
+            if len(word) < 3:
+                continue
+            
+            # Skip words that are all the same character (e.g., "aaaaa")
+            if len(set(word)) == 1:
+                continue
+            
+            # Skip words with no vowels (likely junk from minified code)
+            if not any(c in 'aeiou' for c in word.lower()):
+                continue
+            
+            # Skip words with excessive character repetition
+            if any(word.count(c) > len(word) / 2 for c in set(word)):
+                continue
+            
+            filtered.add(word)
+        
+        return filtered
+    
+    def _is_valid_endpoint(self, endpoint: str) -> bool:
+        """Validate endpoint before adding to results"""
+        # Remove endpoints with code artifacts
+        if any(char in endpoint for char in ['{', '}', '(', ')', ';', '`']):
+            return False
+        
+        # Must start with /
+        if not endpoint.startswith('/'):
+            return False
+        
+        # Reasonable length (most APIs are <100 chars)
+        if len(endpoint) > 100:
+            return False
+        
+        return True
     
     def _extract_with_regex(self, code: str, source_url: str, source_domain: str) -> Dict[str, Any]:
         """Extract data using improved regex patterns with source tracking"""
@@ -427,7 +468,8 @@ class ASTAnalyzer:
                    len(endpoint) > 4 and len(endpoint) < 150 and \
                    not any(x in endpoint.lower() for x in ['retry-after', 'content-type', 'x-request', 'cf-ray']) and \
                    not any(x in endpoint.lower() for x in ['swiper-', 'gravity-', '.css', '.scss', '-button']) and \
-                   '/' in endpoint[1:]:
+                   '/' in endpoint[1:] and \
+                   self._is_valid_endpoint(endpoint):
                     endpoints.append(endpoint)
         
         # PARAMETERS
