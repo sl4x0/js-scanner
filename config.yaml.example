@@ -15,10 +15,15 @@ trufflehog_max_concurrent: 5  # Limit concurrent TruffleHog processes (Issue #2)
 
 # Fetching
 threads: 25  # Recommended: 10 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
-max_concurrent_domains: 10  # Number of domains to process concurrently (NEW)
+max_concurrent_domains: 10  # Number of domains to process concurrently
 timeout: 30  # seconds
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 10485760  # 10MB max per JS file
+
+# Discovery Mode Options
+skip_wayback: false  # Set to true to skip Wayback Machine queries
+skip_live: false  # Set to true to skip live site crawling
+verbose: false  # Set to true to show all HTTP errors and debug info
 
 # Timeouts (Issue #8)
 timeouts:
@@ -59,4 +64,11 @@ batch_processing:
   enabled: true  # Enable new batch workflow
   download_threads: 50  # Max concurrent downloads in Phase 2
   process_threads: 50  # Max concurrent processing in Phase 4
-  cleanup_minified: true  # Delete minified files after processing
+  cleanup_minified: true  # Delete minified files after processing to save disk space
+
+# Domain-Specific Organization (NEW)
+# Results are automatically organized by domain:
+#   extracts/<domain>/endpoints.json - Domain-specific endpoints
+#   extracts/<domain>/params.txt - Domain-specific parameters
+#   secrets/<domain>/secrets.json - Domain-specific secrets
+# Legacy flat files are maintained for backward compatibility

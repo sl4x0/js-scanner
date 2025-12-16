@@ -44,11 +44,13 @@ Comprehensive end-to-end tests covering:
 - **Domain Organization**: Tests domain-specific directory structure
 
 **Usage:**
+
 ```bash
 python tests/integration_tests.py
 ```
 
 **Expected Output:**
+
 ```
 🧪 JS-SCANNER INTEGRATION TEST SUITE
 ================================================================================
@@ -112,6 +114,7 @@ Tests for JavaScript processing:
 ### Test Domains (Multi-Domain Test)
 
 The integration tests use these public domains:
+
 - google.com
 - github.com
 - stackoverflow.com
@@ -128,6 +131,7 @@ The integration tests use these public domains:
 ### Test Files (Extraction Tests)
 
 Local test server files (requires test_server.py running):
+
 - test_clean_api.js - Clean API endpoints
 - test_secrets_aws.js - Fake AWS credentials
 - test_secrets_github.js - Fake GitHub token
@@ -189,6 +193,7 @@ Local test server files (requires test_server.py running):
 ### Successful Test Run
 
 All tests should pass with:
+
 - ✅ Multi-domain scanning with 5+ domains processed
 - ✅ Domain-specific extracts created
 - ✅ Legacy format files created (backward compatibility)
@@ -237,11 +242,13 @@ The test suite verifies backward compatibility by:
 ### Tests Failing
 
 1. **Check dependencies:**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 2. **Verify TruffleHog is installed:**
+
    ```bash
    trufflehog --version
    ```
@@ -267,6 +274,7 @@ python tests/integration_tests.py
 ### Network Timeouts
 
 Multi-domain test may timeout on slow connections:
+
 - Adjust timeout in `integration_tests.py` (default: 300s)
 - Reduce number of test domains
 - Use `--threads` to control concurrency

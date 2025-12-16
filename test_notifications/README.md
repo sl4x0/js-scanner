@@ -9,14 +9,17 @@ This directory contains test files and scripts for validating Discord webhook fu
 All test files contain **FAKE** credentials that are publicly known examples and should never be used in production:
 
 1. **test_secrets_aws.js** - Fake AWS credentials
+
    - Example AWS access key and secret key
    - API endpoints and parameters
 
 2. **test_secrets_github.js** - Fake GitHub token
+
    - Example GitHub personal access token
    - GitHub API endpoints
 
 3. **test_secrets_multiple.js** - Multiple fake secrets in one file
+
    - Database password
    - Stripe API keys
    - JWT secret
@@ -35,6 +38,7 @@ All test files contain **FAKE** credentials that are publicly known examples and
 Simple HTTP server to serve test JavaScript files for scanning.
 
 **Usage:**
+
 ```bash
 python test_server.py [--port PORT]
 ```
@@ -42,6 +46,7 @@ python test_server.py [--port PORT]
 **Default port:** 8000
 
 **Available test URLs:**
+
 - http://localhost:8000/test_secrets_aws.js
 - http://localhost:8000/test_secrets_github.js
 - http://localhost:8000/test_secrets_multiple.js
@@ -52,17 +57,20 @@ python test_server.py [--port PORT]
 Validates Discord webhook functionality with various test scenarios.
 
 **Usage:**
+
 ```bash
 python webhook_validator.py <discord_webhook_url>
 ```
 
 **Tests performed:**
+
 1. Basic text message
 2. Embed message (secret notification format)
 3. Batch notification (multiple secrets)
 4. Rate limiting behavior
 
 **Example:**
+
 ```bash
 python webhook_validator.py "https://discord.com/api/webhooks/123456/abcdef"
 ```
@@ -126,26 +134,31 @@ results/test-notifications/
 ## Test Scenarios
 
 ### Scenario 1: Single Secret Detection
+
 **File:** test_secrets_aws.js  
 **Expected:** 1 AWS credential detected  
 **Notification:** Single secret embed
 
 ### Scenario 2: GitHub Token
+
 **File:** test_secrets_github.js  
 **Expected:** 1 GitHub token detected  
 **Notification:** Single secret embed
 
 ### Scenario 3: Multiple Secrets
+
 **File:** test_secrets_multiple.js  
 **Expected:** 5+ secrets detected  
 **Notification:** Batch notification with multiple embeds
 
 ### Scenario 4: No Secrets
+
 **File:** test_clean_api.js  
 **Expected:** 0 secrets, multiple endpoints/params extracted  
 **Notification:** None (only extracts)
 
 ### Scenario 5: Multi-Domain Test
+
 **Setup:** Mix of localhost and external URLs  
 **Expected:** Secrets and extracts organized by domain  
 **Verification:** Check domain-specific directories
@@ -155,10 +168,12 @@ results/test-notifications/
 The test files contain these known fake secrets:
 
 1. **AWS** (test_secrets_aws.js)
+
    - Access Key ID: AKIAIOSFODNN7EXAMPLE
    - Secret Access Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 
 2. **GitHub** (test_secrets_github.js)
+
    - Token: ghp_1234567890abcdefghijklmnopqrstuvwxyz
 
 3. **Multiple** (test_secrets_multiple.js)
@@ -174,16 +189,19 @@ The test files contain these known fake secrets:
 ## Troubleshooting
 
 ### Webhook Not Working
+
 1. Verify webhook URL is correct
 2. Run webhook_validator.py to test connectivity
 3. Check Discord server settings for webhook permissions
 
 ### No Secrets Detected
+
 1. Ensure TruffleHog is installed and configured
 2. Check that test files contain the expected patterns
 3. Verify scanner is not skipping files due to size/type filters
 
 ### Server Connection Errors
+
 1. Ensure test_server.py is running
 2. Check firewall settings for port 8000
 3. Try different port with `--port` flag
@@ -199,6 +217,7 @@ rm -rf results/test-notifications
 ## Safety Notes
 
 ⚠️ **Important:**
+
 - All secrets in test files are FAKE and publicly known examples
 - Never commit real credentials to test files
 - Use a dedicated test Discord channel for webhook testing
