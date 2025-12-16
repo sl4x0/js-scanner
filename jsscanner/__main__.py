@@ -38,8 +38,14 @@ def show_version_info():
     
     try:
         import tree_sitter
-        print(f"  tree-sitter: {tree_sitter.__version__}")
-    except (ImportError, AttributeError):
+        try:
+            # Try getting version from metadata (newer approach)
+            from importlib.metadata import version
+            ts_version = version('tree-sitter')
+            print(f"  tree-sitter: {ts_version}")
+        except:
+            print("  tree-sitter: installed (version unknown)")
+    except ImportError:
         print("  tree-sitter: Not installed")
     
     try:
@@ -70,7 +76,7 @@ async def main():
     
     # Load configuration
     try:
-        with open(args.config, 'r') as f:
+        with open(args.config, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
     except FileNotFoundError:
         print(f"Error: Config file not found: {args.config}")

@@ -13,7 +13,7 @@ discord_rate_limit: 30 # messages per minute
 discord_status_enabled: false # Only send secret alerts, no start/complete notifications
 
 # TruffleHog
-trufflehog_path: "/usr/local/bin/trufflehog"
+trufflehog_path: "d:\\Automation Bug Bounty\\js-scanner\\trufflehog.exe"
 trufflehog_timeout: 300 # seconds per file
 trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 
