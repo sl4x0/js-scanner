@@ -12,6 +12,17 @@ pip-log.txt
 pip-delete-this-directory.txt
 .pytest_cache/
 
+# Development & Testing (Windows development environment)
+test/
+dev-test/
+test_*/
+benchmark_*.js
+*_test.py
+*.test.js
+.coverage
+htmlcov/
+.tox/
+
 # Results and cache
 results/
 cache/

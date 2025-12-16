@@ -13,7 +13,10 @@ discord_rate_limit: 30 # messages per minute
 discord_status_enabled: false # Only send secret alerts, no start/complete notifications
 
 # TruffleHog
-trufflehog_path: "d:\\Automation Bug Bounty\\js-scanner\\trufflehog.exe"
+# Cross-platform: Use relative path or leave empty to auto-detect
+# Windows: searches for trufflehog.exe | Linux: searches for trufflehog
+# Priority: 1) Config path below, 2) Project root, 3) System PATH
+trufflehog_path: ""  # Leave empty for auto-detection
 trufflehog_timeout: 300 # seconds per file
 trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 

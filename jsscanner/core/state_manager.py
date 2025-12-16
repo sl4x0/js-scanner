@@ -5,10 +5,12 @@ Handles JSON file operations with file locking for thread-safe access
 import json
 import os
 import sys
+import time
 from typing import List, Dict, Any
 from pathlib import Path
+import io
 
-# Platform-specific imports for file locking
+# Platform-specific file locking
 if sys.platform == 'win32':
     import msvcrt
 else:
@@ -31,15 +33,32 @@ class StateManager:
         self.metadata_file = self.target_path / 'metadata.json'
     
     def _lock_file(self, file_obj, exclusive=True):
-        """Cross-platform file locking"""
+        """
+        Cross-platform file locking with retry logic
+        
+        Windows: Uses msvcrt with retry on permission denied
+        Linux: Uses fcntl with blocking lock
+        """
         if sys.platform == 'win32':
-            # Windows file locking
-            try:
-                msvcrt.locking(file_obj.fileno(), msvcrt.LK_LOCK if exclusive else msvcrt.LK_NBLCK, 1)
-            except:
-                pass  # Ignore locking errors on Windows
+            # Windows file locking with retry
+            max_retries = 10
+            retry_delay = 0.01  # 10ms
+            
+            for attempt in range(max_retries):
+                try:
+                    # Try to lock the file
+                    lock_mode = msvcrt.LK_LOCK if exclusive else msvcrt.LK_NBLCK
+                    msvcrt.locking(file_obj.fileno(), lock_mode, 1)
+                    return  # Success
+                except (OSError, IOError) as e:
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        # Last attempt failed - proceed without lock
+                        pass
         else:
-            # Unix file locking
+            # Unix file locking (blocking)
             fcntl.flock(file_obj.fileno(), fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
     
     def _unlock_file(self, file_obj):
@@ -62,7 +81,7 @@ class StateManager:
         Returns:
             True if already scanned, False otherwise
         """
-        with open(self.history_file, 'r+') as f:
+        with open(self.history_file, 'r+', encoding='utf-8') as f:
             # Acquire shared lock for reading
             self._lock_file(f, exclusive=False)
             try:
@@ -80,7 +99,7 @@ class StateManager:
             file_hash: SHA256 hash of the file
             url: Optional URL where the file was found
         """
-        with open(self.history_file, 'r+') as f:
+        with open(self.history_file, 'r+', encoding='utf-8') as f:
             # Acquire exclusive lock for writing
             self._lock_file(f, exclusive=True)
             try:
@@ -117,7 +136,7 @@ class StateManager:
         Returns:
             True if newly marked (should process), False if already exists (skip)
         """
-        with open(self.history_file, 'r+') as f:
+        with open(self.history_file, 'r+', encoding='utf-8') as f:
             self._lock_file(f, exclusive=True)
             try:
                 f.seek(0)
@@ -152,7 +171,7 @@ class StateManager:
         Args:
             secret_data: Dictionary containing secret information
         """
-        with open(self.secrets_file, 'r+') as f:
+        with open(self.secrets_file, 'r+', encoding='utf-8') as f:
             # Acquire exclusive lock
             self._lock_file(f, exclusive=True)
             try:
@@ -178,7 +197,7 @@ class StateManager:
         Args:
             updates: Dictionary of fields to update
         """
-        with open(self.metadata_file, 'r+') as f:
+        with open(self.metadata_file, 'r+', encoding='utf-8') as f:
             # Acquire exclusive lock
             self._lock_file(f, exclusive=True)
             try:
@@ -212,7 +231,7 @@ class StateManager:
         Returns:
             Dictionary containing metadata
         """
-        with open(self.metadata_file, 'r') as f:
+        with open(self.metadata_file, 'r', encoding='utf-8') as f:
             self._lock_file(f, exclusive=False)
             try:
                 return json.load(f)
@@ -226,7 +245,7 @@ class StateManager:
         Returns:
             Count of secrets
         """
-        with open(self.secrets_file, 'r') as f:
+        with open(self.secrets_file, 'r', encoding='utf-8') as f:
             self._lock_file(f, exclusive=False)
             try:
                 secrets = json.load(f)

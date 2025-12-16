@@ -72,18 +72,23 @@ class BrowserManager:
                     self.page_count = 0
                     await asyncio.sleep(1)  # Wait for cleanup (Issue #5)
                 
+                # Cross-platform Chromium launch arguments
+                # Linux VPS requires --no-sandbox and --disable-setuid-sandbox
+                launch_args = [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                    '--disable-dev-tools',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding'
+                ]
+                
                 self.browser = await self.playwright.chromium.launch(
                     headless=self.headless,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu',
-                        '--disable-software-rasterizer',
-                        '--disable-dev-tools',
-                        '--disable-background-timer-throttling',
-                        '--disable-backgrounding-occluded-windows',
-                        '--disable-renderer-backgrounding'
-                    ]
+                    args=launch_args
                 )
     
     async def fetch_with_context(self, url: str, page_timeout: int):
@@ -405,7 +410,72 @@ class Fetcher:
     async def fetch_live(self, target: str) -> List[str]:
         """
         Fetch JavaScript URLs from live site using Playwright
-        Enhanced to detect scripts on modern SPAs
+        Enhanced to detect scripts on modern SPAs with retry mechanism
+        
+        Args:
+            target: Target URL
+            
+        Returns:
+            List of JavaScript URLs
+        """
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    self.logger.info(f"🔄 Retry attempt {attempt + 1}/{max_retries} for {target}")
+                    await asyncio.sleep(retry_delay * attempt)  # Exponential backoff
+                
+                result = await self._fetch_live_attempt(target)
+                return result
+                
+            except Exception as e:
+                error_msg = str(e)
+                
+                # Check if error is retryable
+                is_retryable = any(x in error_msg for x in [
+                    "Target closed", "Protocol error", "browser has been closed",
+                    "context has been closed", "page has been closed"
+                ])
+                
+                if is_retryable and attempt < max_retries - 1:
+                    self.logger.warning(f"⚠️  Browser crashed (attempt {attempt + 1}/{max_retries}): {error_msg[:100]}")
+                    self.logger.info(f"🔄 Restarting browser and retrying...")
+                    
+                    # Force browser restart
+                    try:
+                        if self.browser_manager and self.browser_manager.browser:
+                            await self.browser_manager.browser.close()
+                            self.browser_manager.browser = None
+                    except:
+                        pass
+                    
+                    continue  # Retry
+                else:
+                    # Non-retryable error or final attempt - handle and return
+                    if "Download is starting" in error_msg or "download" in error_msg.lower():
+                        self.logger.info(f"⚠️  URL triggers a download (not a page): {target}")
+                        if target.endswith('.js') or target.endswith('.mjs') or '.js?' in target:
+                            return [target]
+                    elif "net::ERR_NAME_NOT_RESOLVED" in error_msg:
+                        self.logger.warning(f"[DNS ERROR] Could not resolve domain: {target}")
+                    elif "net::ERR_CONNECTION_REFUSED" in error_msg:
+                        self.logger.warning(f"[CONNECTION REFUSED] Server rejected connection: {target}")
+                    elif "net::ERR_CERT" in error_msg or "SSL" in error_msg:
+                        self.logger.warning(f"[SSL ERROR] Certificate validation failed: {target}")
+                    elif "net::ERR_ABORTED" in error_msg:
+                        self.logger.info(f"⚠️  Navigation aborted (redirect or client-side routing): {target}")
+                    else:
+                        self.logger.warning(f"[ERROR] Live scan failed for {target}: {error_msg[:150]}")
+                    
+                    return []
+        
+        return []  # All retries exhausted
+    
+    async def _fetch_live_attempt(self, target: str) -> List[str]:
+        """
+        Single attempt to fetch JavaScript URLs from live site
         
         Args:
             target: Target URL
@@ -510,33 +580,10 @@ class Fetcher:
             
         except asyncio.TimeoutError:
             self.logger.warning(f"[TIMEOUT] Live scan timed out after {self.page_timeout/1000}s for {target}")
-            return list(js_urls)  # Return what we found so far
+            raise  # Re-raise for retry mechanism
         except Exception as e:
-            error_msg = str(e)
-            
-            # Detect specific error types and provide helpful messages
-            if "Download is starting" in error_msg or "download" in error_msg.lower():
-                self.logger.info(f"⚠️  URL triggers a download (not a page): {target}")
-                self.logger.info(f"   This is expected for API endpoints or direct file downloads")
-                # If the URL itself looks like a JS file, we could try fetching it directly
-                if target.endswith('.js') or target.endswith('.mjs') or '.js?' in target:
-                    self.logger.info(f"   URL appears to be a JS file - it will be fetched directly later")
-                    js_urls.add(target)
-            elif "net::ERR_NAME_NOT_RESOLVED" in error_msg or "NS_ERROR_UNKNOWN_HOST" in error_msg:
-                self.logger.warning(f"[DNS ERROR] Could not resolve domain: {target}")
-            elif "net::ERR_CONNECTION_REFUSED" in error_msg or "ERR_CONNECTION_CLOSED" in error_msg:
-                self.logger.warning(f"[CONNECTION REFUSED] Server rejected connection: {target}")
-            elif "net::ERR_CERT" in error_msg or "SSL" in error_msg or "certificate" in error_msg.lower():
-                self.logger.warning(f"[SSL ERROR] Certificate validation failed: {target}")
-            elif "net::ERR_ABORTED" in error_msg:
-                self.logger.info(f"⚠️  Navigation aborted (redirect or client-side routing): {target}")
-            elif "Target closed" in error_msg or "Protocol error" in error_msg:
-                self.logger.warning(f"[BROWSER ERROR] Browser/page closed unexpectedly: {target}")
-            else:
-                # Generic error for unexpected cases
-                self.logger.warning(f"[ERROR] Live scan failed for {target}: {error_msg[:150]}")
-            
-            return list(js_urls)  # Return what we found so far
+            # Re-raise for retry mechanism to handle
+            raise
         finally:
             # Graceful cleanup - handle already-closed browser/context
             try:

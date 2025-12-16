@@ -545,10 +545,22 @@ class ScanEngine:
         minified_dir = Path(self.paths['files_minified'])
         
         if minified_dir.exists():
-            file_count = len(list(minified_dir.glob('*')))
-            shutil.rmtree(minified_dir)
-            minified_dir.mkdir(parents=True, exist_ok=True)
-            self.logger.info(f"✅ Deleted {file_count} minified files")
+            files = list(minified_dir.glob('*'))
+            file_count = len(files)
+            
+            if file_count > 0:
+                # Log each file being deleted for verification
+                self.logger.debug(f"Deleting {file_count} minified files from {minified_dir}")
+                for f in files[:5]:  # Show first 5 files
+                    self.logger.debug(f"  - {f.name}")
+                if file_count > 5:
+                    self.logger.debug(f"  ... and {file_count - 5} more")
+                
+                shutil.rmtree(minified_dir)
+                minified_dir.mkdir(parents=True, exist_ok=True)
+                self.logger.info(f"✅ Deleted {file_count} minified files (freed ~{file_count * 200}KB)")
+            else:
+                self.logger.debug("No minified files to delete")
     
     def _is_minified(self, content: str) -> bool:
         """

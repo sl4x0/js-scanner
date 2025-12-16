@@ -6,6 +6,7 @@ import subprocess
 import json
 import asyncio
 import time
+import sys
 from typing import Optional, List
 
 
@@ -26,7 +27,9 @@ class SecretScanner:
         self.logger = logger
         self.state = state_manager
         self.notifier = notifier
-        self.trufflehog_path = config.get('trufflehog_path', 'trufflehog')
+        
+        # Cross-platform TruffleHog binary detection
+        self.trufflehog_path = self._find_trufflehog_binary(config)
         
         # Rate limit concurrent TruffleHog processes (Issue #2)
         max_concurrent = config.get('trufflehog_max_concurrent', 5)
@@ -37,6 +40,59 @@ class SecretScanner:
         
         # Validate TruffleHog installation (Issue #7)
         self._validate_trufflehog()
+    
+    def _find_trufflehog_binary(self, config: dict) -> str:
+        """
+        Find TruffleHog binary with cross-platform support
+        
+        Priority:
+        1. Config file path (if specified)
+        2. Platform-specific executable in project root
+        3. System PATH
+        
+        Args:
+            config: Configuration dictionary
+            
+        Returns:
+            Path to TruffleHog binary
+        """
+        import shutil
+        from pathlib import Path
+        
+        # 1. Check config
+        config_path = config.get('trufflehog_path')
+        if config_path:
+            # Expand relative paths from project root
+            if not Path(config_path).is_absolute():
+                project_root = Path(__file__).parent.parent.parent
+                config_path = str(project_root / config_path)
+            
+            if Path(config_path).exists():
+                return config_path
+        
+        # 2. Check project root for platform-specific binary
+        project_root = Path(__file__).parent.parent.parent
+        
+        if sys.platform == 'win32':
+            local_binary = project_root / 'trufflehog.exe'
+        else:
+            local_binary = project_root / 'trufflehog'
+        
+        if local_binary.exists():
+            return str(local_binary)
+        
+        # 3. Check system PATH
+        if sys.platform == 'win32':
+            binary_name = 'trufflehog.exe'
+        else:
+            binary_name = 'trufflehog'
+        
+        system_path = shutil.which(binary_name)
+        if system_path:
+            return system_path
+        
+        # Fallback: return binary name and let validation fail with helpful error
+        return binary_name
     
     def _validate_trufflehog(self):
         """Validate TruffleHog is installed and executable"""

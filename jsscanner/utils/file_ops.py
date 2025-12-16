@@ -51,7 +51,7 @@ class FileOps:
         
         for name, filepath in json_files.items():
             if not filepath.exists():
-                with open(filepath, 'w') as f:
+                with open(filepath, 'w', encoding='utf-8') as f:
                     if name == 'history':
                         json.dump({'scanned_hashes': [], 'scan_metadata': {}}, f, indent=2)
                     elif name == 'metadata':
@@ -79,7 +79,7 @@ class FileOps:
             filepath: Path to the JSON file
             data: Data to append (dict or list)
         """
-        async with aiofiles.open(filepath, 'r') as f:
+        async with aiofiles.open(filepath, 'r', encoding='utf-8') as f:
             content = await f.read()
             existing = json.loads(content) if content else []
         
@@ -88,7 +88,7 @@ class FileOps:
         else:
             raise ValueError(f"Expected list in {filepath}")
         
-        async with aiofiles.open(filepath, 'w') as f:
+        async with aiofiles.open(filepath, 'w', encoding='utf-8') as f:
             await f.write(json.dumps(existing, indent=2))
     
     @staticmethod
@@ -101,7 +101,7 @@ class FileOps:
             content: Content to write
             mode: File mode ('w' or 'a')
         """
-        async with aiofiles.open(filepath, mode) as f:
+        async with aiofiles.open(filepath, mode, encoding='utf-8') as f:
             await f.write(content)
     
     @staticmethod
@@ -113,10 +113,10 @@ class FileOps:
             filepath: Path to the file
             lines: List of lines to append
         """
-        # Read existing lines
+        # Read existing lines with UTF-8 encoding (Windows fix)
         existing = set()
         if os.path.exists(filepath):
-            async with aiofiles.open(filepath, 'r') as f:
+            async with aiofiles.open(filepath, 'r', encoding='utf-8') as f:
                 content = await f.read()
                 existing = set(content.splitlines())
         
@@ -124,7 +124,7 @@ class FileOps:
         new_lines = [line for line in lines if line not in existing]
         
         if new_lines:
-            async with aiofiles.open(filepath, 'a') as f:
+            async with aiofiles.open(filepath, 'a', encoding='utf-8') as f:
                 await f.write('\n'.join(new_lines) + '\n')
     
     @staticmethod

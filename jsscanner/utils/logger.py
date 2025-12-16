@@ -4,6 +4,7 @@ Colorized console output for the scanner
 """
 import logging
 import sys
+import io
 from datetime import datetime
 from colorama import Fore, Style, init
 from pathlib import Path
@@ -11,6 +12,17 @@ from logging.handlers import RotatingFileHandler
 
 # Initialize colorama for Windows support
 init(autoreset=True)
+
+# Fix Windows UTF-8 encoding for console output (must be at module level)
+if sys.platform == 'win32' and hasattr(sys.stdout, 'buffer'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, OSError):
+        # Fallback for older Python or redirected stdout
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        except:
+            pass  # Keep default if wrapping fails
 
 
 class ColoredFormatter(logging.Formatter):
