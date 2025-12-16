@@ -34,7 +34,8 @@ class ASTAnalyzer:
             'endpoints': {},  # {endpoint: {sources: [], total_count: 0, domains: set()}}
             'params': {},
             'domains': {},
-            'links': {}
+            'links': {},
+            'words': {}  # Add words tracking for domain-specific wordlists
         }
         
         # Initialize domain organizer for new directory structure
@@ -230,6 +231,23 @@ class ASTAnalyzer:
                     domains
                 )
             
+            # Track wordlist with source tracking for domain organization
+            for word in wordlist:
+                if word not in self.extracts_db['words']:
+                    self.extracts_db['words'][word] = {
+                        'sources': [],
+                        'total_count': 0,
+                        'domains': set()
+                    }
+                
+                self.extracts_db['words'][word]['sources'].append({
+                    'file': source_url,
+                    'domain': source_domain,
+                    'occurrences': 1
+                })
+                self.extracts_db['words'][word]['total_count'] += 1
+                self.extracts_db['words'][word]['domains'].add(source_domain)
+            
             if wordlist:
                 await FileOps.append_unique_lines(
                     str(extracts_path / 'wordlist.txt'),
@@ -376,11 +394,22 @@ class ASTAnalyzer:
     def _extract_with_regex(self, code: str, source_url: str, source_domain: str) -> Dict[str, Any]:
         """Extract data using improved regex patterns with source tracking"""
         
-        # ENDPOINTS - Only paths starting with / or full URLs with /api/, /v1/, etc.
+        # ENDPOINTS - Expanded patterns for better detection
         endpoint_patterns = [
+            # Specific API paths (high confidence)
             r'["\']/(api|graphql|v\d+|rest|endpoint|ajax|auth|user|admin|cart|checkout|account|payment|order|product|search)/[a-zA-Z0-9/_\-\.]*["\']',
+            # fetch() and axios calls
             r'(?:fetch|axios\.[a-z]+|\.get|\.post|\.put|\.delete|\.patch)\s*\(\s*["\']([/][a-zA-Z0-9/_\-\.]+)["\']',
+            # Full URLs with API indicators
             r'["\']https?://[a-zA-Z0-9\.\-]+/(api|v\d+|graphql|rest)/[a-zA-Z0-9/_\-\.]*["\']',
+            # Any path starting with / (relative paths)
+            r'["\']/([\w\-/]+\.(?:js|json|xml|html|php|asp))["\']',
+            # href properties and assignments
+            r'href\s*:\s*["\']([^"\'\']+)["\']',
+            r'href\s*=\s*["\']([^"\'\']+)["\']',
+            # URL assignments and window.location
+            r'(?:url|path|endpoint)\s*:\s*["\']([/][^"\'\']+)["\']',
+            r'window\.location(?:\.href)?\s*=\s*["\']([/][^"\'\']+)["\']',
         ]
         
         endpoints = []

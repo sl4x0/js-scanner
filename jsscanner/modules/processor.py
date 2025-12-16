@@ -66,14 +66,14 @@ class Processor:
             return content
         
         try:
-            # Issue #14: Increase timeout for larger files
-            # Small files: 30s, Medium: 60s, Large: 120s
+            # Issue #14 & #3: Increased timeout thresholds
+            # Small files (<0.5MB): 60s, Medium (<1MB): 120s, Large: 180s
             if content_size_mb < 0.5:
-                timeout = 30.0
+                timeout = 60.0  # Increased from 30s
             elif content_size_mb < 1.0:
-                timeout = 60.0
+                timeout = 120.0  # Increased from 60s
             else:
-                timeout = 120.0
+                timeout = 180.0  # Increased from 120s
             
             loop = asyncio.get_event_loop()
             beautified = await asyncio.wait_for(

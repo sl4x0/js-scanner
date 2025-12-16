@@ -283,11 +283,11 @@ class Fetcher:
         # Get original URLs directly from Wayback CDX API
         cdx_url = "http://web.archive.org/cdx/search/cdx"
         params = {
-            'url': f'*.{clean_target}',
-            'matchType': 'domain',  # Better scope control
+            'url': f'*.{clean_target}/*',
+            'matchType': 'prefix',  # Use prefix for better matching (was 'domain')
             'fl': 'original',
-            'collapse': 'urlkey',  # ✅ More comprehensive results (groups by URL pattern)
-            'filter': 'statuscode:200',
+            'collapse': 'urlkey',  # More comprehensive results (groups by URL pattern)
+            # REMOVED: 'filter': 'statuscode:200' - Too restrictive, many valid files excluded
             'limit': self.wayback_max_results
         }
         

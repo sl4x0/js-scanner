@@ -31,8 +31,8 @@ class DomainExtractOrganizer:
         # Build domain-specific data
         domain_data = {}
         
-        for extract_type in ['endpoints', 'params', 'domains', 'links']:
-            for value, data in extracts_db[extract_type].items():
+        for extract_type in ['endpoints', 'params', 'domains', 'links', 'words']:
+            for value, data in extracts_db.get(extract_type, {}).items():
                 # Group by source domain
                 for source in data['sources']:
                     domain = source.get('domain', 'unknown')
