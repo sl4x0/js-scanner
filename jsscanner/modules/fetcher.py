@@ -540,10 +540,22 @@ class Fetcher:
             
             page.on('request', handle_request)
             
-            # Navigate and wait longer for SPAs
+            # Navigate with domcontentloaded (faster, more reliable than networkidle)
             self.logger.info(f"Navigating to {target}...")
-            await page.goto(target, wait_until='networkidle')
-            self.logger.info(f"Page loaded, waiting for dynamic content...")
+            try:
+                await page.goto(target, wait_until='domcontentloaded', timeout=30000)
+                self.logger.info(f"Page loaded, waiting for dynamic content...")
+            except Exception as e:
+                # Even if navigation times out, we may have discovered JS files via request handler
+                if 'Timeout' in str(e) or 'timeout' in str(e).lower():
+                    self.logger.warning(f"⚠️  Navigation timeout, but may have discovered JS files: {len(js_urls)} found")
+                    # Return discovered files even if page didn't fully load
+                    if js_urls:
+                        self.logger.info(f"🎯 Returning {len(js_urls)} JS files discovered before timeout")
+                        return list(js_urls)
+                    return []
+                else:
+                    raise  # Re-raise non-timeout errors
             
             # Wait extra time for dynamic content
             await asyncio.sleep(3)
