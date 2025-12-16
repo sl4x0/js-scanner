@@ -55,6 +55,9 @@ class ScanEngine:
         # Shutdown flag for graceful exit
         self.shutdown_requested = False
         
+        # Track allowed domains from input file
+        self.allowed_domains = set()
+        
         # Statistics
         self.start_time = None
         self.stats = {
@@ -127,6 +130,15 @@ class ScanEngine:
             urls_to_scan = []
             
             for item in inputs:
+                # Extract domain for scope filtering
+                from urllib.parse import urlparse
+                try:
+                    domain = urlparse(item if item.startswith('http') else f'https://{item}').netloc
+                    if domain:
+                        self.allowed_domains.add(domain.lower().replace('www.', ''))
+                except:
+                    pass
+                
                 # Check if shutdown was requested
                 if self.shutdown_requested:
                     self.logger.warning("Shutdown requested, stopping input processing")
@@ -670,58 +682,27 @@ class ScanEngine:
         return target
     
     def _is_target_domain(self, url: str) -> bool:
-        """
-        Strictly checks if URL belongs to target domain or subdomain
-        Rejects all third-party domains, blob URLs, data URLs, etc.
-        
-        Args:
-            url: URL to check
-            
-        Returns:
-            True if URL is from target domain/subdomain ONLY
-        """
+        """Check if URL belongs to allowed domains from input file"""
         from urllib.parse import urlparse
         
         try:
-            # Reject non-HTTP schemes immediately
             if not url.startswith(('http://', 'https://')):
-                self.logger.debug(f"[SCOPE] Rejected non-HTTP URL: {url}")
                 return False
             
-            parsed = urlparse(url)
-            domain = parsed.netloc.lower()
-            
-            # Must have a domain
-            if not domain:
-                return False
-            
-            # Remove port if present
+            domain = urlparse(url).netloc.lower()
             if ':' in domain:
                 domain = domain.split(':')[0]
             
-            # Extract root domain using helper method (handles multi-part TLDs)
-            root_domain = self._extract_root_domain(domain)
+            # Remove www
+            clean_domain = domain.replace('www.', '')
             
-            # Get target root domain
-            target_lower = self.target.lower()
-            target_lower = target_lower.replace('https://', '').replace('http://', '')
-            target_lower = target_lower.replace('www.', '')
-            
-            # Extract target root domain using helper method
-            target_root = self._extract_root_domain(target_lower)
-            
-            # Strict match: root domains must be identical
-            if root_domain == target_root:
-                return True
-            
-            # Log rejection for visibility
-            if root_domain != target_root:
-                self.logger.debug(f"[SCOPE] Rejected third-party: {domain} (target: {target_root})")
+            # Check if domain or parent domain is in allowed list
+            for allowed in self.allowed_domains:
+                if clean_domain == allowed or clean_domain.endswith('.' + allowed):
+                    return True
             
             return False
-            
-        except Exception as e:
-            self.logger.debug(f"[SCOPE] Parse error for {url}: {e}")
+        except:
             return False
     
     @staticmethod

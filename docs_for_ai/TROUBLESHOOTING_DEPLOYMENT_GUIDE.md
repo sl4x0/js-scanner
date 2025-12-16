@@ -10,36 +10,44 @@
 ## 🔧 Common Issues & Solutions
 
 ### Issue 1: "scan_directory method not found"
+
 **Symptom:** `AttributeError: 'SecretScanner' object has no attribute 'scan_directory'`
 
 **Solution:**
+
 1. Verify the `scan_directory()` method was added to `secret_scanner.py`
 2. Check indentation - the method must be at class level (not nested inside another method)
 3. Restart Python interpreter if testing interactively
 
 **Verification:**
+
 ```bash
 python -c "from jsscanner.modules.secret_scanner import SecretScanner; print(hasattr(SecretScanner, 'scan_directory'))"
 ```
+
 Expected output: `True`
 
 ---
 
 ### Issue 2: "Files not being deleted from minified folder"
+
 **Symptom:** Files remain in `results/target/files/minified/` after scan completion
 
 **Solution:**
+
 1. Verify `_cleanup_minified_files()` method is called in the `run()` method
 2. Check for exceptions in Phase 6 execution logs
 3. Verify file permissions on the minified folder allow deletion
 
 **Check configuration:**
+
 ```yaml
 batch_processing:
-  cleanup_minified: true  # Must be set to true
+  cleanup_minified: true # Must be set to true
 ```
 
 **Manual cleanup test:**
+
 ```bash
 # Check if files exist
 ls -la results/*/files/minified/
@@ -51,9 +59,11 @@ rm -rf results/*/files/minified/*
 ---
 
 ### Issue 3: "TruffleHog not finding any secrets"
+
 **Symptom:** Phase 3 completes successfully but reports 0 secrets when secrets are known to exist
 
 **Solution:**
+
 1. Test TruffleHog manually with:
    ```bash
    trufflehog filesystem results/target/files/minified/ --json --only-verified
@@ -62,6 +72,7 @@ rm -rf results/*/files/minified/*
 3. Verify TruffleHog version with `trufflehog --version` (must be 3.x or higher)
 
 **Debugging:**
+
 ```bash
 # Check TruffleHog installation
 which trufflehog
@@ -75,26 +86,30 @@ trufflehog filesystem . --json --only-verified
 ---
 
 ### Issue 4: "Memory usage is too high"
+
 **Symptom:** System runs out of memory during file processing
 
 **Solution:**
+
 1. Reduce thread count in configuration file:
    ```yaml
    batch_processing:
-     download_threads: 25  # Reduced from 50
-     process_threads: 25   # Reduced from 50
+     download_threads: 25 # Reduced from 50
+     process_threads: 25 # Reduced from 50
    ```
 2. Monitor memory usage with:
+
    ```bash
    # Windows PowerShell
    Get-Process python | Select-Object ProcessName, @{Name="Memory(MB)";Expression={$_.WorkingSet / 1MB}}
-   
+
    # Linux/macOS
    top -p $(pgrep -f jsscanner)
    ps aux | grep jsscanner
    ```
 
 **Memory recommendations by system:**
+
 - 2GB RAM: Set threads to 10-15
 - 4GB RAM: Set threads to 25-30
 - 8GB RAM: Set threads to 50
@@ -103,21 +118,25 @@ trufflehog filesystem . --json --only-verified
 ---
 
 ### Issue 5: "Some files are missing from unminified folder"
+
 **Symptom:** Fewer files in `unminified/` directory than expected
 
 **Solution:**
+
 1. Review Phase 2 logs to verify all downloads completed successfully
 2. Review Phase 5 logs for beautification errors
 3. Check `results/target/logs/scan.log` for errors:
+
    ```bash
    # View recent logs
    tail -f results/*/logs/scan.log
-   
+
    # Search for errors
    grep -i "error\|failed" results/*/logs/scan.log
    ```
 
 **Check file counts:**
+
 ```bash
 # Count downloaded files
 ls -1 results/*/files/minified/ | wc -l
@@ -136,39 +155,42 @@ cat results/*/file_manifest.json | jq 'keys | length'
 ### Scan Speed Comparison
 
 | File Count | Old Workflow Time | New Workflow Time | Performance Improvement |
-|------------|-------------------|-------------------|------------------------|
-| 10 files   | 1-2 minutes       | 20-30 seconds     | 66-75% faster          |
-| 50 files   | 5-10 minutes      | 1-2 minutes       | 80-90% faster          |
-| 100 files  | 10-20 minutes     | 2-4 minutes       | 80-90% faster          |
-| 500 files  | 50-100 minutes    | 10-20 minutes     | 80-90% faster          |
+| ---------- | ----------------- | ----------------- | ----------------------- |
+| 10 files   | 1-2 minutes       | 20-30 seconds     | 66-75% faster           |
+| 50 files   | 5-10 minutes      | 1-2 minutes       | 80-90% faster           |
+| 100 files  | 10-20 minutes     | 2-4 minutes       | 80-90% faster           |
+| 500 files  | 50-100 minutes    | 10-20 minutes     | 80-90% faster           |
 
 ### Phase Breakdown (100 files example)
 
-| Phase | Description | Old Time | New Time | Improvement |
-|-------|-------------|----------|----------|-------------|
-| 1 | Discovery | 10s | 10s | No change |
-| 2 | Download | 300s | 30s | 90% faster |
-| 3 | Secret Scan | 100s | 10s | 90% faster |
-| 4 | AST Analysis | 200s | 20s | 90% faster |
-| 5 | Beautify | 300s | 30s | 90% faster |
-| 6 | Cleanup | 5s | 1s | 80% faster |
-| **Total** | | **~17 min** | **~2 min** | **88% faster** |
+| Phase     | Description  | Old Time    | New Time   | Improvement    |
+| --------- | ------------ | ----------- | ---------- | -------------- |
+| 1         | Discovery    | 10s         | 10s        | No change      |
+| 2         | Download     | 300s        | 30s        | 90% faster     |
+| 3         | Secret Scan  | 100s        | 10s        | 90% faster     |
+| 4         | AST Analysis | 200s        | 20s        | 90% faster     |
+| 5         | Beautify     | 300s        | 30s        | 90% faster     |
+| 6         | Cleanup      | 5s          | 1s         | 80% faster     |
+| **Total** |              | **~17 min** | **~2 min** | **88% faster** |
 
 ### Factors Affecting Scan Speed
 
 **Network-related:**
+
 - Network bandwidth (affects download phase)
 - Network latency (affects HTTP requests)
 - CDN response times
 - DNS resolution speed
 
 **System-related:**
+
 - CPU core count (affects parallel processing phase)
 - Available RAM (limits thread count)
 - Disk I/O speed (affects file operations)
 - Number of concurrent processes
 
 **Content-related:**
+
 - Individual file sizes
 - Number of secrets detected
 - JavaScript complexity (affects AST parsing)
@@ -181,6 +203,7 @@ cat results/*/file_manifest.json | jq 'keys | length'
 The implementation is considered successful when:
 
 ### ✅ Functional Requirements
+
 - [ ] All 6 phases execute in the correct sequential order
 - [ ] Files are downloaded in parallel during Phase 2
 - [ ] TruffleHog scans all files in a single batch operation (Phase 3)
@@ -190,6 +213,7 @@ The implementation is considered successful when:
 - [ ] All extract files are generated correctly (endpoints.txt, params.txt, etc.)
 
 ### ✅ Performance Requirements
+
 - [ ] Overall scan completes at least 50% faster than the previous implementation
 - [ ] Phase 2 downloads at least 10 files simultaneously
 - [ ] Phase 3 completes in under 20 seconds for 100 files
@@ -197,6 +221,7 @@ The implementation is considered successful when:
 - [ ] Phase 5 beautifies at least 10 files simultaneously
 
 ### ✅ Quality Requirements
+
 - [ ] No errors appear in log files
 - [ ] No Python exceptions during normal operation
 - [ ] Memory usage stays within system limits
@@ -204,6 +229,7 @@ The implementation is considered successful when:
 - [ ] State management works correctly (no duplicate processing)
 
 ### ✅ Validation Tests
+
 ```bash
 # Test 1: Verify all phases appear in logs
 python -m jsscanner -t example.com -u https://code.jquery.com/jquery-3.6.0.min.js 2>&1 | grep "PHASE"
@@ -227,6 +253,7 @@ cat results/example.com/secrets.json
 ### For Team Lead
 
 **Pre-Implementation Review:**
+
 - Review this entire document before assigning implementation tasks
 - Estimated effort: 3 hours development + 1 hour testing
 - Recommended task assignment:
@@ -236,11 +263,13 @@ cat results/example.com/secrets.json
 - Require peer code review between developers before merge
 
 **Risk Assessment:**
+
 - **Low Risk:** Configuration file changes
 - **Medium Risk:** Adding new methods to existing classes
 - **High Risk:** Replacing core workflow in `run()` method
 
 **Mitigation:**
+
 - Create feature branch for all changes
 - Test each component individually
 - Maintain backward compatibility where possible
@@ -251,12 +280,14 @@ cat results/example.com/secrets.json
 ### For Developers
 
 **Before Starting Implementation:**
+
 1. Read the complete workflow diagram in the implementation guide
 2. Understand the rationale behind each optimization change
 3. Set up development environment with all dependencies
 4. Create a feature branch: `git checkout -b feature/batch-processing`
 
 **During Implementation:**
+
 - Test each phase individually before integration testing
 - Use the implementation checklist to track progress
 - Ask clarifying questions before making assumptions
@@ -264,6 +295,7 @@ cat results/example.com/secrets.json
 - Write clear commit messages for each logical change
 
 **Code Review Checklist:**
+
 - [ ] All new methods have docstrings
 - [ ] Error handling is comprehensive
 - [ ] Logging is clear and informative
@@ -276,12 +308,14 @@ cat results/example.com/secrets.json
 ### For QA Team
 
 **Testing Responsibilities:**
+
 1. Follow the Testing Procedures section for validation
 2. Execute all 4 defined test cases
 3. Record and report performance metrics
 4. Document any issues discovered with reproduction steps
 
 **Test Environment Setup:**
+
 ```bash
 # Install dependencies
 pip install -r requirements.txt
@@ -295,6 +329,7 @@ trufflehog --version
 ```
 
 **Performance Testing:**
+
 ```bash
 # Create test dataset
 cat > test_urls.txt << EOF
@@ -313,6 +348,7 @@ echo "Completion Time: [RECORD FROM ABOVE]"
 ```
 
 **Bug Report Template:**
+
 ```markdown
 ## Bug Report
 
@@ -321,11 +357,13 @@ echo "Completion Time: [RECORD FROM ABOVE]"
 **Severity:** Critical / High / Medium / Low
 
 **Environment:**
+
 - OS: [Windows/Linux/macOS]
 - Python Version: [3.x.x]
 - Scanner Version: [Git commit hash]
 
 **Steps to Reproduce:**
+
 1. [Step 1]
 2. [Step 2]
 3. [Step 3]
@@ -338,7 +376,9 @@ echo "Completion Time: [RECORD FROM ABOVE]"
 
 **Logs:**
 ```
+
 [Paste relevant logs]
+
 ```
 
 **Screenshots:**
@@ -352,18 +392,21 @@ echo "Completion Time: [RECORD FROM ABOVE]"
 ### Day 1 - Development Phase
 
 **Morning (2-3 hours):**
+
 - [ ] Create feature branch: `git checkout -b feature/batch-processing`
 - [ ] Implement changes to `secret_scanner.py`
 - [ ] Implement changes to `engine.py`
 - [ ] Update configuration files
 
 **Afternoon (1-2 hours):**
+
 - [ ] Run syntax validation tests
 - [ ] Run unit tests locally
 - [ ] Fix any identified issues
 - [ ] Commit changes with descriptive messages
 
 **End of Day:**
+
 - [ ] Run complete test suite
 - [ ] Document any issues encountered
 - [ ] Prepare for code review
@@ -373,25 +416,30 @@ echo "Completion Time: [RECORD FROM ABOVE]"
 ### Day 1-2 - Code Review Phase
 
 **Preparation:**
+
 - [ ] Push feature branch to remote repository
 - [ ] Create pull request with detailed description
 - [ ] Include before/after performance metrics
 - [ ] Link to implementation documentation
 
 **Pull Request Description Template:**
+
 ```markdown
 ## Batch Processing Workflow Implementation
 
 ### Summary
+
 Converts JS Scanner from sequential to batch processing for 80-90% performance improvement.
 
 ### Changes
+
 - Added `scan_directory()` method to SecretScanner
 - Refactored `run()` method with 6-phase workflow
 - Added 4 new batch processing methods
 - Updated configuration files
 
 ### Testing
+
 - [x] Syntax validation passed
 - [x] All imports successful
 - [x] Single file test passed
@@ -399,11 +447,13 @@ Converts JS Scanner from sequential to batch processing for 80-90% performance i
 - [ ] Performance benchmark completed
 
 ### Performance Results
+
 - Old workflow: X minutes for Y files
 - New workflow: Z minutes for Y files
 - Improvement: XX% faster
 
 ### Checklist
+
 - [x] Code follows style guidelines
 - [x] Tests pass locally
 - [x] Documentation updated
@@ -411,6 +461,7 @@ Converts JS Scanner from sequential to batch processing for 80-90% performance i
 ```
 
 **Review Process:**
+
 - [ ] Team lead performs code review
 - [ ] Address all review feedback
 - [ ] Re-test after making changes
@@ -421,17 +472,20 @@ Converts JS Scanner from sequential to batch processing for 80-90% performance i
 ### Day 2 - Staging Testing Phase
 
 **Environment Setup:**
+
 - [ ] Deploy to staging environment
 - [ ] Configure staging Discord webhook
 - [ ] Set up monitoring/logging
 
 **Testing Execution:**
+
 - [ ] Execute Test Case 1: Single file
 - [ ] Execute Test Case 2: Multiple files
 - [ ] Execute Test Case 3: Secret detection
 - [ ] Execute Test Case 4: Performance benchmark
 
 **Performance Testing:**
+
 ```bash
 # Small dataset (10 files)
 time python -m jsscanner -t staging.example.com -i small_dataset.txt
@@ -444,6 +498,7 @@ time python -m jsscanner -t staging.example.com -i large_dataset.txt
 ```
 
 **Validation:**
+
 - [ ] Compare performance against baseline
 - [ ] Verify all outputs are correct
 - [ ] Check memory usage is acceptable
@@ -454,12 +509,14 @@ time python -m jsscanner -t staging.example.com -i large_dataset.txt
 ### Day 3 - Production Deployment Phase
 
 **Pre-Deployment:**
+
 - [ ] Merge approved changes to main branch
 - [ ] Tag release: `git tag -a v2.0.0-batch -m "Batch processing implementation"`
 - [ ] Create deployment backup
 - [ ] Notify team of deployment window
 
 **Deployment Steps:**
+
 ```bash
 # 1. Backup current production
 cp -r /path/to/production /path/to/backup-$(date +%Y%m%d)
@@ -479,6 +536,7 @@ python -c "import jsscanner.core.engine; print('OK')"
 ```
 
 **Post-Deployment:**
+
 - [ ] Monitor system for issues during first 24 hours
 - [ ] Compare performance metrics against baseline
 - [ ] Check error logs hourly for first 4 hours
@@ -486,6 +544,7 @@ python -c "import jsscanner.core.engine; print('OK')"
 - [ ] Document actual performance improvements
 
 **Rollback Plan (if needed):**
+
 ```bash
 # Stop current services
 systemctl stop jsscanner  # Adjust as needed
@@ -508,21 +567,25 @@ python -c "import jsscanner.core.engine; print('OK')"
 ### If issues occur during implementation:
 
 **Step 1: Self-Diagnosis (5-10 minutes)**
+
 1. Consult the "Common Issues & Solutions" section above
 2. Review the relevant test procedures
 3. Check for typos in recent code changes
 
 **Step 2: Log Analysis (5-10 minutes)**
+
 1. Examine logs at `results/target/logs/scan.log`
 2. Search for error messages: `grep -i error results/*/logs/scan.log`
 3. Check Python traceback for root cause
 
 **Step 3: Isolation Testing (10-15 minutes)**
+
 1. Run TruffleHog manually to isolate scanning issues
 2. Test individual methods in Python REPL
 3. Verify configuration file syntax with YAML validator
 
 **Step 4: Escalation (if unresolved)**
+
 1. Contact the project lead with:
    - Specific error messages
    - Reproduction steps
@@ -550,18 +613,21 @@ python -c "import jsscanner.core.engine; print('OK')"
 Before approving implementation to proceed:
 
 ### Team Readiness
+
 - [ ] Development team understands the new workflow architecture
 - [ ] Developers have necessary repository access and permissions
 - [ ] Team has allocated 4-5 hours for implementation and testing
 - [ ] Team has reviewed all documentation
 
 ### Environment Readiness
+
 - [ ] Test environment is configured and accessible
 - [ ] Discord webhook is configured for testing purposes
 - [ ] TruffleHog 3.x is installed on all test systems
 - [ ] Python 3.8+ is available on all systems
 
 ### Process Readiness
+
 - [ ] Current production code backup exists
 - [ ] Rollback plan is documented and tested
 - [ ] Performance baseline metrics are recorded
@@ -570,6 +636,7 @@ Before approving implementation to proceed:
 - [ ] Stakeholders have been notified
 
 ### Risk Management
+
 - [ ] Risk assessment completed
 - [ ] Mitigation strategies identified
 - [ ] Communication plan established
@@ -582,6 +649,7 @@ Before approving implementation to proceed:
 Track these metrics before and after deployment:
 
 ### Performance Metrics
+
 - Average scan time per file
 - Total scan completion time
 - Phase 2 (download) completion time
@@ -590,18 +658,21 @@ Track these metrics before and after deployment:
 - Phase 5 (beautify) completion time
 
 ### Quality Metrics
+
 - Number of errors per scan
 - Success rate (completed scans / total scans)
 - Secret detection accuracy
 - File processing accuracy
 
 ### Resource Metrics
+
 - Peak memory usage
 - Average CPU utilization
 - Disk space usage
 - Network bandwidth consumption
 
 ### Sample Metrics Report
+
 ```
 Scan Date: 2025-12-16
 Target: example.com
@@ -633,26 +704,30 @@ Success Rate: 100%
 
 ## 📝 Version History
 
-| Version | Date | Changes | Author |
-|---------|------|---------|--------|
-| 1.0 | 2025-12-16 | Initial troubleshooting & deployment guide | Implementation Team |
+| Version | Date       | Changes                                    | Author              |
+| ------- | ---------- | ------------------------------------------ | ------------------- |
+| 1.0     | 2025-12-16 | Initial troubleshooting & deployment guide | Implementation Team |
 
 ---
 
 ## 🎓 Lessons Learned (Post-Deployment)
 
-*This section should be updated after deployment with actual experiences:*
+_This section should be updated after deployment with actual experiences:_
 
 ### What Went Well
+
 - [To be filled after deployment]
 
 ### What Could Be Improved
+
 - [To be filled after deployment]
 
 ### Unexpected Issues
+
 - [To be filled after deployment]
 
 ### Recommendations for Future
+
 - [To be filled after deployment]
 
 ---
