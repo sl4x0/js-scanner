@@ -157,6 +157,7 @@ class Fetcher:
         self.logger = logger
         self.playwright = None
         self.browser_manager = None
+        self.last_failure_reason = None  # Track last fetch failure reason
         
         # Rate limiters
         wayback_rate = config.get('wayback', {}).get('rate_limit', 15)
@@ -568,7 +569,11 @@ class Fetcher:
             
         Returns:
             Content of the file, or None if failed
+            
+        Note:
+            Sets self.last_failure_reason to track why fetch failed
         """
+        self.last_failure_reason = None
         max_size = self.config.get('max_file_size', 10485760)  # 10MB default
         max_retries = 3
         
@@ -603,9 +608,10 @@ class Fetcher:
                         content_length = response.headers.get('Content-Length')
                         if content_length and int(content_length) > max_size:
                             self.logger.warning(
-                                f"File too large: {url} ({int(content_length) / 1024 / 1024:.2f} MB, "
+                                f"❌ File too large: {url} ({int(content_length) / 1024 / 1024:.2f} MB, "
                                 f"max: {max_size / 1024 / 1024:.2f} MB)"
                             )
+                            self.last_failure_reason = 'too_large'
                             return None
                         
                         # ✅ OPTIMIZATION: Stream and check size incrementally (prevents memory overflow)
@@ -616,8 +622,9 @@ class Fetcher:
                             total_size += len(chunk)
                             if total_size > max_size:
                                 self.logger.warning(
-                                    f"File exceeded size during download: {url} ({total_size / 1024 / 1024:.2f} MB)"
+                                    f"❌ File exceeded size during download: {url} ({total_size / 1024 / 1024:.2f} MB)"
                                 )
+                                self.last_failure_reason = 'too_large'
                                 return None
                             chunks.append(chunk)
                         
@@ -629,49 +636,51 @@ class Fetcher:
                             '<html' in content_start or
                             '<head>' in content_start or
                             content_start.startswith('<!')):
-                            self.logger.debug(f"Skipping {url}: Content is HTML, not JS")
+                            self.logger.warning(f"❌ HTML instead of JS: {url}")
+                            self.last_failure_reason = 'html_not_js'
                             return None
                         
                         # Check if content is actually empty or whitespace only (allow minified JS)
                         if not content or len(content.strip()) < 50:
-                            self.logger.debug(f"Skipping {url}: Content is empty or too short")
+                            self.logger.warning(f"❌ Content too short ({len(content)} bytes): {url}")
+                            self.last_failure_reason = 'too_short'
                             return None
                         
                         return content
                     else:
-                        # Only log WARNING for unexpected status codes
-                        if response.status not in [403, 404, 503]:
-                            self.logger.warning(f"Failed to fetch {url}: status {response.status}")
-                        else:
-                            self.logger.debug(f"Skipping {url}: status {response.status}")
+                        # Log all HTTP errors as warnings for better visibility
+                        self.logger.warning(f"❌ HTTP {response.status}: {url}")
+                        self.last_failure_reason = 'http_error'
                         return None
         except asyncio.TimeoutError:
             self.logger.warning(
-                f"[TIMEOUT] {url}\n"
-                f"  Error: Request exceeded 30 second timeout\n"
-                f"  Possible causes: Slow server, network congestion, or firewall blocking"
+                f"❌ [TIMEOUT] {url}\n"
+                f"  Request exceeded 30 second timeout"
             )
+            self.last_failure_reason = 'timeout'
             return None
         except aiohttp.ClientConnectorError as e:
             self.logger.warning(
-                f"[CONNECTION FAILED] {url}\n"
-                f"  Error: {str(e)[:100]}\n"
-                f"  Possible causes: DNS failure, network block, or invalid domain"
+                f"❌ [CONNECTION FAILED] {url}\n"
+                f"  Error: {str(e)[:200]}"
             )
+            self.last_failure_reason = 'http_error'
             return None
         except aiohttp.ClientError as e:
             self.logger.warning(
-                f"[HTTP ERROR] {url}\n"
-                f"  Error: {str(e)[:100]}\n"
-                f"  Possible causes: Invalid response, connection reset, or server error"
+                f"❌ [HTTP ERROR] {url}\n"
+                f"  Error: {str(e)[:200]}"
             )
+            self.last_failure_reason = 'http_error'
             return None
         except Exception as e:
-            self.logger.warning(
-                f"[UNEXPECTED ERROR] {url}\n"
-                f"  Error: {str(e)[:100]}\n"
-                f"  Type: {type(e).__name__}"
+            self.logger.error(
+                f"❌ [UNEXPECTED ERROR] {url}\n"
+                f"  Error: {str(e)[:200]}\n"
+                f"  Type: {type(e).__name__}",
+                exc_info=True
             )
+            self.last_failure_reason = 'http_error'
             return None
     
     async def fetch_with_playwright(self, url: str) -> Optional[str]:

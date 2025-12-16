@@ -60,7 +60,18 @@ class ScanEngine:
         self.stats = {
             'total_files': 0,
             'total_secrets': 0,
-            'errors': []
+            'errors': [],
+            'failures': {
+                'fetch_failed': 0,
+                'empty_content': 0,
+                'html_not_js': 0,
+                'too_short': 0,
+                'too_large': 0,
+                'timeout': 0,
+                'http_error': 0,
+                'duplicates': 0,
+                'invalid_url': 0
+            }
         }
     
     async def run(self, inputs: List[str], discovery_mode: bool = False):
@@ -201,6 +212,17 @@ class ScanEngine:
             # Log and send final stats
             log_stats(self.logger, self.stats)
             
+            # Log detailed failure breakdown
+            total_failures = sum(self.stats['failures'].values())
+            if total_failures > 0:
+                self.logger.info(f"\n{'='*80}")
+                self.logger.info(f"📊 Failure Breakdown ({total_failures} total):")
+                self.logger.info(f"{'='*80}")
+                for failure_type, count in self.stats['failures'].items():
+                    if count > 0:
+                        self.logger.info(f"  {failure_type}: {count}")
+                self.logger.info(f"{'='*80}\n")
+            
             # Log error summary if there were errors
             if self.stats.get('errors'):
                 error_count = len(self.stats['errors'])
@@ -301,6 +323,7 @@ class ScanEngine:
         # Validate URL
         if not self._is_valid_js_url(url):
             self.logger.warning(f"Invalid JS URL rejected: {url}")
+            self.stats['failures']['invalid_url'] += 1
             return
         
         try:
@@ -315,8 +338,22 @@ class ScanEngine:
                         if attempt > 0:
                             self.logger.info(f"✓ Fetch successful on attempt {attempt + 1}/{max_retries}")
                         else:
-                            self.logger.info(f"✓ Fetch successful")
+                            self.logger.debug(f"✓ Fetch successful: {url}")
                         break
+                    else:
+                        # Track the specific failure reason from fetcher
+                        if hasattr(self.fetcher, 'last_failure_reason') and self.fetcher.last_failure_reason:
+                            self.stats['failures'][self.fetcher.last_failure_reason] += 1
+                        else:
+                            self.stats['failures']['fetch_failed'] += 1
+                        return
+                    else:
+                        # Track the specific failure reason from fetcher
+                        if hasattr(self.fetcher, 'last_failure_reason') and self.fetcher.last_failure_reason:
+                            self.stats['failures'][self.fetcher.last_failure_reason] += 1
+                        else:
+                            self.stats['failures']['fetch_failed'] += 1
+                        return
                 except asyncio.TimeoutError as e:
                     self.logger.warning(
                         f"⚠️  Attempt {attempt + 1}/{max_retries} timed out\n"
@@ -349,6 +386,7 @@ class ScanEngine:
             
             if not content:
                 self.logger.warning(f"Empty content from {url}")
+                self.stats['failures']['empty_content'] += 1
                 return
             
             # Calculate hash
@@ -358,6 +396,7 @@ class ScanEngine:
             # Check if already scanned (atomic operation to prevent race condition)
             if not self.state.mark_as_scanned_if_new(file_hash, url):
                 self.logger.debug(f"Skipping duplicate: {url}")
+                self.stats['failures']['duplicates'] += 1
                 return
             self.stats['total_files'] += 1
             
@@ -475,6 +514,10 @@ class ScanEngine:
         
         for url in urls:
             try:
+                # Fix common URL corruption: backslashes instead of forward slashes
+                # e.g., "https://example.com/file.js\\" -> "https://example.com/file.js"
+                url = url.replace('\\', '/').rstrip('/')
+                
                 # Basic validation - reject obviously corrupted URLs
                 if not url.startswith(('http://', 'https://')):
                     invalid_urls.append(url)
