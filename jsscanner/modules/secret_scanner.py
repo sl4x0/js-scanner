@@ -6,7 +6,7 @@ import subprocess
 import json
 import asyncio
 import time
-from typing import Optional
+from typing import Optional, List
 
 
 class SecretScanner:
@@ -226,6 +226,81 @@ class SecretScanner:
             verified = source_metadata.get('Verified', False)
         
         return verified
+    
+    async def scan_directory(self, directory_path: str) -> List[dict]:
+        """
+        Scan an entire directory of files with TruffleHog (BATCH MODE)
+        
+        Args:
+            directory_path: Path to directory containing files to scan
+            
+        Returns:
+            List of secret findings
+        """
+        findings = []
+        
+        try:
+            # Run TruffleHog on entire directory
+            cmd = [
+                self.trufflehog_path,
+                'filesystem',
+                directory_path,
+                '--json',
+                '--only-verified',
+                '--no-update'
+            ]
+            
+            self.logger.info(f"Running: {' '.join(cmd)}")
+            
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            # Log stderr for debugging (TruffleHog outputs progress to stderr)
+            if stderr:
+                stderr_text = stderr.decode().strip()
+                if stderr_text:
+                    self.logger.debug(f"TruffleHog stderr: {stderr_text}")
+            
+            if process.returncode != 0:
+                self.logger.error(f"TruffleHog failed with exit code {process.returncode}")
+                return findings
+            
+            # Handle empty results gracefully
+            if not stdout or not stdout.strip():
+                self.logger.info("No secrets found in directory")
+                return findings
+            
+            # Parse JSON output
+            for line in stdout.decode().splitlines():
+                if line.strip():
+                    try:
+                        finding = json.loads(line)
+                        findings.append(finding)
+                        
+                        # Add to state manager
+                        self.state.add_secret(finding)
+                        
+                        # Send to Discord
+                        if self.notifier:
+                            # Extract file info for Discord notification
+                            source_metadata = finding.get('SourceMetadata', {})
+                            file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', 'unknown')
+                            await self.notifier.queue_batch_alert([finding], file_path)
+                        
+                    except json.JSONDecodeError:
+                        continue
+            
+            self.logger.info(f"Found {len(findings)} secrets in directory")
+            
+        except Exception as e:
+            self.logger.error(f"Directory scan failed: {e}")
+        
+        return findings
     
     async def scan_content(self, content: str, source_url: str) -> int:
         """

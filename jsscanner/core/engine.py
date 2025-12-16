@@ -76,7 +76,7 @@ class ScanEngine:
     
     async def run(self, inputs: List[str], discovery_mode: bool = False):
         """
-        Main execution method
+        Main execution method with BATCH PROCESSING
         
         Args:
             inputs: List of URLs or domains to scan
@@ -117,7 +117,13 @@ class ScanEngine:
             # Initialize modules
             await self._initialize_modules()
             
-            # === NEW: Process inputs based on discovery mode ===
+            # ============================================================
+            # PHASE 1: DISCOVERY & URL COLLECTION
+            # ============================================================
+            self.logger.info(f"\n{'='*60}")
+            self.logger.info("📡 PHASE 1: DISCOVERY & URL COLLECTION")
+            self.logger.info(f"{'='*60}")
+            
             urls_to_scan = []
             
             for item in inputs:
@@ -154,50 +160,81 @@ class ScanEngine:
             # Deduplicate URLs
             urls_to_scan = self._deduplicate_urls(urls_to_scan)
             
-            self.logger.info(f"\n{'='*80}")
-            self.logger.info(f"📊 Total unique JavaScript files to scan: {len(urls_to_scan)}")
-            self.logger.info(f"{'='*80}\n")
-            
-            # Log sample URLs for debugging
-            if urls_to_scan and len(urls_to_scan) > 0:
-                self.logger.debug(f"Sample URLs: {urls_to_scan[:3]}")
+            self.logger.info(f"{'='*60}")
+            self.logger.info(f"📊 Total unique files to process: {len(urls_to_scan)}")
+            self.logger.info(f"{'='*60}\n")
             
             # Store source URLs in metadata
             self.state.update_metadata({
                 'source_urls': urls_to_scan[:100]  # Store first 100 to avoid bloat
             })
             
-            # Process each URL with progress indicator and ETA
-            total_urls = len(urls_to_scan)
-            file_start_time = time.time()
+            if not urls_to_scan:
+                self.logger.warning("No JavaScript files found to scan")
+                return
             
-            for idx, url in enumerate(urls_to_scan, 1):
-                # Calculate progress percentage
-                progress = (idx / total_urls) * 100
-                
-                # Calculate ETA (after processing at least 3 files)
-                eta_str = ""
-                if idx > 3:
-                    elapsed = time.time() - file_start_time
-                    avg_time_per_file = elapsed / (idx - 1)
-                    remaining_files = total_urls - idx
-                    eta_seconds = avg_time_per_file * remaining_files
-                    
-                    if eta_seconds < 60:
-                        eta_str = f" | ETA: {int(eta_seconds)}s"
-                    elif eta_seconds < 3600:
-                        eta_str = f" | ETA: {int(eta_seconds / 60)}m {int(eta_seconds % 60)}s"
-                    else:
-                        hours = int(eta_seconds / 3600)
-                        minutes = int((eta_seconds % 3600) / 60)
-                        eta_str = f" | ETA: {hours}h {minutes}m"
-                
-                self.logger.info(f"\n{'='*80}")
-                self.logger.info(f"📍 [{idx}/{total_urls}] ({progress:.1f}%){eta_str} Processing: {url}")
-                self.logger.info(f"{'='*80}")
-                await self._process_url(url)
+            # ============================================================
+            # PHASE 2: DOWNLOADING ALL FILES (Parallel)
+            # ============================================================
+            self.logger.info(f"\n{'='*60}")
+            self.logger.info("⬇️  PHASE 2: DOWNLOADING ALL FILES")
+            self.logger.info(f"{'='*60}")
             
-            # Final statistics
+            downloaded_files = await self._download_all_files(urls_to_scan)
+            self.logger.info(f"✅ Downloaded {len(downloaded_files)} files\n")
+            
+            if not downloaded_files:
+                self.logger.warning("No files were successfully downloaded")
+                return
+            
+            # ============================================================
+            # PHASE 3: SCANNING FOR SECRETS (TruffleHog)
+            # ============================================================
+            self.logger.info(f"\n{'='*60}")
+            self.logger.info("🔍 PHASE 3: SCANNING FOR SECRETS (TruffleHog)")
+            self.logger.info(f"{'='*60}")
+            
+            # Scan entire minified directory at once
+            minified_dir = str(Path(self.paths['files_minified']))
+            secrets = await self.secret_scanner.scan_directory(minified_dir)
+            self.stats['total_secrets'] = len(secrets)
+            
+            if secrets:
+                self.logger.info(f"✅ Found {len(secrets)} secrets\n")
+            else:
+                self.logger.info(f"✅ No secrets found\n")
+            
+            # ============================================================
+            # PHASE 4: EXTRACTING DATA (Parallel)
+            # ============================================================
+            self.logger.info(f"\n{'='*60}")
+            self.logger.info("⚙️  PHASE 4: EXTRACTING DATA (Parallel)")
+            self.logger.info(f"{'='*60}")
+            
+            await self._process_all_files_parallel(downloaded_files)
+            
+            # ============================================================
+            # PHASE 5: BEAUTIFYING FILES
+            # ============================================================
+            self.logger.info(f"\n{'='*60}")
+            self.logger.info("✨ PHASE 5: BEAUTIFYING FILES")
+            self.logger.info(f"{'='*60}")
+            
+            await self._unminify_all_files(downloaded_files)
+            
+            # ============================================================
+            # PHASE 6: CLEANUP
+            # ============================================================
+            if self.config.get('batch_processing', {}).get('cleanup_minified', True):
+                self.logger.info(f"\n{'='*60}")
+                self.logger.info("🗑️  PHASE 6: CLEANUP")
+                self.logger.info(f"{'='*60}")
+                
+                await self._cleanup_minified_files()
+            
+            # ============================================================
+            # FINAL STATISTICS
+            # ============================================================
             duration = time.time() - self.start_time
             self.stats['scan_duration'] = duration
             
@@ -300,141 +337,160 @@ class ScanEngine:
         
         await self.fetcher.initialize()
     
-    async def _process_url(self, url: str, depth: int = 0):
+    async def _download_all_files(self, urls: List[str]) -> List[dict]:
         """
-        Processes a single JavaScript URL
+        PHASE 2: Download all files in parallel
         
         Args:
-            url: URL to process
-            depth: Current recursion depth
+            urls: List of URLs to download
+            
+        Returns:
+            List of downloaded file info dictionaries containing:
+            - url: Original URL
+            - hash: File content hash
+            - filename: Readable filename
+            - minified_path: Path to minified file
+            - content: File content
         """
-        max_depth = self.config.get('recursion', {}).get('max_depth', 3)
+        downloaded_files = []
+        semaphore = asyncio.Semaphore(self.config.get('threads', 50))
         
-        # Check depth limit
-        if depth >= max_depth:
-            self.logger.debug(f"Max depth {max_depth} reached for {url}")
-            return
-        
-        # Skip third-party domains
-        if not self._is_target_domain(url):
-            self.logger.debug(f"Skipping third-party domain: {url}")
-            return
-        
-        # Validate URL
-        if not self._is_valid_js_url(url):
-            self.logger.warning(f"Invalid JS URL rejected: {url}")
-            self.stats['failures']['invalid_url'] += 1
-            return
-        
-        try:
-            # Fetch content with retry logic
-            max_retries = 3
-            content = None
-            
-            for attempt in range(max_retries):
+        async def download_one(url: str) -> Optional[dict]:
+            async with semaphore:
                 try:
+                    # Validate URL
+                    if not self._is_valid_js_url(url):
+                        self.logger.debug(f"Invalid URL: {url}")
+                        return None
+                    
+                    if not self._is_target_domain(url):
+                        self.logger.debug(f"Out of scope: {url}")
+                        return None
+                    
+                    # Fetch content
                     content = await self.fetcher.fetch_content(url)
-                    if content:
-                        if attempt > 0:
-                            self.logger.info(f"✓ Fetch successful on attempt {attempt + 1}/{max_retries}")
-                        else:
-                            self.logger.debug(f"✓ Fetch successful: {url}")
-                        break
-                    else:
-                        # Track the specific failure reason from fetcher
-                        if hasattr(self.fetcher, 'last_failure_reason') and self.fetcher.last_failure_reason:
-                            self.stats['failures'][self.fetcher.last_failure_reason] += 1
-                        else:
-                            self.stats['failures']['fetch_failed'] += 1
-                        return
-                except asyncio.TimeoutError as e:
-                    self.logger.warning(
-                        f"⚠️  Attempt {attempt + 1}/{max_retries} timed out\n"
-                        f"   URL: {url}\n"
-                        f"   Error: {str(e)[:100]}"
-                    )
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2 ** attempt)
-                except (aiohttp.ClientError, aiohttp.ClientConnectorError) as e:
-                    self.logger.warning(
-                        f"⚠️  Attempt {attempt + 1}/{max_retries} failed\n"
-                        f"   Error: {str(e)[:100]}\n"
-                        f"   Type: {type(e).__name__}"
-                    )
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2 ** attempt)
+                    if not content:
+                        return None
+                    
+                    # Calculate hash
+                    from ..utils.hashing import calculate_hash
+                    file_hash = await calculate_hash(content)
+                    
+                    # Check if already scanned
+                    if not self.state.mark_as_scanned_if_new(file_hash, url):
+                        self.logger.debug(f"Duplicate: {url}")
+                        self.stats['failures']['duplicates'] += 1
+                        return None
+                    
+                    # Generate filename
+                    readable_name = self._get_readable_filename(url, file_hash)
+                    
+                    # Save minified version
+                    minified_path = Path(self.paths['files_minified']) / readable_name
+                    with open(minified_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    
+                    # Save manifest
+                    self._save_file_manifest(url, file_hash, readable_name)
+                    
+                    self.stats['total_files'] += 1
+                    
+                    return {
+                        'url': url,
+                        'hash': file_hash,
+                        'filename': readable_name,
+                        'minified_path': str(minified_path),
+                        'content': content
+                    }
+                
                 except Exception as e:
-                    self.logger.error(
-                        f"⚠️  Unexpected error on attempt {attempt + 1}/{max_retries}\n"
-                        f"   Error: {str(e)[:100]}\n"
-                        f"   Type: {type(e).__name__}",
-                        exc_info=True
-                    )
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
-                    else:
-                        self.logger.error(f"Failed to fetch {url} after {max_retries} attempts")
-                        self.stats['errors'].append(f"Fetch failed: {url}")
-                        return
-            
-            if not content:
-                self.logger.warning(f"Empty content from {url}")
-                self.stats['failures']['empty_content'] += 1
-                return
-            
-            # Calculate hash
-            from ..utils.hashing import calculate_hash
-            file_hash = await calculate_hash(content)
-            
-            # Check if already scanned (atomic operation to prevent race condition)
-            if not self.state.mark_as_scanned_if_new(file_hash, url):
-                self.logger.debug(f"Skipping duplicate: {url}")
-                self.stats['failures']['duplicates'] += 1
-                return
-            self.stats['total_files'] += 1
-            
-            # Generate readable filename
-            readable_name = self._get_readable_filename(url, file_hash)
-            
-            # Save minified version
-            minified_path = Path(self.paths['files_minified']) / readable_name
-            with open(minified_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            # Process content (beautify, extract source maps)
-            processed_content = await self.processor.process(content, str(minified_path))
-            
-            # Save unminified version
-            unminified_path = Path(self.paths['files_unminified']) / readable_name
-            with open(unminified_path, 'w', encoding='utf-8') as f:
-                f.write(processed_content)
-            
-            # Save to manifest
-            self._save_file_manifest(url, file_hash, readable_name)
-            
-            # Scan for secrets (streaming)
-            secrets_found = await self.secret_scanner.scan_file(str(unminified_path), url)
-            self.stats['total_secrets'] += secrets_found
-            
-            # AST analysis
-            await self.ast_analyzer.analyze(processed_content, url)
-            
-            # Recursive crawling (if enabled)
-            if self.config.get('recursion', {}).get('enabled', False):
-                linked_urls = await self.crawler.extract_js_links(processed_content, url, depth)
-                for linked_url in linked_urls:
-                    await self._process_url(linked_url, depth + 1)
-            
-        except ValueError as e:
-            self.logger.error(f"Invalid data while processing {url}: {e}", exc_info=True)
-            self.stats['errors'].append(f"ValueError: {str(e)}")
-        except IOError as e:
-            self.logger.error(f"File I/O error processing {url}: {e}", exc_info=True)
-            self.stats['errors'].append(f"IOError: {str(e)}")
-        except Exception as e:
-            self.logger.error(f"Unexpected error processing {url}: {e}", exc_info=True)
-            self.stats['errors'].append(f"Unexpected: {str(e)}")
-            raise  # Re-raise for debugging
+                    self.logger.error(f"Download failed {url}: {e}")
+                    return None
+        
+        # Download all files in parallel
+        tasks = [download_one(url) for url in urls]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter successful downloads
+        for result in results:
+            if isinstance(result, dict):
+                downloaded_files.append(result)
+            elif isinstance(result, Exception):
+                self.logger.error(f"Task exception: {result}")
+        
+        return downloaded_files
+    
+    async def _process_all_files_parallel(self, files: List[dict]):
+        """
+        PHASE 4: Process all files in parallel (AST analysis on minified files)
+        
+        Args:
+            files: List of file info dictionaries from _download_all_files()
+        """
+        semaphore = asyncio.Semaphore(self.config.get('threads', 50))
+        
+        async def process_one(file_info: dict):
+            async with semaphore:
+                try:
+                    content = file_info['content']
+                    url = file_info['url']
+                    
+                    # Run AST analysis on MINIFIED content (faster!)
+                    await self.ast_analyzer.analyze(content, url)
+                    
+                except Exception as e:
+                    self.logger.error(f"Processing failed {file_info['url']}: {e}")
+        
+        tasks = [process_one(f) for f in files]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
+        self.logger.info(f"✅ Processed {len(files)} files")
+    
+    async def _unminify_all_files(self, files: List[dict]):
+        """
+        PHASE 5: Beautify all files in parallel
+        
+        Args:
+            files: List of file info dictionaries from _download_all_files()
+        """
+        semaphore = asyncio.Semaphore(self.config.get('threads', 50))
+        
+        async def unminify_one(file_info: dict):
+            async with semaphore:
+                try:
+                    content = file_info['content']
+                    minified_path = file_info['minified_path']
+                    filename = file_info['filename']
+                    
+                    # Process (beautify)
+                    processed = await self.processor.process(content, minified_path)
+                    
+                    # Save unminified version
+                    unminified_path = Path(self.paths['files_unminified']) / filename
+                    with open(unminified_path, 'w', encoding='utf-8') as f:
+                        f.write(processed)
+                    
+                except Exception as e:
+                    self.logger.error(f"Unminify failed {file_info['url']}: {e}")
+        
+        tasks = [unminify_one(f) for f in files]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
+        self.logger.info(f"✅ Beautified {len(files)} files")
+    
+    async def _cleanup_minified_files(self):
+        """
+        PHASE 6: Delete all minified files to save disk space
+        """
+        import shutil
+        
+        minified_dir = Path(self.paths['files_minified'])
+        
+        if minified_dir.exists():
+            file_count = len(list(minified_dir.glob('*')))
+            shutil.rmtree(minified_dir)
+            minified_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"✅ Deleted {file_count} minified files")
     
     def _is_in_scope(self, url: str) -> bool:
         """
