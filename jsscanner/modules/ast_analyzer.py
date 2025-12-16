@@ -396,20 +396,34 @@ class ASTAnalyzer:
         filtered = set()
         
         for word in words:
-            # Skip very short words (<3 chars)
-            if len(word) < 3:
+            # Skip very short words (<4 chars)
+            if len(word) < 4:
                 continue
             
-            # Skip words that are all the same character (e.g., "aaaaa")
+            # Skip words that are all the same character
             if len(set(word)) == 1:
                 continue
             
-            # Skip words with no vowels (likely junk from minified code)
+            # Skip words with no vowels
             if not any(c in 'aeiou' for c in word.lower()):
                 continue
             
-            # Skip words with excessive character repetition
+            # Skip words with excessive character repetition (>50% same char)
             if any(word.count(c) > len(word) / 2 for c in set(word)):
+                continue
+            
+            # Skip fragment words ending in vowels (likely cut-off: "abili")
+            if len(word) < 6 and word[-1] in 'aeiouy':
+                continue
+            
+            # Skip words with too few vowels (<2 vowels)
+            vowel_count = sum(1 for c in word.lower() if c in 'aeiou')
+            if vowel_count < 2:
+                continue
+            
+            # Skip words that are mostly numbers
+            digit_count = sum(1 for c in word if c.isdigit())
+            if digit_count > len(word) / 2:
                 continue
             
             filtered.add(word)
@@ -419,15 +433,32 @@ class ASTAnalyzer:
     def _is_valid_endpoint(self, endpoint: str) -> bool:
         """Validate endpoint before adding to results"""
         # Remove endpoints with code artifacts
-        if any(char in endpoint for char in ['{', '}', '(', ')', ';', '`']):
+        if any(char in endpoint for char in ['{', '}', '(', ')', ';', '`', '$', '=', '>', '<']):
             return False
         
         # Must start with /
         if not endpoint.startswith('/'):
             return False
         
-        # Reasonable length (most APIs are <100 chars)
+        # No template strings
+        if '${' in endpoint:
+            return False
+        
+        # No incomplete syntax
+        if endpoint.rstrip().endswith((',', ':', ';', '\\', '|', '&')):
+            return False
+        
+        # No double slashes
+        if '//' in endpoint[1:]:
+            return False
+        
+        # Reasonable length
         if len(endpoint) > 100:
+            return False
+        
+        # Valid URL characters only (strict regex check)
+        import re
+        if not re.match(r'^/[a-zA-Z0-9/_\-\.]+$', endpoint):
             return False
         
         return True
