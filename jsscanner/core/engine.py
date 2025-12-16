@@ -186,7 +186,14 @@ class ScanEngine:
             secrets = secrets_minified + secrets_unminified
             self.stats['total_secrets'] = len(secrets)
             
-            # Export TruffleHog results to JSON (includes ALL findings - verified + unverified)
+            # Save organized secrets (domain-specific + full results)
+            await self.secret_scanner.save_organized_secrets()
+            
+            # Get secrets summary for reporting
+            secrets_summary = self.secret_scanner.get_secrets_summary()
+            self.stats['secrets_summary'] = secrets_summary
+            
+            # Export TruffleHog results to JSON (legacy - for backward compatibility)
             trufflehog_output = Path(self.paths['base']) / 'trufflehog_full.json'
             self.secret_scanner.export_results(str(trufflehog_output))
             
@@ -332,6 +339,9 @@ class ScanEngine:
         self.secret_scanner = SecretScanner(self.config, self.logger, self.state, self.notifier)
         self.ast_analyzer = ASTAnalyzer(self.config, self.logger, self.paths)
         self.crawler = Crawler(self.config, self.logger)
+        
+        # Initialize secrets organizer
+        self.secret_scanner.initialize_organizer(self.paths['base'])
         
         await self.fetcher.initialize()
     
@@ -581,9 +591,16 @@ class ScanEngine:
         tasks = [process_one(f) for f in files]
         await asyncio.gather(*tasks, return_exceptions=True)
         
+        # Save organized extracts (domain-specific + legacy format)
+        await self.ast_analyzer.save_organized_extracts()
+        
         # Get extracts with source tracking
         extracts_with_sources = self.ast_analyzer.get_extracts_with_sources()
         self.stats['extracts_detailed'] = extracts_with_sources
+        
+        # Get domain summary for reporting
+        domain_summary = self.ast_analyzer.get_domain_summary()
+        self.stats['domain_summary'] = domain_summary
         
         self.logger.info(f"✅ Processed {len(files)} files")
     

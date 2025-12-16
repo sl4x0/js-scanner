@@ -8,6 +8,7 @@ from tree_sitter import Parser
 from typing import List, Set, Dict, Any
 from pathlib import Path
 from ..utils.file_ops import FileOps
+from .domain_organizer import DomainExtractOrganizer
 
 
 class ASTAnalyzer:
@@ -35,6 +36,9 @@ class ASTAnalyzer:
             'domains': {},
             'links': {}
         }
+        
+        # Initialize domain organizer for new directory structure
+        self.domain_organizer = DomainExtractOrganizer(paths['extracts'], logger)
         
         # Initialize Tree-sitter parser
         try:
@@ -580,3 +584,19 @@ class ASTAnalyzer:
             }
         
         return result
+    
+    async def save_organized_extracts(self):
+        """
+        Save extracts in both domain-specific and legacy formats
+        """
+        # Save domain-specific organization
+        await self.domain_organizer.save_by_domain(self.extracts_db)
+        
+        # Save legacy format for backward compatibility
+        await self.domain_organizer.save_legacy_format(self.extracts_db)
+        
+        self.logger.info("✅ Saved extracts in both domain-specific and legacy formats")
+    
+    def get_domain_summary(self) -> Dict[str, Any]:
+        """Get summary of domain-specific extracts"""
+        return self.domain_organizer.get_domain_summary()

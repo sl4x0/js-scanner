@@ -8,6 +8,7 @@ import asyncio
 import time
 import sys
 from typing import Optional, List
+from .secrets_organizer import DomainSecretsOrganizer
 
 
 class SecretScanner:
@@ -38,8 +39,20 @@ class SecretScanner:
         # Track all secrets found for export
         self.all_secrets = []
         
+        # Initialize domain organizer for secrets
+        self.secrets_organizer = None  # Will be initialized with base_path
+        
         # Validate TruffleHog installation (Issue #7)
         self._validate_trufflehog()
+    
+    def initialize_organizer(self, base_path: str):
+        """
+        Initialize secrets organizer with base path
+        
+        Args:
+            base_path: Base result path for the target
+        """
+        self.secrets_organizer = DomainSecretsOrganizer(base_path, self.logger)
     
     def _find_trufflehog_binary(self, config: dict) -> str:
         """
@@ -457,3 +470,26 @@ class SecretScanner:
                 self.logger.debug(f"Exported empty secrets list to {output_path}")
         except Exception as e:
             self.logger.error(f"Failed to export secrets: {e}")
+    
+    async def save_organized_secrets(self):
+        """
+        Save secrets organized by domain
+        """
+        if not self.secrets_organizer:
+            self.logger.warning("Secrets organizer not initialized, skipping domain organization")
+            return
+        
+        # Save full results
+        await self.secrets_organizer.save_full_results(self.all_secrets)
+        
+        # Organize and save by domain
+        await self.secrets_organizer.organize_secrets(self.all_secrets)
+        
+        self.logger.info("✅ Saved secrets in both domain-specific and full formats")
+    
+    def get_secrets_summary(self):
+        """Get summary of secrets organized by domain"""
+        if not self.secrets_organizer:
+            return {}
+        
+        return self.secrets_organizer.get_secrets_summary()

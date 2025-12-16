@@ -165,7 +165,39 @@ results/<project-name>/
 
 ## 🧪 Testing
 
-See [docs/TESTING.md](TESTING.md) for comprehensive testing guide.
+Comprehensive test suite for validation and quality assurance:
+
+### Integration Tests
+```bash
+# Run all integration tests (10+ domains, extraction, beautification)
+python tests/integration_tests.py
+```
+
+### Discord Notification Tests
+```bash
+# Start test server
+cd test_notifications
+python test_server.py
+
+# Validate webhook (in another terminal)
+python webhook_validator.py "YOUR_WEBHOOK_URL"
+
+# Run scanner against test files
+cd ..
+python -m jsscanner -t test-notifications -i test_notifications/test_urls.txt
+```
+
+### Test Documentation
+- **[tests/README.md](tests/README.md)** - Integration test suite documentation
+- **[test_notifications/README.md](test_notifications/README.md)** - Notification testing guide
+
+**Test Coverage:**
+- ✅ Multi-domain scanning (10+ domains)
+- ✅ Domain-specific organization
+- ✅ Extraction accuracy validation
+- ✅ Beautification quality tests
+- ✅ Discord webhook validation
+- ✅ Backward compatibility verification
 
 **Quick test:**
 ```powershell
