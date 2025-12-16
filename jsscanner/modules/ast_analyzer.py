@@ -39,31 +39,30 @@ class ASTAnalyzer:
         # Initialize Tree-sitter parser
         try:
             import tree_sitter_javascript as tsjavascript
+            from tree_sitter import Parser
             import tree_sitter
             
             # Get the language
             language = tsjavascript.language()
             
-            # Issue #12: Check tree-sitter version explicitly with fallback
+            # Issue #12: Robust version detection with API fallback
             try:
                 ts_version = tuple(map(int, tree_sitter.__version__.split('.')[:2]))
                 version_str = tree_sitter.__version__
             except AttributeError:
-                # Fallback: Try to detect API by checking if set_language exists
-                ts_version = (0, 22)  # Assume new API if no version
+                ts_version = None
                 version_str = "unknown"
             
-            if ts_version >= (0, 22):
-                # New API (v0.22+)
+            # Try new API first (v0.22+) - language passed to Parser constructor
+            try:
+                self.parser = Parser(language)
+                self.logger.info(f"Tree-sitter parser initialized (v{version_str}, new API)")
+            except TypeError:
+                # Fall back to old API (v0.20-0.21) - set_language method
                 self.parser = Parser()
                 self.parser.set_language(language)
-            else:
-                # Old API (v0.20-0.21) - requires Language wrapper
-                from tree_sitter import Language
-                js_lang = Language(language)
-                self.parser = Parser(js_lang)
-            
-            self.logger.info(f"Tree-sitter parser initialized (v{version_str})")
+                self.logger.info(f"Tree-sitter parser initialized (v{version_str}, old API)")
+                
         except Exception as e:
             self.logger.warning(f"Failed to initialize Tree-sitter: {e}")
             self.parser = None
@@ -96,7 +95,76 @@ class ASTAnalyzer:
             domains = await self._extract_domains(content)
             wordlist = await loop.run_in_executor(None, self._generate_wordlist_sync, root_node, content)
             
-            # Save extracts
+            # Extract domain from source URL for tracking
+            from urllib.parse import urlparse
+            try:
+                source_domain = urlparse(source_url).netloc.replace('www.', '')
+            except:
+                source_domain = 'unknown'
+            
+            # Track sources in extracts_db
+            from collections import Counter
+            for endpoint in endpoints:
+                if endpoint not in self.extracts_db['endpoints']:
+                    self.extracts_db['endpoints'][endpoint] = {
+                        'sources': [],
+                        'total_count': 0,
+                        'domains': set()
+                    }
+                self.extracts_db['endpoints'][endpoint]['sources'].append({
+                    'file': source_url,
+                    'domain': source_domain,
+                    'occurrences': 1
+                })
+                self.extracts_db['endpoints'][endpoint]['total_count'] += 1
+                self.extracts_db['endpoints'][endpoint]['domains'].add(source_domain)
+            
+            for param in params:
+                if param not in self.extracts_db['params']:
+                    self.extracts_db['params'][param] = {
+                        'sources': [],
+                        'total_count': 0,
+                        'domains': set()
+                    }
+                self.extracts_db['params'][param]['sources'].append({
+                    'file': source_url,
+                    'domain': source_domain,
+                    'occurrences': 1
+                })
+                self.extracts_db['params'][param]['total_count'] += 1
+                self.extracts_db['params'][param]['domains'].add(source_domain)
+            
+            for domain in domains:
+                if domain not in self.extracts_db['domains']:
+                    self.extracts_db['domains'][domain] = {
+                        'sources': [],
+                        'total_count': 0,
+                        'domains': set()
+                    }
+                self.extracts_db['domains'][domain]['sources'].append({
+                    'file': source_url,
+                    'domain': source_domain,
+                    'occurrences': 1
+                })
+                self.extracts_db['domains'][domain]['total_count'] += 1
+                self.extracts_db['domains'][domain]['domains'].add(source_domain)
+            
+            for link in links:
+                if link not in self.extracts_db['links']:
+                    self.extracts_db['links'][link] = {
+                        'sources': [],
+                        'total_count': 0,
+                        'domains': set()
+                    }
+                self.extracts_db['links'][link]['sources'].append({
+                    'file': source_url,
+                    'domain': source_domain,
+                    'occurrences': 1
+                })
+                self.extracts_db['links'][link]['total_count'] += 1
+                self.extracts_db['links'][link]['domains'].add(source_domain)
+            
+            # Save extracts to files (for backwards compatibility)
             extracts_path = Path(self.paths['extracts'])
             
             if endpoints:

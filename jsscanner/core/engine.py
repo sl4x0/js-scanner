@@ -211,6 +211,10 @@ class ScanEngine:
             secrets = await self.secret_scanner.scan_directory(minified_dir)
             self.stats['total_secrets'] = len(secrets)
             
+            # Export TruffleHog results to JSON
+            trufflehog_output = Path(self.paths['base']) / 'trufflehog.json'
+            self.secret_scanner.export_results(str(trufflehog_output))
+            
             if secrets:
                 self.logger.info(f"✅ Found {len(secrets)} secrets\n")
             else:
@@ -404,9 +408,16 @@ class ScanEngine:
                     # Generate filename
                     readable_name = self._get_readable_filename(url, file_hash)
                     
-                    # Save minified version
-                    minified_path = Path(self.paths['files_minified']) / readable_name
-                    with open(minified_path, 'w', encoding='utf-8') as f:
+                    # Detect if file is minified
+                    is_minified = self._is_minified(content)
+                    
+                    # Save to appropriate directory based on minification
+                    if is_minified:
+                        file_path = Path(self.paths['files_minified']) / readable_name
+                    else:
+                        file_path = Path(self.paths['files_unminified']) / readable_name
+                    
+                    with open(file_path, 'w', encoding='utf-8') as f:
                         f.write(content)
                     
                     # Save manifest
@@ -418,7 +429,9 @@ class ScanEngine:
                         'url': url,
                         'hash': file_hash,
                         'filename': readable_name,
-                        'minified_path': str(minified_path),
+                        'minified_path': str(file_path) if is_minified else None,
+                        'unminified_path': str(file_path) if not is_minified else None,
+                        'is_minified': is_minified,
                         'content': content
                     }
                 
@@ -485,9 +498,17 @@ class ScanEngine:
         async def unminify_one(file_info: dict):
             async with semaphore:
                 try:
+                    # Skip if already unminified
+                    if not file_info.get('is_minified', True):
+                        return
+                    
                     content = file_info['content']
-                    minified_path = file_info['minified_path']
+                    minified_path = file_info.get('minified_path')
                     filename = file_info['filename']
+                    
+                    # Skip if no minified path (shouldn't happen)
+                    if not minified_path:
+                        return
                     
                     # Process (beautify)
                     processed = await self.processor.process(content, minified_path)
@@ -528,6 +549,48 @@ class ScanEngine:
             shutil.rmtree(minified_dir)
             minified_dir.mkdir(parents=True, exist_ok=True)
             self.logger.info(f"✅ Deleted {file_count} minified files")
+    
+    def _is_minified(self, content: str) -> bool:
+        """
+        Detect if JavaScript file is minified
+        
+        Args:
+            content: JavaScript content
+            
+        Returns:
+            True if file appears to be minified
+        """
+        # Skip empty files
+        if not content or len(content) < 100:
+            return False
+        
+        # Sample first 5000 characters for performance
+        sample = content[:5000]
+        lines = sample.split('\n')
+        
+        # Calculate average line length
+        if len(lines) < 3:
+            # Very few lines suggests minification
+            return True
+        
+        total_chars = sum(len(line) for line in lines)
+        avg_line_length = total_chars / len(lines) if lines else 0
+        
+        # Minified files typically have very long lines (>200 chars average)
+        if avg_line_length > 200:
+            return True
+        
+        # Check for common minification patterns
+        # - Very long lines (>500 chars)
+        # - Lack of whitespace
+        # - Few newlines relative to length
+        long_lines = sum(1 for line in lines if len(line) > 500)
+        newline_ratio = sample.count('\n') / len(sample) if sample else 0
+        
+        if long_lines > len(lines) * 0.3 or newline_ratio < 0.01:
+            return True
+        
+        return False
     
     def _is_in_scope(self, url: str) -> bool:
         """

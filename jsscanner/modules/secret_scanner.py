@@ -156,6 +156,9 @@ class SecretScanner:
                             # Save to state
                             self.state.add_secret(secret_data)
                             
+                            # Track all secrets for export
+                            self.all_secrets.append(secret_data)
+                            
                             # ✅ OPTIMIZATION: Collect secrets for batch notification
                             file_secrets.append(secret_data)
                             
