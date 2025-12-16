@@ -15,6 +15,7 @@ trufflehog_max_concurrent: 5  # Limit concurrent TruffleHog processes (Issue #2)
 
 # Fetching
 threads: 25  # Recommended: 10 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
+max_concurrent_domains: 10  # Number of domains to process concurrently (NEW)
 timeout: 30  # seconds
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 10485760  # 10MB max per JS file

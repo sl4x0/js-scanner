@@ -59,16 +59,30 @@ class Processor:
         """
         import asyncio
         
+        # Skip beautification for very large files (>2MB) - too slow
+        content_size_mb = len(content) / (1024 * 1024)
+        if content_size_mb > 2.0:
+            self.logger.warning(f"Skipping beautification for large file ({content_size_mb:.1f}MB, limit: 2MB)")
+            return content
+        
         try:
-            # Issue #14: Wrap beautification in timeout to prevent hanging on large files
+            # Issue #14: Increase timeout for larger files
+            # Small files: 30s, Medium: 60s, Large: 120s
+            if content_size_mb < 0.5:
+                timeout = 30.0
+            elif content_size_mb < 1.0:
+                timeout = 60.0
+            else:
+                timeout = 120.0
+            
             loop = asyncio.get_event_loop()
             beautified = await asyncio.wait_for(
                 loop.run_in_executor(None, jsbeautifier.beautify, content, self.beautifier_options),
-                timeout=30.0
+                timeout=timeout
             )
             return beautified
         except asyncio.TimeoutError:
-            self.logger.warning(f"Beautification timed out after 30s, using original content")
+            self.logger.warning(f"Beautification timed out after {timeout}s ({content_size_mb:.1f}MB file), using original content")
             return content
         except (ValueError, TypeError) as e:
             self.logger.warning(f"Failed to beautify (invalid content): {e}")

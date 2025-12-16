@@ -163,6 +163,7 @@ class Fetcher:
         self.playwright = None
         self.browser_manager = None
         self.last_failure_reason = None  # Track last fetch failure reason
+        self.verbose = config.get('verbose', False)  # Verbose mode flag
         
         # Rate limiters
         wayback_rate = config.get('wayback', {}).get('rate_limit', 15)
@@ -285,62 +286,89 @@ class Fetcher:
             'url': f'*.{clean_target}',
             'matchType': 'domain',  # Better scope control
             'fl': 'original',
-            'collapse': 'digest',  # ✅ Proper deduplication by content hash
+            'collapse': 'urlkey',  # ✅ More comprehensive results (groups by URL pattern)
             'filter': 'statuscode:200',
             'limit': self.wayback_max_results
         }
         
         js_urls = set()  # Use set for automatic deduplication
         
-        try:
-            # Apply rate limiting
-            await self.wayback_limiter.acquire()
-            
-            self.logger.info(f"Wayback query: {cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}")
-            
-            async with aiohttp.ClientSession() as session:
-                timeout = aiohttp.ClientTimeout(total=120, sock_read=60)
-                async with session.get(cdx_url, params=params, timeout=timeout) as response:
-                    self.logger.info(f"Wayback API response status: {response.status}")
-                    
-                    if response.status == 200:
-                        # Stream line by line to handle large responses
-                        line_count = 0
-                        async for line in response.content:
-                            line_count += 1
-                            original_url = line.decode('utf-8', errors='ignore').strip()
-                            
-                            if not original_url:
-                                continue
-                            
-                            # Check if it's a valid .js URL using urlparse
-                            try:
-                                from urllib.parse import urlparse
-                                parsed = urlparse(original_url)
+        # Retry configuration
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(max_retries):
+            try:
+                # Apply rate limiting
+                await self.wayback_limiter.acquire()
+                
+                if attempt > 0:
+                    self.logger.info(f"🔄 Wayback retry attempt {attempt + 1}/{max_retries} for {clean_target}")
+                    await asyncio.sleep(retry_delay * attempt)
+                
+                self.logger.info(f"Wayback query: {cdx_url}?url={params['url']}&fl={params['fl']}&collapse={params['collapse']}")
+                
+                async with aiohttp.ClientSession() as session:
+                    timeout = aiohttp.ClientTimeout(total=120, sock_read=60)
+                    async with session.get(cdx_url, params=params, timeout=timeout) as response:
+                        self.logger.info(f"Wayback API response status: {response.status}")
+                        
+                        if response.status == 200:
+                            # Stream line by line to handle large responses
+                            line_count = 0
+                            async for line in response.content:
+                                line_count += 1
+                                original_url = line.decode('utf-8', errors='ignore').strip()
                                 
-                                # Must have proper scheme and domain
-                                if not parsed.scheme or not parsed.netloc:
+                                if not original_url:
                                     continue
                                 
-                                # Check if path ends with .js or .mjs
-                                if parsed.path.endswith('.js') or parsed.path.endswith('.mjs'):
-                                    # Add original URL directly (no web.archive.org wrapper)
-                                    js_urls.add(original_url)
-                            except:
-                                continue
+                                # Check if it's a valid .js URL using urlparse
+                                try:
+                                    from urllib.parse import urlparse
+                                    parsed = urlparse(original_url)
+                                    
+                                    # Must have proper scheme and domain
+                                    if not parsed.scheme or not parsed.netloc:
+                                        continue
+                                    
+                                    # Check if path ends with .js or .mjs
+                                    if parsed.path.endswith('.js') or parsed.path.endswith('.mjs'):
+                                        # Add original URL directly (no web.archive.org wrapper)
+                                        js_urls.add(original_url)
+                                except:
+                                    continue
+                                
+                                # Log progress every 1000 lines
+                                if line_count % 1000 == 0:
+                                    self.logger.info(f"Processed {line_count} lines, found {len(js_urls)} JS URLs so far...")
                             
-                            # Log progress every 1000 lines
-                            if line_count % 1000 == 0:
-                                self.logger.info(f"Processed {line_count} lines, found {len(js_urls)} JS URLs so far...")
-                        
-                        self.logger.info(f"Wayback returned {line_count} total URLs, found {len(js_urls)} unique .js files")
-                    else:
-                        self.logger.warning(f"Wayback returned status {response.status}")
-                        
-        except asyncio.TimeoutError:
-            self.logger.warning(f"Wayback request timed out after 120s")
-        except Exception as e:
-            self.logger.error(f"Error fetching from Wayback: {e}")
+                            self.logger.info(f"Wayback returned {line_count} total URLs, found {len(js_urls)} unique .js files")
+                            break  # Success, exit retry loop
+                        elif response.status == 429:
+                            self.logger.warning(f"Wayback rate limit exceeded (429)")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(retry_delay * 2)  # Longer wait for rate limit
+                                continue
+                        elif response.status >= 500:
+                            self.logger.warning(f"Wayback server error ({response.status})")
+                            if attempt < max_retries - 1:
+                                continue
+                        else:
+                            self.logger.warning(f"Wayback returned status {response.status}")
+                            break  # Don't retry for client errors
+                            
+            except asyncio.TimeoutError:
+                self.logger.warning(f"Wayback request timed out after 120s (attempt {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    continue
+            except aiohttp.ClientError as e:
+                self.logger.warning(f"Wayback network error: {e} (attempt {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    continue
+            except Exception as e:
+                self.logger.error(f"Unexpected error fetching from Wayback: {e}")
+                break  # Don't retry for unexpected errors
         
         # Filter to only target domain before returning
         filtered_urls = []
@@ -695,20 +723,29 @@ class Fetcher:
                             '<html' in content_start or
                             '<head>' in content_start or
                             content_start.startswith('<!')):
-                            self.logger.warning(f"❌ HTML instead of JS: {url}")
+                            if self.verbose:
+                                self.logger.warning(f"❌ HTML instead of JS: {url}")
+                            else:
+                                self.logger.debug(f"Filtered HTML response: {url}")
                             self.last_failure_reason = 'html_not_js'
                             return None
                         
                         # Check if content is actually empty or whitespace only (allow minified JS)
                         if not content or len(content.strip()) < 50:
-                            self.logger.warning(f"❌ Content too short ({len(content)} bytes): {url}")
+                            if self.verbose:
+                                self.logger.warning(f"❌ Content too short ({len(content)} bytes): {url}")
+                            else:
+                                self.logger.debug(f"Filtered short content ({len(content)} bytes): {url}")
                             self.last_failure_reason = 'too_short'
                             return None
                         
                         return content
                     else:
-                        # Log all HTTP errors as warnings for better visibility
-                        self.logger.warning(f"❌ HTTP {response.status}: {url}")
+                        # Only log in verbose mode - these are common (404, 403, etc.)
+                        if self.verbose:
+                            self.logger.warning(f"❌ HTTP {response.status}: {url}")
+                        else:
+                            self.logger.debug(f"HTTP {response.status}: {url}")
                         self.last_failure_reason = 'http_error'
                         return None
         except asyncio.TimeoutError:

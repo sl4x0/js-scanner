@@ -95,6 +95,10 @@ async def main():
     if args.no_recursion:
         config.setdefault('recursion', {})['enabled'] = False
     
+    # Add verbose flag to config
+    if hasattr(args, 'verbose') and args.verbose:
+        config['verbose'] = True
+    
     # Validate config
     if not validate_config(config):
         sys.exit(1)

@@ -289,29 +289,51 @@ class SecretScanner:
         
         return verified
     
+    def _load_file_manifest(self, directory_path: str) -> dict:
+        """Load file manifest to map filenames to original URLs"""
+        import json
+        from pathlib import Path
+        
+        # Navigate up from files/unminified to base directory
+        base_dir = Path(directory_path).parent.parent
+        manifest_file = base_dir / 'file_manifest.json'
+        
+        if manifest_file.exists():
+            try:
+                with open(manifest_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                self.logger.debug(f"Failed to load manifest: {e}")
+        
+        return {}
+    
     async def scan_directory(self, directory_path: str) -> List[dict]:
         """
         Scan an entire directory of files with TruffleHog (BATCH MODE)
+        Saves ALL findings (verified and unverified) for manual review
         
         Args:
             directory_path: Path to directory containing files to scan
             
         Returns:
-            List of secret findings
+            List of verified secret findings (all findings appended to all_secrets for export)
         """
-        # Reset all_secrets for this scan
-        self.all_secrets = []
-        findings = []
+        # Don't reset all_secrets - append to existing findings
+        # (allows scanning multiple directories in one session)
+        verified_findings = []
+        
+        # Load file manifest to get original URLs
+        file_manifest = self._load_file_manifest(directory_path)
         
         try:
-            # Run TruffleHog on entire directory
+            # Run TruffleHog to get ALL findings (verified + unverified)
+            # This ensures we save everything for manual review
             cmd = [
                 self.trufflehog_path,
                 'filesystem',
                 directory_path,
                 '--json',
-                '--only-verified',
-                '--no-update'
+                '--no-update'  # Removed --only-verified to get ALL findings
             ]
             
             self.logger.info(f"Running: {' '.join(cmd)}")
@@ -337,37 +359,56 @@ class SecretScanner:
             # Handle empty results gracefully
             if not stdout or not stdout.strip():
                 self.logger.info("No secrets found in directory")
-                return findings
+                return verified_findings
             
-            # Parse JSON output
+            # Parse JSON output - save ALL findings
             for line in stdout.decode().splitlines():
                 if line.strip():
                     try:
                         finding = json.loads(line)
-                        findings.append(finding)
                         
-                        # Track for export
+                        # Enrich finding with original URL from manifest
+                        source_metadata = finding.get('SourceMetadata', {})
+                        file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', '')
+                        
+                        if file_path and file_manifest:
+                            from pathlib import Path
+                            filename = Path(file_path).name
+                            
+                            # Get original URL from manifest (manifest is dict: filename -> {url, hash, timestamp})
+                            if filename in file_manifest:
+                                manifest_entry = file_manifest[filename]
+                                # Add enriched metadata for Discord notification
+                                finding['SourceMetadata'] = {
+                                    'url': manifest_entry.get('url', ''),
+                                    'file': filename,
+                                    'line': source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0)
+                                }
+                        
+                        # Track ALL findings for export (verified + unverified)
                         self.all_secrets.append(finding)
                         
-                        # Add to state manager
-                        self.state.add_secret(finding)
-                        
-                        # Send to Discord
-                        if self.notifier:
-                            # Extract file info for Discord notification
-                            source_metadata = finding.get('SourceMetadata', {})
-                            file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', 'unknown')
-                            await self.notifier.queue_batch_alert([finding], file_path)
+                        # Only process VERIFIED secrets for state and notifications
+                        if self._is_verified(finding):
+                            verified_findings.append(finding)
+                            self.state.add_secret(finding)
+                            
+                            # Send to Discord
+                            if self.notifier:
+                                # Extract file info for Discord notification
+                                source_metadata = finding.get('SourceMetadata', {})
+                                file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', 'unknown')
+                                await self.notifier.queue_batch_alert([finding], file_path)
                         
                     except json.JSONDecodeError:
                         continue
             
-            self.logger.info(f"Found {len(findings)} secrets in directory")
+            self.logger.info(f"TruffleHog scan complete: {len(verified_findings)} verified secrets, {len(self.all_secrets)} total findings")
             
         except Exception as e:
             self.logger.error(f"Directory scan failed: {e}")
         
-        return findings
+        return verified_findings
     
     async def scan_content(self, content: str, source_url: str) -> int:
         """

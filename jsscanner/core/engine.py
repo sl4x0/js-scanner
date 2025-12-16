@@ -121,65 +121,27 @@ class ScanEngine:
             await self._initialize_modules()
             
             # ============================================================
-            # PHASE 1: DISCOVERY & URL COLLECTION
+            # PHASE 1: DISCOVERY & URL COLLECTION (CONCURRENT)
             # ============================================================
             self.logger.info(f"\n{'='*60}")
-            self.logger.info("📡 PHASE 1: DISCOVERY & URL COLLECTION")
+            self.logger.info("📡 PHASE 1: DISCOVERY & URL COLLECTION (CONCURRENT)")
             self.logger.info(f"{'='*60}")
             
-            urls_to_scan = []
-            
+            # Extract domains for scope filtering
+            from urllib.parse import urlparse
             for item in inputs:
-                # Extract domain for scope filtering
-                from urllib.parse import urlparse
                 try:
-                    domain = urlparse(item if item.startswith('http') else f'https://{item}').netloc
+                    parsed = urlparse(item if item.startswith('http') else f'https://{item}')
+                    domain = parsed.netloc
                     if domain:
-                        self.allowed_domains.add(domain.lower().replace('www.', ''))
+                        # Keep port for localhost, remove www
+                        clean_domain = domain.lower().replace('www.', '')
+                        self.allowed_domains.add(clean_domain)
                 except:
                     pass
-                
-                # Check if shutdown was requested
-                if self.shutdown_requested:
-                    self.logger.warning("Shutdown requested, stopping input processing")
-                    break
-                
-                # CASE A: It's already a full JS URL (scan immediately)
-                if self._is_valid_js_url(item):
-                    self.logger.info(f"✓ Direct JS URL: {item}")
-                    urls_to_scan.append(item)
-                    continue
-                
-                # CASE B: It's a Domain/Page URL (needs JS extraction)
-                self.logger.info(f"📍 Processing input: {item}")
-                
-                # Always fetch LIVE JS from this page/domain (unless --no-live)
-                if not self.config.get('skip_live', False):
-                    live_js = await self.fetcher.fetch_live(item)
-                    self.logger.info(f"  ├─ Live scan: Found {len(live_js)} JS files")
-                    urls_to_scan.extend(live_js)
-                
-                # ONLY if Discovery Mode is ON, query Wayback
-                if discovery_mode and not self.config.get('skip_wayback', False):
-                    wb_js = await self.fetcher.fetch_wayback(item)
-                    self.logger.info(f"  └─ Wayback scan: Found {len(wb_js)} JS files")
-                    urls_to_scan.extend(wb_js)
-                elif discovery_mode:
-                    self.logger.info(f"  └─ Wayback scan: Skipped (--no-wayback flag)")
-                else:
-                    self.logger.info(f"  └─ Wayback scan: Skipped (discovery mode OFF)")
             
-            # Deduplicate URLs
-            urls_to_scan = self._deduplicate_urls(urls_to_scan)
-            
-            self.logger.info(f"{'='*60}")
-            self.logger.info(f"📊 Total unique files to process: {len(urls_to_scan)}")
-            self.logger.info(f"{'='*60}\n")
-            
-            # Store source URLs in metadata
-            self.state.update_metadata({
-                'source_urls': urls_to_scan[:100]  # Store first 100 to avoid bloat
-            })
+            # Process domains concurrently
+            urls_to_scan = await self._discover_all_domains_concurrent(inputs, discovery_mode)
             
             if not urls_to_scan:
                 self.logger.warning("No JavaScript files found to scan")
@@ -206,13 +168,26 @@ class ScanEngine:
             self.logger.info("🔍 PHASE 3: SCANNING FOR SECRETS (TruffleHog)")
             self.logger.info(f"{'='*60}")
             
-            # Scan entire minified directory at once
+            # Reset all_secrets before scanning (in case of multiple scan_directory calls)
+            self.secret_scanner.all_secrets = []
+            
+            # Scan BOTH minified AND unminified directories
+            # (files are saved to different directories based on minification detection)
             minified_dir = str(Path(self.paths['files_minified']))
-            secrets = await self.secret_scanner.scan_directory(minified_dir)
+            unminified_dir = str(Path(self.paths['files_unminified']))
+            
+            # Scan minified files
+            secrets_minified = await self.secret_scanner.scan_directory(minified_dir)
+            
+            # Scan unminified files
+            secrets_unminified = await self.secret_scanner.scan_directory(unminified_dir)
+            
+            # Combine results (secret_scanner tracks all in self.all_secrets)
+            secrets = secrets_minified + secrets_unminified
             self.stats['total_secrets'] = len(secrets)
             
-            # Export TruffleHog results to JSON
-            trufflehog_output = Path(self.paths['base']) / 'trufflehog.json'
+            # Export TruffleHog results to JSON (includes ALL findings - verified + unverified)
+            trufflehog_output = Path(self.paths['base']) / 'trufflehog_full.json'
             self.secret_scanner.export_results(str(trufflehog_output))
             
             if secrets:
@@ -360,6 +335,101 @@ class ScanEngine:
         
         await self.fetcher.initialize()
     
+    async def _discover_all_domains_concurrent(self, inputs: List[str], discovery_mode: bool) -> List[str]:
+        """
+        PHASE 1: Concurrent domain discovery with parallel Wayback and Live requests
+        
+        Args:
+            inputs: List of URLs or domains to scan
+            discovery_mode: If True, perform active discovery (Wayback + Live crawling)
+            
+        Returns:
+            List of discovered JavaScript URLs
+        """
+        all_urls = []
+        
+        # Configure concurrency level
+        max_concurrent_domains = self.config.get('max_concurrent_domains', 10)
+        semaphore = asyncio.Semaphore(max_concurrent_domains)
+        
+        self.logger.info(f"🚀 Processing {len(inputs)} domains with concurrency level: {max_concurrent_domains}")
+        
+        async def discover_one_domain(index: int, item: str) -> List[str]:
+            """Discover JS files for a single domain/URL"""
+            async with semaphore:
+                discovered = []
+                
+                try:
+                    # Check if shutdown was requested
+                    if self.shutdown_requested:
+                        self.logger.warning("Shutdown requested, stopping input processing")
+                        return []
+                    
+                    # CASE A: It's already a full JS URL (scan immediately)
+                    if self._is_valid_js_url(item):
+                        self.logger.info(f"[{index+1}/{len(inputs)}] ✓ Direct JS URL: {item}")
+                        return [item]
+                    
+                    # CASE B: It's a Domain/Page URL (needs JS extraction)
+                    self.logger.info(f"[{index+1}/{len(inputs)}] 📍 Processing: {item}")
+                    
+                    # Run live and wayback concurrently for this domain
+                    tasks = []
+                    
+                    # Always fetch LIVE JS from this page/domain (unless --no-live)
+                    if not self.config.get('skip_live', False):
+                        tasks.append(('live', self.fetcher.fetch_live(item)))
+                    
+                    # ONLY if Discovery Mode is ON, query Wayback
+                    if discovery_mode and not self.config.get('skip_wayback', False):
+                        tasks.append(('wayback', self.fetcher.fetch_wayback(item)))
+                    
+                    # Execute live and wayback concurrently
+                    if tasks:
+                        results = await asyncio.gather(*[task[1] for task in tasks], return_exceptions=True)
+                        
+                        for i, result in enumerate(results):
+                            source_type = tasks[i][0]
+                            if isinstance(result, Exception):
+                                self.logger.error(f"  ├─ {source_type.capitalize()} scan error: {result}")
+                            elif isinstance(result, list):
+                                discovered.extend(result)
+                                self.logger.info(f"  ├─ {source_type.capitalize()} scan: Found {len(result)} JS files")
+                            else:
+                                self.logger.warning(f"  ├─ {source_type.capitalize()} scan: Unexpected result type")
+                    
+                    self.logger.info(f"  └─ Total discovered for {item}: {len(discovered)} JS files")
+                    
+                except Exception as e:
+                    self.logger.error(f"[{index+1}/{len(inputs)}] Error processing {item}: {e}", exc_info=True)
+                
+                return discovered
+        
+        # Process all domains concurrently
+        tasks = [discover_one_domain(i, item) for i, item in enumerate(inputs)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Collect all URLs
+        for result in results:
+            if isinstance(result, list):
+                all_urls.extend(result)
+            elif isinstance(result, Exception):
+                self.logger.error(f"Task exception during discovery: {result}")
+        
+        # Deduplicate URLs
+        all_urls = self._deduplicate_urls(all_urls)
+        
+        self.logger.info(f"{'='*60}")
+        self.logger.info(f"📊 Total unique files to process: {len(all_urls)}")
+        self.logger.info(f"{'='*60}\n")
+        
+        # Store source URLs in metadata
+        self.state.update_metadata({
+            'source_urls': all_urls[:100]  # Store first 100 to avoid bloat
+        })
+        
+        return all_urls
+    
     async def _download_all_files(self, urls: List[str]) -> List[dict]:
         """
         PHASE 2: Download all files in parallel
@@ -377,22 +447,38 @@ class ScanEngine:
         """
         downloaded_files = []
         semaphore = asyncio.Semaphore(self.config.get('threads', 50))
+        total_urls = len(urls)
+        completed = 0
+        failed_breakdown = {
+            'invalid_url': 0,
+            'out_of_scope': 0,
+            'fetch_failed': 0,
+            'duplicate': 0
+        }
+        lock = asyncio.Lock()  # For thread-safe counter updates
         
         async def download_one(url: str) -> Optional[dict]:
+            nonlocal completed
             async with semaphore:
                 try:
                     # Validate URL
                     if not self._is_valid_js_url(url):
                         self.logger.debug(f"Invalid URL: {url}")
+                        async with lock:
+                            failed_breakdown['invalid_url'] += 1
                         return None
                     
                     if not self._is_target_domain(url):
                         self.logger.debug(f"Out of scope: {url}")
+                        async with lock:
+                            failed_breakdown['out_of_scope'] += 1
                         return None
                     
                     # Fetch content
                     content = await self.fetcher.fetch_content(url)
                     if not content:
+                        async with lock:
+                            failed_breakdown['fetch_failed'] += 1
                         return None
                     
                     # Calculate hash
@@ -403,6 +489,8 @@ class ScanEngine:
                     if not self.state.mark_as_scanned_if_new(file_hash, url):
                         self.logger.debug(f"Duplicate: {url}")
                         self.stats['failures']['duplicates'] += 1
+                        async with lock:
+                            failed_breakdown['duplicate'] += 1
                         return None
                     
                     # Generate filename
@@ -424,6 +512,13 @@ class ScanEngine:
                     self._save_file_manifest(url, file_hash, readable_name)
                     
                     self.stats['total_files'] += 1
+                    
+                    # Update progress
+                    async with lock:
+                        completed += 1
+                        if completed % 10 == 0 or completed == total_urls:
+                            success_count = len(downloaded_files) + 1  # +1 for current
+                            self.logger.info(f"🔄 Progress: {completed}/{total_urls} processed, {success_count} downloaded")
                     
                     return {
                         'url': url,
@@ -451,6 +546,14 @@ class ScanEngine:
                 downloaded_files.append(result)
             elif isinstance(result, Exception):
                 self.logger.error(f"Task exception: {result}")
+        
+        # Show clean summary
+        total_filtered = sum(failed_breakdown.values())
+        self.logger.info(f"\n{'='*60}")
+        self.logger.info(f"✅ Downloaded {len(downloaded_files)} files (filtered {total_filtered} invalid/duplicate)")
+        if self.config.get('verbose', False) and total_filtered > 0:
+            self.logger.info(f"  Breakdown: {failed_breakdown}")
+        self.logger.info(f"{'='*60}\n")
         
         return downloaded_files
     
@@ -790,15 +893,19 @@ class ScanEngine:
                 return False
             
             domain = urlparse(url).netloc.lower()
-            if ':' in domain:
-                domain = domain.split(':')[0]
             
-            # Remove www
+            # Remove www but keep port
             clean_domain = domain.replace('www.', '')
             
-            # Check if domain or parent domain is in allowed list
+            # Check if domain (with or without port) is in allowed list
             for allowed in self.allowed_domains:
-                if clean_domain == allowed or clean_domain.endswith('.' + allowed):
+                # Exact match (with port)
+                if clean_domain == allowed:
+                    return True
+                # Match without port
+                domain_no_port = clean_domain.split(':')[0] if ':' in clean_domain else clean_domain
+                allowed_no_port = allowed.split(':')[0] if ':' in allowed else allowed
+                if domain_no_port == allowed_no_port or domain_no_port.endswith('.' + allowed_no_port):
                     return True
             
             return False
@@ -927,8 +1034,11 @@ class ScanEngine:
             # Short hash (first 7 chars)
             short_hash = file_hash[:7]
             
+            # Clean domain: replace colon with dash (Windows compatibility)
+            clean_domain = domain.replace(':', '-')
+            
             # Build final name: domain-filename-hash.js
-            final_name = f"{domain}-{filename}-{short_hash}.js"
+            final_name = f"{clean_domain}-{filename}-{short_hash}.js"
             
             # Final cleanup
             final_name = final_name.replace('..', '.')
