@@ -347,13 +347,6 @@ class ScanEngine:
                         else:
                             self.stats['failures']['fetch_failed'] += 1
                         return
-                    else:
-                        # Track the specific failure reason from fetcher
-                        if hasattr(self.fetcher, 'last_failure_reason') and self.fetcher.last_failure_reason:
-                            self.stats['failures'][self.fetcher.last_failure_reason] += 1
-                        else:
-                            self.stats['failures']['fetch_failed'] += 1
-                        return
                 except asyncio.TimeoutError as e:
                     self.logger.warning(
                         f"⚠️  Attempt {attempt + 1}/{max_retries} timed out\n"
