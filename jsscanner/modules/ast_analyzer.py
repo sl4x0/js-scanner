@@ -5,7 +5,7 @@ Uses Tree-sitter to parse JavaScript and extract endpoints, parameters, and word
 import asyncio
 import re
 from tree_sitter import Parser
-from typing import List, Set
+from typing import List, Set, Dict, Any
 from pathlib import Path
 from ..utils.file_ops import FileOps
 
@@ -26,6 +26,7 @@ class ASTAnalyzer:
         self.logger = logger
         self.paths = paths
         self.min_word_length = config.get('ast', {}).get('min_word_length', 4)
+        self._tree_sitter_warning_logged = False  # Only warn once
         
         # Initialize Tree-sitter parser
         try:
@@ -68,7 +69,9 @@ class ASTAnalyzer:
             source_url: Source URL
         """
         if not self.parser:
-            self.logger.warning("Tree-sitter not available, using regex fallback")
+            if not self._tree_sitter_warning_logged:
+                self.logger.warning("Tree-sitter not available, using regex fallback for all files")
+                self._tree_sitter_warning_logged = True
             await self._analyze_with_regex(content, source_url)
             return
         
@@ -255,84 +258,144 @@ class ASTAnalyzer:
         traverse(node)
         return list(words)
     
-    async def _analyze_with_regex(self, content: str, source_url: str):
-        """Fallback analysis using regex when Tree-sitter is unavailable"""
-        extracts_path = Path(self.paths['extracts'])
+    def _extract_with_regex(self, code: str) -> Dict[str, Any]:
+        """Extract data using improved regex patterns"""
         
-        # Extract endpoints with enhanced patterns
+        # ENDPOINTS - Only real API endpoints
         endpoint_patterns = [
-            # API routes
-            r'["\']([/api/][^"\']*)["\']',
-            r'["\']([/v\d+/][^"\']*)["\']',
-            r'["\']([/graphql][^"\']*)["\']',
-            r'["\']([/rest/][^"\']*)["\']',
-            r'["\']([/ajax/][^"\']*)["\']',
-            # HTTP methods
-            r'(?:fetch|axios\.(?:get|post|put|delete|patch))\(["\']([^"\']*)["\']',
-            r'\$.(?:get|post|ajax)\(["\']([^"\']*)["\']',
-            # XMLHttpRequest
-            r'open\(["\'](?:GET|POST|PUT|DELETE|PATCH)["\'],\s*["\']([^"\']*)["\']',
-            # WebSocket
-            r'new\s+WebSocket\(["\']([^"\']*)["\']',
-            # GraphQL
-            r'gql`[^`]*query[^`]*`',
-            r'graphql\(["\']([^"\']*)["\']'
+            r'["\']/(api|v\d+|graphql|rest|endpoint)/[a-zA-Z0-9/_-]+["\']',  # API paths
+            r'["\']https?://[^"\']+?/(api|v\d+|graphql)[^"\']*["\']',  # Full API URLs
+            r'fetch\(["\']([^"\']+)["\']',  # fetch() calls
+            r'axios\.[a-z]+\(["\']([^"\']+)["\']',  # axios calls
+            r'\.get\(["\']([^"\']+)["\']',  # .get() calls
+            r'\.post\(["\']([^"\']+)["\']',  # .post() calls
         ]
         
         endpoints = set()
         for pattern in endpoint_patterns:
-            matches = re.findall(pattern, content, re.IGNORECASE)
+            matches = re.findall(pattern, code, re.IGNORECASE)
             for match in matches:
-                if isinstance(match, tuple):
-                    match = match[0] if match else ''
-                if match and (self._is_endpoint(match) or 'graphql' in match.lower() or 'ws' in match.lower()):
-                    endpoints.add(match)
+                endpoint = match[0] if isinstance(match, tuple) else match
+                # Filter out garbage
+                if (len(endpoint) > 5 and 
+                    len(endpoint) < 200 and
+                    not any(x in endpoint.lower() for x in ['graphql{', 'query ', 'mutation ', 'fragment ', '__typename'])):
+                    endpoints.add(endpoint.strip('"\''))
         
-        if endpoints:
-            await FileOps.append_unique_lines(
-                str(extracts_path / 'endpoints.txt'),
-                list(endpoints)
-            )
-        
-        # Extract parameters from common patterns
+        # PARAMETERS - Only URL parameters
         param_patterns = [
-            r'new\s+URLSearchParams\(\{([^}]+)\}\)',
-            r'FormData\.append\(["\']([^"\']*)["\']',
-            r'\?([a-zA-Z_][a-zA-Z0-9_]*)='
+            r'[?&]([a-zA-Z_][a-zA-Z0-9_]{0,30})=',  # URL params
+            r'params\s*:\s*\{[^}]*["\']([a-zA-Z_][a-zA-Z0-9_]{0,30})["\']',  # params object
+            r'searchParams\.append\(["\']([a-zA-Z_][a-zA-Z0-9_]{0,30})["\']',  # URLSearchParams
         ]
         
         params = set()
         for pattern in param_patterns:
-            matches = re.findall(pattern, content)
+            matches = re.findall(pattern, code)
             for match in matches:
-                # Extract parameter names
-                if ':' in match or ',' in match:
-                    # Object syntax
-                    for param in re.findall(r'([a-zA-Z_][a-zA-Z0-9_]*)\s*:', match):
-                        params.add(param)
-                else:
-                    params.add(match)
+                param = match[0] if isinstance(match, tuple) else match
+                # Filter: only valid parameter names
+                if (len(param) >= 1 and 
+                    len(param) <= 30 and
+                    (param.isalnum() or '_' in param)):
+                    params.add(param)
         
-        if params:
+        # DOMAINS - Only real domains
+        domain_patterns = [
+            r'https?://([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+[a-zA-Z]{2,}',  # Full URLs
+            r'//([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)+[a-zA-Z]{2,}',  # Protocol-relative
+        ]
+        
+        domains = set()
+        for pattern in domain_patterns:
+            matches = re.findall(pattern, code)
+            for match in matches:
+                domain = match[0] if isinstance(match, tuple) else match
+                domain = domain.rstrip('.')
+                # Filter: must be valid domain
+                if ('.' in domain and 
+                    len(domain) > 4 and 
+                    len(domain) < 100 and
+                    not any(x in domain.lower() for x in ['.js', '.css', '.svg', '.png', '.jpg', 'localhost', 'example.com'])):
+                    domains.add(domain)
+        
+        # LINKS - Only external resources
+        link_patterns = [
+            r'<script[^>]+src=["\']([^"\']+)["\']',
+            r'<link[^>]+href=["\']([^"\']+)["\']',
+            r'import\s+.*?from\s+["\']([^"\']+)["\']',
+        ]
+        
+        links = set()
+        for pattern in link_patterns:
+            matches = re.findall(pattern, code, re.IGNORECASE)
+            for match in matches:
+                link = match[0] if isinstance(match, tuple) else match
+                if link.startswith(('http://', 'https://', '//')):
+                    links.add(link)
+        
+        # COMMENTS - Extract for context (but limit)
+        comments = []
+        comment_patterns = [
+            r'//\s*TODO:?\s*(.+)',
+            r'//\s*FIXME:?\s*(.+)',
+            r'//\s*API:?\s*(.+)',
+            r'/\*\s*TODO:?\s*(.+?)\*/',
+        ]
+        
+        for pattern in comment_patterns:
+            matches = re.findall(pattern, code, re.DOTALL)
+            comments.extend([m.strip()[:200] for m in matches[:10]])  # Max 10 comments, 200 chars each
+        
+        return {
+            'endpoints': sorted(list(endpoints))[:100],  # Max 100
+            'params': sorted(list(params))[:100],  # Max 100
+            'domains': sorted(list(domains))[:50],  # Max 50
+            'links': sorted(list(links))[:50],  # Max 50
+            'comments': comments[:10],  # Max 10
+            'wordlist': []  # Disabled - usually useless
+        }
+    
+    async def _analyze_with_regex(self, content: str, source_url: str):
+        """Fallback analysis using regex when Tree-sitter is unavailable"""
+        extracts_path = Path(self.paths['extracts'])
+        
+        # Use improved extraction
+        extracted = self._extract_with_regex(content)
+        
+        # Save endpoints
+        if extracted['endpoints']:
+            await FileOps.append_unique_lines(
+                str(extracts_path / 'endpoints.txt'),
+                extracted['endpoints']
+            )
+        
+        # Save parameters
+        if extracted['params']:
             await FileOps.append_unique_lines(
                 str(extracts_path / 'params.txt'),
-                list(params)
+                extracted['params']
             )
         
-        # Extract links
-        links = await self._extract_links(content)
-        if links:
+        # Save links
+        if extracted['links']:
             await FileOps.append_unique_lines(
                 str(extracts_path / 'links.txt'),
-                links
+                extracted['links']
             )
         
-        # Extract domains
-        domains = await self._extract_domains(content)
-        if domains:
+        # Save domains
+        if extracted['domains']:
             await FileOps.append_unique_lines(
                 str(extracts_path / 'domains.txt'),
-                domains
+                extracted['domains']
+            )
+        
+        # Save comments if any
+        if extracted['comments']:
+            await FileOps.append_unique_lines(
+                str(extracts_path / 'comments.txt'),
+                extracted['comments']
             )
     
     @staticmethod

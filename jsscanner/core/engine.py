@@ -261,16 +261,22 @@ class ScanEngine:
             # Log and send final stats
             log_stats(self.logger, self.stats)
             
-            # Log detailed failure breakdown
-            total_failures = sum(self.stats['failures'].values())
-            if total_failures > 0:
+            # Log detailed failure breakdown (exclude duplicates)
+            actual_failures = {k: v for k, v in self.stats['failures'].items() if k != 'duplicates'}
+            total_actual_failures = sum(actual_failures.values())
+            
+            if total_actual_failures > 0:
                 self.logger.info(f"\n{'='*80}")
-                self.logger.info(f"📊 Failure Breakdown ({total_failures} total):")
+                self.logger.info(f"📊 Failure Breakdown ({total_actual_failures} total):")
                 self.logger.info(f"{'='*80}")
-                for failure_type, count in self.stats['failures'].items():
+                for failure_type, count in sorted(actual_failures.items(), key=lambda x: x[1], reverse=True):
                     if count > 0:
                         self.logger.info(f"  {failure_type}: {count}")
                 self.logger.info(f"{'='*80}\n")
+            
+            # Log duplicates separately as info, not failure
+            if self.stats['failures'].get('duplicates', 0) > 0:
+                self.logger.info(f"ℹ️  Skipped {self.stats['failures']['duplicates']} duplicate files")
             
             # Log error summary if there were errors
             if self.stats.get('errors'):
@@ -416,7 +422,9 @@ class ScanEngine:
                     }
                 
                 except Exception as e:
-                    self.logger.error(f"Download failed {url}: {e}")
+                    # Only log specific error types, not every download failure
+                    if 'timeout' in str(e).lower() or 'connection' in str(e).lower():
+                        self.logger.debug(f"Network error for {url}: {str(e)}")
                     return None
         
         # Download all files in parallel
@@ -465,6 +473,8 @@ class ScanEngine:
         Args:
             files: List of file info dictionaries from _download_all_files()
         """
+        timeout_count = 0  # Track timeouts
+        max_timeout_logs = 3  # Only log first 3 timeouts
         semaphore = asyncio.Semaphore(self.config.get('threads', 50))
         
         async def unminify_one(file_info: dict):
@@ -482,6 +492,13 @@ class ScanEngine:
                     with open(unminified_path, 'w', encoding='utf-8') as f:
                         f.write(processed)
                     
+                except asyncio.TimeoutError:
+                    nonlocal timeout_count
+                    timeout_count += 1
+                    if timeout_count <= max_timeout_logs:
+                        self.logger.warning(f"Beautification timed out after 30s, using original content")
+                    elif timeout_count == max_timeout_logs + 1:
+                        self.logger.warning(f"... suppressing further timeout warnings ...")
                 except Exception as e:
                     self.logger.error(f"Unminify failed {file_info['url']}: {e}")
         
@@ -489,6 +506,9 @@ class ScanEngine:
         await asyncio.gather(*tasks, return_exceptions=True)
         
         self.logger.info(f"✅ Beautified {len(files)} files")
+        
+        if timeout_count > 0:
+            self.logger.info(f"ℹ️  {timeout_count} files timed out during beautification (using original)")
     
     async def _cleanup_minified_files(self):
         """
