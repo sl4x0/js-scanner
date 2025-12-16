@@ -39,29 +39,53 @@ class ASTAnalyzer:
         # Initialize Tree-sitter parser
         try:
             import tree_sitter_javascript as tsjavascript
-            from tree_sitter import Parser
             import tree_sitter
+            from tree_sitter import Parser
             
             # Get the language
-            language = tsjavascript.language()
+            JS_LANGUAGE = tsjavascript.language()
             
-            # Issue #12: Robust version detection with API fallback
+            # Try to get version for logging
             try:
-                ts_version = tuple(map(int, tree_sitter.__version__.split('.')[:2]))
                 version_str = tree_sitter.__version__
             except AttributeError:
-                ts_version = None
                 version_str = "unknown"
             
-            # Try new API first (v0.22+) - language passed to Parser constructor
-            try:
-                self.parser = Parser(language)
-                self.logger.info(f"Tree-sitter parser initialized (v{version_str}, new API)")
-            except TypeError:
-                # Fall back to old API (v0.20-0.21) - set_language method
-                self.parser = Parser()
-                self.parser.set_language(language)
-                self.logger.info(f"Tree-sitter parser initialized (v{version_str}, old API)")
+            # Try different API patterns (version-agnostic approach)
+            parser_initialized = False
+            
+            # Method 1: Try Parser() with language capsule directly (v0.23+)
+            if not parser_initialized:
+                try:
+                    self.parser = Parser(JS_LANGUAGE)
+                    self.logger.info(f"✓ Tree-sitter initialized (v{version_str}, direct capsule API)")
+                    parser_initialized = True
+                except (TypeError, AttributeError):
+                    pass
+            
+            # Method 2: Try old set_language API (v0.20-0.22)
+            if not parser_initialized:
+                try:
+                    self.parser = Parser()
+                    self.parser.set_language(JS_LANGUAGE)
+                    self.logger.info(f"✓ Tree-sitter initialized (v{version_str}, set_language API)")
+                    parser_initialized = True
+                except (TypeError, AttributeError):
+                    pass
+            
+            # Method 3: Try Language wrapper (some v0.22 variants)
+            if not parser_initialized:
+                try:
+                    from tree_sitter import Language
+                    wrapped_language = Language(JS_LANGUAGE)
+                    self.parser = Parser(wrapped_language)
+                    self.logger.info(f"✓ Tree-sitter initialized (v{version_str}, Language wrapper API)")
+                    parser_initialized = True
+                except (TypeError, AttributeError, ImportError):
+                    pass
+            
+            if not parser_initialized:
+                raise RuntimeError("Could not initialize parser with any known API pattern")
                 
         except Exception as e:
             self.logger.warning(f"Failed to initialize Tree-sitter: {e}")
