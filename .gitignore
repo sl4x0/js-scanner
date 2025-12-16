@@ -12,7 +12,8 @@ pip-log.txt
 pip-delete-this-directory.txt
 .pytest_cache/
 
-# Development & Testing (Windows development environment)
+# AI Development & Testing (hidden from main view)
+.ai/
 test/
 dev-test/
 test_*/

@@ -1,2 +1,0 @@
-https://httpbin.org
-https://jsonplaceholder.typicode.com
