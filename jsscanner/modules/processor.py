@@ -114,7 +114,7 @@ class Processor:
             )
             return beautified
         except asyncio.TimeoutError:
-            self.logger.warning(f"Beautification timed out after {timeout}s ({content_size_mb:.1f}MB file), using original content")
+            self.logger.debug(f"Beautification timed out after {timeout}s ({content_size_mb:.1f}MB file), using original content")
             return content
         except (ValueError, TypeError) as e:
             self.logger.warning(f"Failed to beautify (invalid content): {e}")

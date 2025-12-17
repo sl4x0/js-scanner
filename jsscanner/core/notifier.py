@@ -197,7 +197,7 @@ class DiscordNotifier:
                         print(f"Discord webhook error: {response.status}")
         except Exception as e:
             if self.logger:
-                self.logger.error(f"❌ Discord notification error: {e}")
+                self.logger.error(f"❌ Discord notification error: {type(e).__name__}: {str(e)}")
             else:
                 print(f"Failed to send Discord notification: {e}")
     
