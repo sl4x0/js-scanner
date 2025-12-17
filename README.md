@@ -1,4 +1,4 @@
-![!banner](./static/banner.png)
+![banner](./static/banner.png)
 
 # JS Scanner v3.0
 
