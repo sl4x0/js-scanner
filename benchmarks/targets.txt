@@ -1,7 +1,0 @@
-# Benchmark Targets
-# Add one domain per line (no trailing slashes)
-
-# Example targets (replace with real targets)
-https://example.com
-https://test.example.org
-https://demo.example.net
