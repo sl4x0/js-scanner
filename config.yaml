@@ -21,21 +21,21 @@ trufflehog_timeout: 300 # seconds per file
 trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 
 # Fetching
-threads: 100 # Recommended: 50 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
-timeout: 10 # seconds
+threads: 50 # Reduced to avoid rate limiting (was 100)
+timeout: 60 # seconds (increased for slow servers)
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
 verify_ssl: false # Set to false to bypass SSL certificate verification errors
 
 # Issue #8: Configurable timeouts
 timeouts:
-  http_request: 10
-  playwright_page: 60000
-  trufflehog: 300
+  http_request: 60 # for asyncio HTTP requests (seconds)
+  playwright_page: 60000 # ms
+  trufflehog: 300 # seconds per file
 
 # Playwright
 playwright:
-  headless: true
+  headless: true # Run browser in headless mode
   max_concurrent: 10 # Max concurrent browser instances
   restart_after: 100 # Restart browser after N pages
   page_timeout: 60000 # ms (increased to 60s for sites with anti-bot protection)
