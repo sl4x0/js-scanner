@@ -1,13 +1,16 @@
 """
 State Manager
 Handles JSON file operations with file locking for thread-safe access
+Implements incremental scanning with hash-based change detection
 """
 import json
 import os
 import sys
 import time
-from typing import List, Dict, Any
+import hashlib
+from typing import List, Dict, Any, Optional
 from pathlib import Path
+from datetime import datetime
 import io
 
 # Platform-specific file locking
@@ -31,6 +34,10 @@ class StateManager:
         self.history_file = self.target_path / 'history.json'
         self.secrets_file = self.target_path / 'secrets.json'
         self.metadata_file = self.target_path / 'metadata.json'
+        self.state_file = self.target_path / 'state.json'
+        
+        # In-memory state cache for incremental scanning
+        self.state = self._load_state()
     
     def _lock_file(self, file_obj, exclusive=True):
         """
@@ -263,3 +270,123 @@ class StateManager:
         """
         from datetime import datetime
         return datetime.utcnow().isoformat() + 'Z'
+    
+    def _load_state(self) -> Dict:
+        """Load state file for incremental scanning"""
+        try:
+            if self.state_file.exists():
+                with open(self.state_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        
+        # Return default state structure
+        return {
+            'version': '1.0',
+            'files': {},
+            'stats': {
+                'total_scans': 0,
+                'total_files_ever': 0,
+                'endpoints_found': 0,
+                'secrets_found': 0
+            },
+            'last_scan': None
+        }
+    
+    def _save_state(self) -> None:
+        """Save state to disk"""
+        try:
+            with open(self.state_file, 'w', encoding='utf-8') as f:
+                json.dump(self.state, f, indent=2)
+        except Exception as e:
+            # Non-critical - don't fail scan if state save fails
+            pass
+    
+    def should_rescan_file(self, url: str, new_hash: str, force: bool = False) -> bool:
+        """
+        Determine if file needs rescanning based on hash comparison
+        
+        Args:
+            url: File URL
+            new_hash: Current hash of file
+            force: If True, always rescan
+            
+        Returns:
+            True if file should be scanned, False to skip
+        """
+        if force:
+            return True
+        
+        file_state = self.state.get('files', {}).get(url)
+        
+        if not file_state:
+            # Never scanned before
+            return True
+        
+        old_hash = file_state.get('hash')
+        if old_hash != new_hash:
+            # Content changed
+            return True
+        
+        # Optional: Force rescan after 30 days
+        try:
+            last_scan_str = file_state.get('last_scanned')
+            if last_scan_str:
+                last_scan = datetime.fromisoformat(last_scan_str.replace('Z', '+00:00'))
+                days_old = (datetime.now(last_scan.tzinfo) - last_scan).days
+                
+                if days_old > 30:
+                    return True
+        except Exception:
+            pass
+        
+        return False
+    
+    def mark_file_scanned(self, url: str, file_hash: str, metadata: Optional[Dict] = None) -> None:
+        """
+        Record that file was scanned with its hash and metadata
+        
+        Args:
+            url: File URL
+            file_hash: Content hash
+            metadata: Optional metadata (status, size, findings, etc.)
+        """
+        if 'files' not in self.state:
+            self.state['files'] = {}
+        
+        if metadata is None:
+            metadata = {}
+        
+        self.state['files'][url] = {
+            'hash': file_hash,
+            'last_scanned': self._get_timestamp(),
+            'status': metadata.get('status', 200),
+            'size': metadata.get('size', 0),
+            'endpoints_found': metadata.get('endpoints', 0),
+            'secrets_found': metadata.get('secrets', 0),
+            'extracted': metadata.get('extracted', False)
+        }
+        
+        # Update global stats
+        self.state['stats']['total_files_ever'] = len(self.state['files'])
+        self.state['last_scan'] = self._get_timestamp()
+        
+        # Save state periodically (every 10 files)
+        if len(self.state['files']) % 10 == 0:
+            self._save_state()
+    
+    def finalize_scan(self) -> None:
+        """Save final state after scan completes"""
+        self.state['stats']['total_scans'] += 1
+        self._save_state()
+    
+    def get_scan_stats(self) -> Dict:
+        """Get incremental scanning statistics"""
+        total_files = len(self.state.get('files', {}))
+        return {
+            'total_files_tracked': total_files,
+            'total_scans': self.state.get('stats', {}).get('total_scans', 0),
+            'last_scan': self.state.get('last_scan'),
+            'endpoints_found': self.state.get('stats', {}).get('endpoints_found', 0),
+            'secrets_found': self.state.get('stats', {}).get('secrets_found', 0)
+        }

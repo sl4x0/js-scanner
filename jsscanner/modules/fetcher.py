@@ -9,6 +9,7 @@ from playwright.async_api import async_playwright, Browser, BrowserContext
 from typing import List, Optional
 from urllib.parse import urljoin, urlparse
 import re
+from .noise_filter import NoiseFilter
 
 
 class BrowserManager:
@@ -130,6 +131,9 @@ class Fetcher:
         self.last_failure_reason = None  # Track last fetch failure reason
         self.verbose = config.get('verbose', False)  # Verbose mode flag
         
+        # Initialize noise filter
+        self.noise_filter = NoiseFilter(logger=logger)
+        
         # Playwright settings
         self.max_concurrent = config.get('playwright', {}).get('max_concurrent', 3)
         self.restart_after = config.get('playwright', {}).get('restart_after', 100)
@@ -209,8 +213,80 @@ class Fetcher:
             self.logger.info("Playwright browser manager initialized")
         else:
             self.logger.info("Playwright initialization skipped (--no-live flag)")
-    
-    async def cleanup(self) -> None:
+        async def _smart_interactions(self, page) -> None:
+        """
+        Trigger lazy loaders through smart interactions (conservative approach)
+        Implements scroll, hover, and tab switching without risky clicks
+        
+        Args:
+            page: Playwright page object
+        """
+        try:
+            # 1. Progressive scroll to trigger infinite scroll and lazy images
+            self.logger.debug("🖱️  Progressive scrolling to trigger lazy content...")
+            await page.evaluate("""
+                async () => {
+                    const distance = 100;
+                    const delay = 100;
+                    const maxScroll = document.body.scrollHeight;
+                    
+                    for (let i = 0; i < maxScroll; i += distance) {
+                        window.scrollTo(0, i);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                    window.scrollTo(0, 0); // Back to top
+                }
+            """)
+            
+            # 2. Hover on interactive elements (triggers tooltips, dropdowns, popovers)
+            self.logger.debug("🖱️  Hovering on interactive elements...")
+            await page.evaluate("""
+                () => {
+                    const selectors = [
+                        '[data-tooltip]',
+                        '[data-popover]',
+                        '[aria-haspopup]',
+                        '.dropdown-toggle',
+                        '[role=\"button\"]',
+                        '[data-toggle]',
+                        '.has-dropdown'
+                    ];
+                    
+                    selectors.forEach(selector => {
+                        try {
+                            document.querySelectorAll(selector).forEach(el => {
+                                el.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true}));
+                                el.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+                            });
+                        } catch(e) {
+                            // Ignore errors on individual elements
+                        }
+                    });
+                }
+            """)
+            
+            # 3. Trigger tab switches (for tabbed interfaces)
+            self.logger.debug("🖱️  Activating tabs...")
+            await page.evaluate("""
+                () => {
+                    document.querySelectorAll('[role=\"tab\"]').forEach((tab, i) => {
+                        try {
+                            setTimeout(() => {
+                                tab.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                            }, i * 100);
+                        } catch(e) {
+                            // Ignore errors
+                        }
+                    });
+                }
+            """)
+            
+            # 4. Wait for any lazy-loaded scripts to download
+            await asyncio.sleep(3)
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️  Interaction triggers failed: {e}")
+        async def cleanup(self) -> None:
         """
         Cleanup Playwright resources
         
@@ -305,6 +381,7 @@ class Fetcher:
             target = f'https://{target}'
         
         js_urls = set()
+        lazy_loaded_urls = set()  # Track dynamically loaded JS
         context = None
         page = None
         
@@ -326,6 +403,8 @@ class Fetcher:
             page.set_default_timeout(60000)  # ✅ 60 seconds instead of 30
             
             # Track all JS requests (with strict domain filtering)
+            request_start_time = time.time()
+            
             async def handle_request(request):
                 url = request.url
                 resource_type = request.resource_type
@@ -343,16 +422,28 @@ class Fetcher:
                     self.logger.debug(f"Skipping malformed URL: {url[:100]}")
                     return
                 
+                # Track timing for lazy-load detection
+                request_time = time.time() - request_start_time
+                
                 # Detect JS files by resource type OR file extension
                 if resource_type == 'script':
                     js_urls.add(url)
-                    self.logger.info(f"✓ Found JS: {url}")
+                    # Mark as lazy-loaded if loaded after 2 seconds
+                    if request_time > 2.0:
+                        lazy_loaded_urls.add(url)
+                        self.logger.info(f"🎯 Lazy-loaded: {url}")
+                    else:
+                        self.logger.info(f"✓ Found JS: {url}")
                 elif '.js' in url.lower():
                     # Fallback: check if URL contains .js
                     parsed = urlparse(url)
                     if parsed.path.endswith('.js') or parsed.path.endswith('.mjs') or '.js?' in url.lower():
                         js_urls.add(url)
-                        self.logger.info(f"✓ Found JS: {url}")
+                        if request_time > 2.0:
+                            lazy_loaded_urls.add(url)
+                            self.logger.info(f"🎯 Lazy-loaded: {url}")
+                        else:
+                            self.logger.info(f"✓ Found JS: {url}")
             
             page.on('request', handle_request)
             
@@ -362,10 +453,9 @@ class Fetcher:
                 await page.goto(target, wait_until='domcontentloaded', timeout=30000)
                 self.logger.info(f"Page loaded, waiting for dynamic content...")
             except Exception as e:
-                # Even if navigation times out, we may have discovered JS files via request handler
-                if 'Timeout' in str(e) or 'timeout' in str(e).lower():
-                    self.logger.warning(f"⚠️  Navigation timeout, but may have discovered JS files: {len(js_urls)} found")
-                    # Return discovered files even if page didn't fully load
+              NEW: Smart interactions to trigger lazy-loaded components
+            self.logger.info(f"🖱️  Triggering interactions for lazy-loaded content...")
+            await self._smart_interactions(pageovered files even if page didn't fully load
                     if js_urls:
                         self.logger.info(f"🎯 Returning {len(js_urls)} JS files discovered before timeout")
                         return list(js_urls)
@@ -431,6 +521,9 @@ class Fetcher:
         
         self.logger.info(f"🎯 Live scan complete: Found {len(js_urls)} JavaScript files")
         
+        if lazy_loaded_urls:
+            self.logger.info(f"   ├─ Initial load: {len(js_urls) - len(lazy_loaded_urls)} files")
+            self.logger.info(f"   └─ Lazy-loaded: {len(lazy_loaded_urls)} files")
         return js_urls
     
     async def fetch_content(self, url: str, retry_count: int = 0) -> Optional[str]:
@@ -448,6 +541,13 @@ class Fetcher:
         Note:
             Sets self.last_failure_reason to track why fetch failed
         """
+        # Check noise filter early (before downloading)
+        should_skip, reason = self.noise_filter.should_skip_url(url)
+        if should_skip:
+            self.logger.debug(f"⏭️  Filtered (noise): {url} - {reason}")
+            self.last_failure_reason = 'filtered_noise'
+            return None
+        
         self.last_failure_reason = None
         max_size = self.config.get('max_file_size', 10485760)  # 10MB default
         max_retries = 3
@@ -504,6 +604,13 @@ class Fetcher:
                             chunks.append(chunk)
                         
                         content = b''.join(chunks).decode('utf-8', errors='ignore')
+                        
+                        # Check content hash for known vendor libraries
+                        should_skip, reason = self.noise_filter.should_skip_content(content, url)
+                        if should_skip:
+                            self.logger.debug(f"⏭️  Filtered (known lib): {url} - {reason}")
+                            self.last_failure_reason = 'filtered_known_library'
+                            return None
                         
                         # Detect soft 404s - HTML error pages with 200 status
                         content_start = content.strip()[:500].lower()

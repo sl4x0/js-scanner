@@ -122,6 +122,12 @@ Performance Tips:
     )
     
     parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Force rescan all files (ignore incremental scan state/cache)'
+    )
+    
+    parser.add_argument(
         '--threads',
         type=int,
         help='Number of concurrent threads (overrides config)'

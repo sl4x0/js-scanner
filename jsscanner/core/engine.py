@@ -248,6 +248,22 @@ class ScanEngine:
             # Log and send final stats
             log_stats(self.logger, self.stats)
             
+            # NEW: Report noise filtering statistics
+            if hasattr(self.fetcher, 'noise_filter'):
+                noise_stats = self.fetcher.noise_filter.get_stats()
+                if noise_stats['total_checked'] > 0:
+                    self.logger.info(f"\n{'='*80}")
+                    self.logger.info(f"📊 Noise Filtering Statistics:")
+                    self.logger.info(f"{'='*80}")
+                    self.logger.info(f"  • Total URLs checked: {noise_stats['total_checked']}")
+                    self.logger.info(f"  • Filtered (CDN): {noise_stats['filtered_cdn']}")
+                    self.logger.info(f"  • Filtered (Pattern): {noise_stats['filtered_pattern']}")
+                    self.logger.info(f"  • Filtered (Known libs): {noise_stats['filtered_hash']}")
+                    self.logger.info(f"  • Total filtered: {noise_stats['total_filtered']}")
+                    self.logger.info(f"  • Filter rate: {noise_stats['filter_rate']}")
+                    self.logger.info(f"  • Passed through: {noise_stats['passed']}")
+                    self.logger.info(f"{'='*80}\n")
+            
             # Log detailed failure breakdown (exclude duplicates)
             actual_failures = {k: v for k, v in self.stats['failures'].items() if k != 'duplicates'}
             total_actual_failures = sum(actual_failures.values())
@@ -302,6 +318,9 @@ class ScanEngine:
                 json.dump(results_json, f, indent=2)
             
             self.logger.info(f"📄 Results exported to: {json_output}")
+            
+            # Finalize state for incremental scanning
+            self.state.finalize_scan()
             
             # Only send completion status if enabled
             if self.config.get('discord_status_enabled', False):

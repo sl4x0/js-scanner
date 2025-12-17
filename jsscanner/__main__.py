@@ -98,6 +98,9 @@ async def main():
     if args.no_beautify:
         config['skip_beautification'] = True
     
+    if args.force:
+        config['force_rescan'] = True
+    
     # Add verbose flag to config
     if hasattr(args, 'verbose') and args.verbose:
         config['verbose'] = True
