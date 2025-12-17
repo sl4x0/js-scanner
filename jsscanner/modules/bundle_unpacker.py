@@ -101,10 +101,24 @@ class BundleUnpacker:
             
             # Create output directory (clean if exists)
             output_path = Path(output_dir)
+            
+            # Force cleanup of existing directory
             if output_path.exists():
-                # Directory exists, clean it to avoid webcrack conflicts
-                shutil.rmtree(output_path, ignore_errors=True)
-                await asyncio.sleep(0.1)  # Brief wait for filesystem
+                self.logger.debug(f"Cleaning existing directory: {output_path}")
+                try:
+                    shutil.rmtree(output_path, ignore_errors=False)
+                    # Wait for filesystem to sync
+                    await asyncio.sleep(0.2)
+                except Exception as e:
+                    self.logger.warning(f"Could not clean directory: {e}")
+                    # Try harder - rename and delete
+                    temp_name = output_path.with_suffix('.old')
+                    if temp_name.exists():
+                        shutil.rmtree(temp_name, ignore_errors=True)
+                    output_path.rename(temp_name)
+                    shutil.rmtree(temp_name, ignore_errors=True)
+                    await asyncio.sleep(0.2)
+            
             output_path.mkdir(parents=True, exist_ok=True)
             
             # Run webcrack
@@ -146,8 +160,19 @@ class BundleUnpacker:
                     'file_count': len(extracted_files)
                 }
             else:
-                error_msg = stderr.decode() if stderr else "Unknown error"
-                self.logger.warning(f"⚠️  webcrack failed: {error_msg}")
+                error_msg = stderr.decode().strip() if stderr else "Unknown error"
+                # Parse common webcrack errors
+                if "already exists" in error_msg.lower():
+                    self.logger.warning(
+                        f"⚠️  webcrack failed: Output directory conflict\n"
+                        f"   Directory: {output_path}\n"
+                        f"   Attempting to clean and retry..."
+                    )
+                    # Force cleanup and don't retry (will fallback to beautification)
+                    if output_path.exists():
+                        shutil.rmtree(output_path, ignore_errors=True)
+                else:
+                    self.logger.warning(f"⚠️  webcrack failed: {error_msg}")
                 return None
                 
         except asyncio.TimeoutError:
