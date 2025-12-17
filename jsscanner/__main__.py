@@ -92,9 +92,6 @@ async def main():
     if args.threads:
         config['threads'] = args.threads
     
-    if args.no_recursion:
-        config.setdefault('recursion', {})['enabled'] = False
-    
     if args.no_beautify:
         config['skip_beautification'] = True
     
