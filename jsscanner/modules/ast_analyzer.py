@@ -289,12 +289,98 @@ class ASTAnalyzer:
         
         return tree
     
+    def _get_string_value(self, node, content: str) -> str:
+        """
+        Get the string value from a node, or return 'EXPR' if it's a dynamic expression
+        
+        Args:
+            node: AST node
+            content: Source code content
+            
+        Returns:
+            String value or 'EXPR' for dynamic expressions
+        """
+        if node is None:
+            return 'EXPR'
+        
+        # String literals
+        if node.type == 'string':
+            return content[node.start_byte:node.end_byte].strip('"\'')
+        
+        # Template strings - replace ${...} with EXPR
+        if node.type == 'template_string':
+            text = content[node.start_byte:node.end_byte].strip('`')
+            # Replace template expressions
+            return re.sub(r'\$\{[^}]+\}', 'EXPR', text)
+        
+        # Identifiers, function calls, etc. = dynamic
+        return 'EXPR'
+    
+    def _reconstruct_concatenated_strings(self, node, content: str) -> str:
+        """
+        Reconstruct string concatenations like:
+        "/api/" + version + "/users" → "/api/EXPR/users"
+        
+        Args:
+            node: Binary expression node
+            content: Source code content
+            
+        Returns:
+            Reconstructed string or None if not a concatenation
+        """
+        if node.type != 'binary_expression':
+            return None
+        
+        operator_node = node.child_by_field_name('operator')
+        if operator_node is None:
+            return None
+        
+        operator = content[operator_node.start_byte:operator_node.end_byte]
+        
+        # Only handle + operator (string concatenation)
+        if operator != '+':
+            return None
+        
+        left_node = node.child_by_field_name('left')
+        right_node = node.child_by_field_name('right')
+        
+        # Recursively handle nested concatenations
+        if left_node and left_node.type == 'binary_expression':
+            left = self._reconstruct_concatenated_strings(left_node, content)
+        else:
+            left = self._get_string_value(left_node, content)
+        
+        if right_node and right_node.type == 'binary_expression':
+            right = self._reconstruct_concatenated_strings(right_node, content)
+        else:
+            right = self._get_string_value(right_node, content)
+        
+        if left is None or right is None:
+            return None
+        
+        # Combine the parts
+        result = left + right
+        
+        # Only return if it looks like an endpoint or URL
+        if result.startswith('/') or result.startswith('http') or 'api' in result.lower():
+            return result
+        
+        return None
+    
     def _extract_endpoints_sync(self, node, content: str) -> List[str]:
         """Extracts API endpoints from AST (synchronous for executor)"""
         endpoints = set()
         
         # Look for string literals that look like endpoints
         def traverse(n):
+            # NEW: Check for string concatenations (Priority 1 feature)
+            if n.type == 'binary_expression':
+                concatenated = self._reconstruct_concatenated_strings(n, content)
+                if concatenated and self._is_endpoint(concatenated):
+                    # Validate with relaxed rules for EXPR placeholders
+                    if self._is_valid_concatenated_endpoint(concatenated):
+                        endpoints.add(concatenated)
+            
             if n.type == 'string':
                 text = content[n.start_byte:n.end_byte].strip('"\'')
                 if self._is_endpoint(text) and self._is_valid_endpoint(text):
@@ -315,7 +401,9 @@ class ASTAnalyzer:
                     # Remove template expressions for pattern matching
                     cleaned = re.sub(r'\$\{[^}]+\}', '', text)
                     if (self._is_endpoint(cleaned) or 'api' in cleaned.lower()) and self._is_valid_endpoint(cleaned):
-                        endpoints.add(text)
+                        # Keep template expression markers
+                        templated = re.sub(r'\$\{[^}]+\}', 'EXPR', text)
+                        endpoints.add(templated)
             
             for child in n.children:
                 traverse(child)
@@ -329,16 +417,131 @@ class ASTAnalyzer:
         
         # Look for object properties and query parameters
         def traverse(n):
+            # Existing: Object properties
             if n.type == 'property_identifier' or n.type == 'shorthand_property_identifier':
                 text = content[n.start_byte:n.end_byte]
-                if text and len(text) > 1:
+                if text and len(text) > 1 and self._is_valid_param(text):
                     params.add(text)
+            
+            # NEW Phase 2a: JSON object keys
+            if n.type == 'pair':
+                key_node = n.child_by_field_name('key')
+                if key_node:
+                    if key_node.type == 'property_identifier':
+                        key = content[key_node.start_byte:key_node.end_byte]
+                    elif key_node.type == 'string':
+                        key = content[key_node.start_byte:key_node.end_byte].strip('"\'')
+                    else:
+                        key = content[key_node.start_byte:key_node.end_byte]
+                    
+                    if key and self._is_valid_param(key):
+                        params.add(key)
+            
+            # NEW Phase 2b: Variable declarations (var, let, const)
+            if n.type in ('variable_declarator', 'lexical_declaration'):
+                for child in n.children:
+                    if child.type == 'variable_declarator':
+                        name_node = child.child_by_field_name('name')
+                        if name_node and name_node.type == 'identifier':
+                            var_name = content[name_node.start_byte:name_node.end_byte]
+                            if self._is_valid_param(var_name):
+                                params.add(var_name)
+                    elif child.type == 'identifier':
+                        var_name = content[child.start_byte:child.end_byte]
+                        if self._is_valid_param(var_name):
+                            params.add(var_name)
+            
+            # Function parameters
+            if n.type == 'formal_parameters':
+                for child in n.children:
+                    if child.type == 'identifier':
+                        param_name = content[child.start_byte:child.end_byte]
+                        if self._is_valid_param(param_name):
+                            params.add(param_name)
             
             for child in n.children:
                 traverse(child)
         
         traverse(node)
+        
+        # NEW Phase 2c: HTML input field extraction
+        html_params = self._extract_html_input_names(content)
+        params.update(html_params)
+        
         return list(params)
+    
+    def _is_valid_param(self, param: str) -> bool:
+        """
+        Validate if a string is a valid parameter name
+        
+        Args:
+            param: Parameter name to validate
+            
+        Returns:
+            True if valid parameter
+        """
+        # Length check
+        if not param or len(param) < 2 or len(param) > 50:
+            return False
+        
+        # Must start with letter or underscore
+        if not (param[0].isalpha() or param[0] == '_'):
+            return False
+        
+        # Only alphanumeric and underscores
+        if not all(c.isalnum() or c in ('_', '-') for c in param):
+            return False
+        
+        # Skip common JavaScript keywords
+        js_keywords = {
+            'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for',
+            'while', 'do', 'switch', 'case', 'break', 'continue', 'try', 'catch',
+            'throw', 'new', 'this', 'super', 'class', 'extends', 'import', 'export',
+            'default', 'async', 'await', 'true', 'false', 'null', 'undefined',
+            'typeof', 'instanceof', 'void', 'delete', 'in', 'of', 'with'
+        }
+        
+        if param.lower() in js_keywords:
+            return False
+        
+        # Skip very common variable names
+        common_vars = {'i', 'j', 'k', 'x', 'y', 'z', 'a', 'b', 'c', 'e', 't', 'n', 'r', 's'}
+        if param.lower() in common_vars:
+            return False
+        
+        return True
+    
+    def _extract_html_input_names(self, content: str) -> Set[str]:
+        """
+        Extract name/id attributes from HTML input fields
+        
+        Args:
+            content: Content to search (may contain HTML in strings)
+            
+        Returns:
+            Set of parameter names from HTML inputs
+        """
+        params = set()
+        
+        # Patterns for HTML input fields
+        patterns = [
+            r'<input[^>]+name=["\']([^"\']+)["\']',
+            r'<input[^>]+id=["\']([^"\']+)["\']',
+            r'<textarea[^>]+name=["\']([^"\']+)["\']',
+            r'<select[^>]+name=["\']([^"\']+)["\']',
+            r'<form[^>]+name=["\']([^"\']+)["\']',
+            # Also check for data attributes
+            r'data-name=["\']([^"\']+)["\']',
+            r'data-field=["\']([^"\']+)["\']',
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            for match in matches:
+                if self._is_valid_param(match):
+                    params.add(match)
+        
+        return params
     
     async def _extract_links(self, content: str) -> List[str]:
         """Extracts internal document links"""
@@ -420,11 +623,114 @@ class ASTAnalyzer:
                 if len(text) >= self.min_word_length and text.isalpha():
                     words.add(text.lower())
             
+            # Extract from string literals and comments
+            if n.type == 'string':
+                text = content[n.start_byte:n.end_byte].strip('"\'')
+                words.update(self._tokenize_text(text))
+            
+            if n.type == 'comment':
+                text = content[n.start_byte:n.end_byte]
+                words.update(self._tokenize_text(text))
+            
             for child in n.children:
                 traverse(child)
         
         traverse(node)
+        
+        # NEW Phase 3a: Extract from HTML content
+        html_words = self._extract_words_from_html(content)
+        words.update(html_words)
+        
         return list(self._filter_wordlist(words))
+    
+    def _tokenize_text(self, text: str) -> Set[str]:
+        """
+        Split text into words (Phase 3 enhancement)
+        
+        Args:
+            text: Text to tokenize
+            
+        Returns:
+            Set of words
+        """
+        # Remove HTML tags
+        text = re.sub(r'<[^>]+>', ' ', text)
+        
+        # Remove special characters, keep only letters
+        text = re.sub(r'[^a-zA-Z\s]', ' ', text)
+        
+        # Split on whitespace and extract words
+        tokens = set()
+        for word in text.split():
+            if len(word) >= self.min_word_length and word.isalpha():
+                tokens.add(word.lower())
+        
+        return tokens
+    
+    def _extract_words_from_html(self, content: str) -> Set[str]:
+        """
+        Extract words from HTML content (Phase 3a)
+        
+        Args:
+            content: Content possibly containing HTML
+            
+        Returns:
+            Set of words from HTML
+        """
+        words = set()
+        
+        # HTML Comments
+        comments = re.findall(r'<!--(.*?)-->', content, re.DOTALL)
+        for comment in comments:
+            words.update(self._tokenize_text(comment))
+        
+        # Image alt text
+        alts = re.findall(r'<img[^>]+alt=["\']([^"\']+)["\']', content, re.IGNORECASE)
+        for alt in alts:
+            words.update(self._tokenize_text(alt))
+        
+        # Meta tags
+        metas = re.findall(r'<meta[^>]+content=["\']([^"\']+)["\']', content, re.IGNORECASE)
+        for meta in metas:
+            words.update(self._tokenize_text(meta))
+        
+        # Title tags
+        titles = re.findall(r'<title[^>]*>([^<]+)</title>', content, re.IGNORECASE)
+        for title in titles:
+            words.update(self._tokenize_text(title))
+        
+        # Aria labels
+        aria_labels = re.findall(r'aria-label=["\']([^"\']+)["\']', content, re.IGNORECASE)
+        for label in aria_labels:
+            words.update(self._tokenize_text(label))
+        
+        # Placeholder text
+        placeholders = re.findall(r'placeholder=["\']([^"\']+)["\']', content, re.IGNORECASE)
+        for placeholder in placeholders:
+            words.update(self._tokenize_text(placeholder))
+        
+        return words
+    
+    # NEW Phase 3b: Stop words list
+    STOP_WORDS = {
+        'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her',
+        'was', 'one', 'our', 'out', 'this', 'that', 'from', 'with', 'have',
+        'has', 'had', 'been', 'were', 'said', 'there', 'what', 'when', 'where',
+        'which', 'who', 'will', 'more', 'than', 'other', 'some', 'time', 'into',
+        'could', 'them', 'see', 'him', 'your', 'come', 'its', 'now', 'than',
+        'like', 'just', 'know', 'take', 'people', 'year', 'good', 'some', 'would',
+        'make', 'their', 'about', 'many', 'then', 'such', 'also', 'only', 'over',
+        'think', 'back', 'after', 'use', 'two', 'how', 'work', 'first', 'well',
+        'way', 'even', 'want', 'because', 'any', 'these', 'give', 'most', 'should',
+        'very', 'being', 'through', 'here', 'each', 'much', 'before', 'however',
+        # Common web/programming terms
+        'var', 'let', 'const', 'function', 'return', 'void', 'null', 'true', 'false',
+        'undefined', 'typeof', 'instanceof', 'new', 'delete', 'class', 'extends',
+        'async', 'await', 'export', 'import', 'default', 'require', 'module',
+        # Generic words
+        'item', 'value', 'object', 'array', 'string', 'number', 'boolean', 'date',
+        'error', 'message', 'type', 'name', 'text', 'link', 'image', 'file'
+    }
     
     def _filter_wordlist(self, words: set) -> set:
         """Filter out low-quality words from extracted wordlist"""
@@ -433,6 +739,10 @@ class ASTAnalyzer:
         for word in words:
             # Skip very short words (<4 chars)
             if len(word) < 4:
+                continue
+            
+            # NEW Phase 3b: Skip stop words
+            if word.lower() in self.STOP_WORDS:
                 continue
             
             # Skip words that are all the same character
@@ -460,6 +770,17 @@ class ASTAnalyzer:
             digit_count = sum(1 for c in word if c.isdigit())
             if digit_count > len(word) / 2:
                 continue
+            
+            # NEW: Skip ALL uppercase words (likely acronyms/constants)
+            if word.isupper() and len(word) > 3:
+                continue
+            
+            # NEW: Skip camelCase/PascalCase by splitting and checking each part
+            # But only if it would result in valid words
+            if word[0].isupper() or any(c.isupper() for c in word[1:]):
+                # Skip for now - these are likely variable names
+                # Could be enhanced to split and add both parts
+                pass
             
             filtered.add(word)
         
@@ -494,6 +815,44 @@ class ASTAnalyzer:
         # Valid URL characters only (strict regex check)
         import re
         if not re.match(r'^/[a-zA-Z0-9/_\-\.]+$', endpoint):
+            return False
+        
+        return True
+    
+    def _is_valid_concatenated_endpoint(self, endpoint: str) -> bool:
+        """
+        Validate concatenated endpoint (allows EXPR placeholder)
+        
+        Args:
+            endpoint: Endpoint string possibly containing EXPR
+            
+        Returns:
+            True if valid
+        """
+        # Must start with /
+        if not endpoint.startswith('/') and not endpoint.startswith('http'):
+            return False
+        
+        # No template strings (already converted to EXPR)
+        if '${' in endpoint:
+            return False
+        
+        # No incomplete syntax
+        if endpoint.rstrip().endswith((',', ':', ';', '\\', '|', '&')):
+            return False
+        
+        # Reasonable length
+        if len(endpoint) > 200:  # Longer than normal due to EXPR
+            return False
+        
+        # Valid URL characters + EXPR placeholder
+        import re
+        # Allow EXPR as a placeholder
+        if not re.match(r'^[/]?[a-zA-Z0-9/_\-\.EXPR?&=]+$', endpoint):
+            return False
+        
+        # Must have at least one slash after the first character
+        if '/' not in endpoint[1:]:
             return False
         
         return True

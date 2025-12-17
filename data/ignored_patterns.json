@@ -92,6 +92,8 @@
     "*/vendor-*.js",
     "*/vendors-*.js",
     "*/runtime-*.js",
+    "*/runtime~*.js",
+    "*/manifest.*.js",
     "*/webpack-runtime*.js"
   ],
   "known_library_hashes": {

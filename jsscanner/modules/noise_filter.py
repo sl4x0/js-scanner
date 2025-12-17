@@ -122,7 +122,7 @@ class NoiseFilter:
             # Heuristic vendor detection
             is_vendor, reason = self._is_likely_vendor_library(content)
             if is_vendor:
-                self.stats['filtered_hash'] += 1  # Count as hash-based for stats
+                self.stats['filtered_vendor'] += 1  # Count as vendor heuristic
                 return True, reason
             
             return False, ""
