@@ -301,7 +301,7 @@ class ScanEngine:
             
             # Log duplicates separately as info, not failure
             if self.stats['failures'].get('duplicates', 0) > 0:
-                self.logger.info(f"ℹ️  Skipped {self.stats['failures']['duplicates']} duplicate files")
+                self.logger.info(f"ℹ️  Skipped {self.stats['failures']['duplicates']} files (already scanned in previous run)")
             
             # Log error summary if there were errors
             if self.stats.get('errors'):
@@ -550,13 +550,18 @@ class ScanEngine:
                     from ..utils.hashing import calculate_hash
                     file_hash = await calculate_hash(content)
                     
-                    # Check if already scanned
-                    if not self.state.mark_as_scanned_if_new(file_hash, url):
-                        self.logger.debug(f"Duplicate: {url}")
-                        self.stats['failures']['duplicates'] += 1
-                        async with lock:
-                            failed_breakdown['duplicate'] += 1
-                        return None
+                    # Check if already scanned (UNLESS force flag is set)
+                    force_rescan = self.config.get('force_rescan', False)
+                    if not force_rescan:
+                        if not self.state.mark_as_scanned_if_new(file_hash, url):
+                            self.logger.debug(f"Duplicate (already scanned): {url}")
+                            self.stats['failures']['duplicates'] += 1
+                            async with lock:
+                                failed_breakdown['duplicate'] += 1
+                            return None
+                    else:
+                        # Force mode: still mark as scanned but don't skip
+                        self.state.mark_as_scanned_if_new(file_hash, url)
                     
                     # Generate filename
                     readable_name = self._get_readable_filename(url, file_hash)
@@ -615,7 +620,7 @@ class ScanEngine:
         # Show clean summary
         total_filtered = sum(failed_breakdown.values())
         self.logger.info(f"\n{'='*60}")
-        self.logger.info(f"✅ Downloaded {len(downloaded_files)} files (filtered {total_filtered} invalid/duplicate)")
+        self.logger.info(f"✅ Downloaded {len(downloaded_files)} files (skipped {total_filtered} invalid/cached)")
         if self.config.get('verbose', False) and total_filtered > 0:
             self.logger.info(f"  Breakdown: {failed_breakdown}")
         self.logger.info(f"{'='*60}\n")

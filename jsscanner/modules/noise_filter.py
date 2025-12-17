@@ -99,7 +99,7 @@ class NoiseFilter:
     
     def should_skip_content(self, content: str, filename: str = "") -> Tuple[bool, str]:
         """
-        Check if content hash matches known vendor libraries
+        Check if content hash matches known vendor libraries or matches vendor patterns
         
         Args:
             content: File content
@@ -119,11 +119,59 @@ class NoiseFilter:
                     self.stats['filtered_hash'] += 1
                     return True, f"Known library: {lib_name}"
             
+            # Heuristic vendor detection
+            is_vendor, reason = self._is_likely_vendor_library(content)
+            if is_vendor:
+                self.stats['filtered_hash'] += 1  # Count as hash-based for stats
+                return True, reason
+            
             return False, ""
             
         except Exception as e:
             if self.logger:
                 self.logger.debug(f"Error checking content hash: {e}")
+            return False, ""
+    
+    def _is_likely_vendor_library(self, content: str) -> Tuple[bool, str]:
+        """
+        Detect vendor libraries using heuristic patterns
+        
+        Args:
+            content: File content
+            
+        Returns:
+            (is_vendor, reason)
+        """
+        try:
+            size = len(content)
+            newline_count = content.count('\n')
+            
+            # Large minified files (>50KB) with very few newlines = likely vendor lib
+            if size > 50000 and newline_count < 20:
+                return True, "Vendor (large minified file)"
+            
+            # Check for common vendor signatures in first 1000 chars
+            header = content[:1000]
+            vendor_signatures = [
+                ('!function(e,t){"object"==typeof exports', 'UMD pattern'),
+                ('/*! jQuery v', 'jQuery'),
+                ('/*! Lazy Load', 'Lazy Load'),
+                ('* Swiper ', 'Swiper'),
+                ('define.amd', 'AMD module'),
+                ('React.createElement', 'React'),
+                ('Vue.component', 'Vue'),
+                ('angular.module', 'Angular'),
+                ('/*! Bootstrap v', 'Bootstrap'),
+                ('Shopify.theme', 'Shopify theme'),
+            ]
+            
+            for signature, lib_name in vendor_signatures:
+                if signature in header:
+                    return True, f"Vendor ({lib_name})"
+            
+            return False, ""
+            
+        except Exception as e:
             return False, ""
     
     def get_stats(self) -> Dict:
