@@ -39,7 +39,7 @@ python tests/test_beautification.py
 Comprehensive end-to-end tests covering:
 
 - **Multi-Domain Test**: Scans 10+ diverse domains
-- **Extraction Accuracy**: Validates endpoint and parameter detection
+- **Extraction Accuracy**: Validates endpoint and domain detection
 - **Beautification Test**: Verifies minified JS handling
 - **Domain Organization**: Tests domain-specific directory structure
 
@@ -60,13 +60,12 @@ TEST 1: Multi-Domain Integration Test (10+ domains)
    - Base directory: ✓
    - Domain extracts: 8 domains
    - Total endpoints: 156
-   - Total params: 234
    - Legacy format: ✓
 
 TEST 2: Extraction Accuracy Validation
 ✅ Extraction completed
    - Endpoints found: 12
-   - Params found: 18
+   - Domains found: 8
 
 TEST 3: Beautification Test
 ✅ Beautification test completed
@@ -94,10 +93,8 @@ Result: 4/4 tests passed
 Detailed tests for AST analysis and extraction:
 
 - Endpoint detection patterns
-- Parameter extraction
 - Domain extraction
 - Link discovery
-- Wordlist generation
 
 ### 3. Beautification Tests (test_beautification.py)
 
@@ -151,7 +148,7 @@ Local test server files (requires test_server.py running):
     'has_domain_secrets': bool,
     'domain_secret_count': int,
     'has_legacy_endpoints': bool,  # Backward compatibility
-    'has_legacy_params': bool
+    'has_legacy_domains': bool
 }
 ```
 
@@ -160,15 +157,15 @@ Local test server files (requires test_server.py running):
 ```python
 {
     'total_endpoints': int,
-    'total_params': int,
+    'total_domains': int,
     'domain_specific_data': {
         'example.com': {
             'endpoints': int,
-            'params': int
+            'domains': int
         }
     },
     'legacy_endpoints_count': int,  # Should match total
-    'legacy_params_count': int
+    'legacy_domains_count': int
 }
 ```
 
@@ -208,13 +205,11 @@ results/
 ├── test-multi-domain/
 │   ├── extracts/
 │   │   ├── google.com/
-│   │   │   ├── endpoints.json
-│   │   │   ├── params.txt
-│   │   │   └── words.txt
+│   │   │   └── endpoints.json
 │   │   ├── github.com/
 │   │   │   └── ...
 │   │   ├── endpoints.txt          # Legacy format
-│   │   └── params.txt              # Legacy format
+│   │   └── domains.txt             # Legacy format
 │   ├── secrets/
 │   │   ├── google.com/
 │   │   │   └── secrets.json

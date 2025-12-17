@@ -42,24 +42,25 @@ python -m jsscanner -t myproject -u https://example.com --source-maps
 - SubJS integration
 - Browser crawling (Playwright)
 - Secret detection (TruffleHog)
-- AST extraction (endpoints, params, wordlists)
+- AST extraction (endpoints, domains, links)
 - Source map recovery
 - Discord notifications
 - Domain-specific organization
 
 ## v3.0 Updates
 
-- 70% better wordlists (fragment filtering)
+- Streamlined extraction (endpoints, domains, links only)
 - Bundle detection (Webpack/Vite/Parcel)
 - Cross-version tree-sitter
+- Removed params/wordlist features for better focus
 
 ## Results Location
 
 `results/[target]/`
 
 - `extracts/endpoints.txt`
-- `extracts/params.txt`
-- `extracts/wordlist.txt`
+- `extracts/domains.txt`
+- `extracts/links.txt`
 - `extracts/[domain]/`
 - `secrets.json`
 - `files/`
