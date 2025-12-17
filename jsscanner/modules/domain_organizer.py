@@ -31,7 +31,7 @@ class DomainExtractOrganizer:
         # Build domain-specific data
         domain_data = {}
         
-        for extract_type in ['endpoints', 'params', 'domains', 'links', 'words']:
+        for extract_type in ['endpoints', 'domains', 'links']:
             for value, data in extracts_db.get(extract_type, {}).items():
                 # Group by source domain
                 for source in data['sources']:
@@ -40,19 +40,16 @@ class DomainExtractOrganizer:
                     if domain not in domain_data:
                         domain_data[domain] = {
                             'endpoints': set(),
-                            'params': set(),
                             'domains': set(),
                             'links': set(),
-                            'endpoints_detailed': {},
-                            'params_detailed': {},
-                            'words': set()
+                            'endpoints_detailed': {}
                         }
                     
                     # Add to appropriate set
                     domain_data[domain][extract_type].add(value)
                     
-                    # Store detailed info for endpoints and params
-                    if extract_type in ['endpoints', 'params']:
+                    # Store detailed info for endpoints
+                    if extract_type in ['endpoints']:
                         key = f"{extract_type}_detailed"
                         if value not in domain_data[domain][key]:
                             domain_data[domain][key][value] = {
@@ -81,18 +78,6 @@ class DomainExtractOrganizer:
                 }
                 with open(endpoints_file, 'w', encoding='utf-8') as f:
                     json.dump(endpoints_data, f, indent=2)
-            
-            # Save params.txt
-            if data['params']:
-                params_file = domain_dir / 'params.txt'
-                with open(params_file, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(sorted(list(data['params']))))
-            
-            # Save words.txt (placeholder for now, will be populated from wordlist)
-            words_file = domain_dir / 'words.txt'
-            if data.get('words'):
-                with open(words_file, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(sorted(list(data['words']))))
         
         self.logger.info(f"✅ Organized extracts for {len(domain_data)} domains")
         return domain_data
@@ -105,7 +90,7 @@ class DomainExtractOrganizer:
             extracts_db: Dictionary with endpoints, params, domains, links
         """
         # Save flat files in base extracts directory (backward compatibility)
-        for extract_type in ['endpoints', 'params', 'domains', 'links']:
+        for extract_type in ['endpoints', 'domains', 'links']:
             file_ext = 'txt'
             file_path = self.base_path / f'{extract_type}.{file_ext}'
             
@@ -136,9 +121,7 @@ class DomainExtractOrganizer:
             if domain_dir.is_dir():
                 domain = domain_dir.name
                 summary[domain] = {
-                    'endpoints_count': 0,
-                    'params_count': 0,
-                    'words_count': 0
+                    'endpoints_count': 0
                 }
                 
                 # Count endpoints
@@ -147,17 +130,5 @@ class DomainExtractOrganizer:
                     with open(endpoints_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         summary[domain]['endpoints_count'] = data.get('count', 0)
-                
-                # Count params
-                params_file = domain_dir / 'params.txt'
-                if params_file.exists():
-                    with open(params_file, 'r', encoding='utf-8') as f:
-                        summary[domain]['params_count'] = len(f.readlines())
-                
-                # Count words
-                words_file = domain_dir / 'words.txt'
-                if words_file.exists():
-                    with open(words_file, 'r', encoding='utf-8') as f:
-                        summary[domain]['words_count'] = len(f.readlines())
         
         return summary

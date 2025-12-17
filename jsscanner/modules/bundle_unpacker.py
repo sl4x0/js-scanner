@@ -99,8 +99,12 @@ class BundleUnpacker:
         try:
             self.logger.info(f"🔓 Unpacking bundle: {Path(input_file).name}")
             
-            # Create output directory
+            # Create output directory (clean if exists)
             output_path = Path(output_dir)
+            if output_path.exists():
+                # Directory exists, clean it to avoid webcrack conflicts
+                shutil.rmtree(output_path, ignore_errors=True)
+                await asyncio.sleep(0.1)  # Brief wait for filesystem
             output_path.mkdir(parents=True, exist_ok=True)
             
             # Run webcrack

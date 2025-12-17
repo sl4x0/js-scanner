@@ -1,6 +1,6 @@
 """
 AST Analyzer Module
-Uses Tree-sitter to parse JavaScript and extract endpoints, parameters, and wordlists
+Uses Tree-sitter to parse JavaScript and extract endpoints, domains, and links
 """
 import asyncio
 import re
@@ -26,16 +26,13 @@ class ASTAnalyzer:
         self.config = config
         self.logger = logger
         self.paths = paths
-        self.min_word_length = config.get('ast', {}).get('min_word_length', 4)
         self._tree_sitter_warning_logged = False  # Only warn once
         
         # Track sources for each extract
         self.extracts_db = {
             'endpoints': {},  # {endpoint: {sources: [], total_count: 0, domains: set()}}
-            'params': {},
             'domains': {},
-            'links': {},
-            'words': {}  # Add words tracking for domain-specific wordlists
+            'links': {}
         }
         
         # Initialize domain organizer for new directory structure
@@ -130,10 +127,8 @@ class ASTAnalyzer:
             
             # Extract various elements (run in executor since they traverse large ASTs)
             endpoints = await loop.run_in_executor(None, self._extract_endpoints_sync, root_node, content)
-            params = await loop.run_in_executor(None, self._extract_params_sync, root_node, content)
             links = await self._extract_links(content)
             domains = await self._extract_domains(content)
-            wordlist = await loop.run_in_executor(None, self._generate_wordlist_sync, root_node, content)
             
             # Extract domain from source URL for tracking
             from urllib.parse import urlparse
@@ -158,21 +153,6 @@ class ASTAnalyzer:
                 })
                 self.extracts_db['endpoints'][endpoint]['total_count'] += 1
                 self.extracts_db['endpoints'][endpoint]['domains'].add(source_domain)
-            
-            for param in params:
-                if param not in self.extracts_db['params']:
-                    self.extracts_db['params'][param] = {
-                        'sources': [],
-                        'total_count': 0,
-                        'domains': set()
-                    }
-                self.extracts_db['params'][param]['sources'].append({
-                    'file': source_url,
-                    'domain': source_domain,
-                    'occurrences': 1
-                })
-                self.extracts_db['params'][param]['total_count'] += 1
-                self.extracts_db['params'][param]['domains'].add(source_domain)
             
             for domain in domains:
                 if domain not in self.extracts_db['domains']:
@@ -213,12 +193,6 @@ class ASTAnalyzer:
                     endpoints
                 )
             
-            if params:
-                await FileOps.append_unique_lines(
-                    str(extracts_path / 'params.txt'),
-                    params
-                )
-            
             if links:
                 await FileOps.append_unique_lines(
                     str(extracts_path / 'links.txt'),
@@ -231,32 +205,8 @@ class ASTAnalyzer:
                     domains
                 )
             
-            # Track wordlist with source tracking for domain organization
-            for word in wordlist:
-                if word not in self.extracts_db['words']:
-                    self.extracts_db['words'][word] = {
-                        'sources': [],
-                        'total_count': 0,
-                        'domains': set()
-                    }
-                
-                self.extracts_db['words'][word]['sources'].append({
-                    'file': source_url,
-                    'domain': source_domain,
-                    'occurrences': 1
-                })
-                self.extracts_db['words'][word]['total_count'] += 1
-                self.extracts_db['words'][word]['domains'].add(source_domain)
-            
-            if wordlist:
-                await FileOps.append_unique_lines(
-                    str(extracts_path / 'wordlist.txt'),
-                    wordlist
-                )
-            
             self.logger.info(
-                f"Extracted: {len(endpoints)} endpoints, {len(params)} params, "
-                f"{len(wordlist)} words"
+                f"Extracted: {len(endpoints)} endpoints, {len(domains)} domains, {len(links)} links"
             )
             
         except Exception as e:
@@ -411,138 +361,6 @@ class ASTAnalyzer:
         traverse(node)
         return list(endpoints)
     
-    def _extract_params_sync(self, node, content: str) -> List[str]:
-        """Extracts parameter names from AST (synchronous for executor)"""
-        params = set()
-        
-        # Look for object properties and query parameters
-        def traverse(n):
-            # Existing: Object properties
-            if n.type == 'property_identifier' or n.type == 'shorthand_property_identifier':
-                text = content[n.start_byte:n.end_byte]
-                if text and len(text) > 1 and self._is_valid_param(text):
-                    params.add(text)
-            
-            # NEW Phase 2a: JSON object keys
-            if n.type == 'pair':
-                key_node = n.child_by_field_name('key')
-                if key_node:
-                    if key_node.type == 'property_identifier':
-                        key = content[key_node.start_byte:key_node.end_byte]
-                    elif key_node.type == 'string':
-                        key = content[key_node.start_byte:key_node.end_byte].strip('"\'')
-                    else:
-                        key = content[key_node.start_byte:key_node.end_byte]
-                    
-                    if key and self._is_valid_param(key):
-                        params.add(key)
-            
-            # NEW Phase 2b: Variable declarations (var, let, const)
-            if n.type in ('variable_declarator', 'lexical_declaration'):
-                for child in n.children:
-                    if child.type == 'variable_declarator':
-                        name_node = child.child_by_field_name('name')
-                        if name_node and name_node.type == 'identifier':
-                            var_name = content[name_node.start_byte:name_node.end_byte]
-                            if self._is_valid_param(var_name):
-                                params.add(var_name)
-                    elif child.type == 'identifier':
-                        var_name = content[child.start_byte:child.end_byte]
-                        if self._is_valid_param(var_name):
-                            params.add(var_name)
-            
-            # Function parameters
-            if n.type == 'formal_parameters':
-                for child in n.children:
-                    if child.type == 'identifier':
-                        param_name = content[child.start_byte:child.end_byte]
-                        if self._is_valid_param(param_name):
-                            params.add(param_name)
-            
-            for child in n.children:
-                traverse(child)
-        
-        traverse(node)
-        
-        # NEW Phase 2c: HTML input field extraction
-        html_params = self._extract_html_input_names(content)
-        params.update(html_params)
-        
-        return list(params)
-    
-    def _is_valid_param(self, param: str) -> bool:
-        """
-        Validate if a string is a valid parameter name
-        
-        Args:
-            param: Parameter name to validate
-            
-        Returns:
-            True if valid parameter
-        """
-        # Length check
-        if not param or len(param) < 2 or len(param) > 50:
-            return False
-        
-        # Must start with letter or underscore
-        if not (param[0].isalpha() or param[0] == '_'):
-            return False
-        
-        # Only alphanumeric and underscores
-        if not all(c.isalnum() or c in ('_', '-') for c in param):
-            return False
-        
-        # Skip common JavaScript keywords
-        js_keywords = {
-            'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for',
-            'while', 'do', 'switch', 'case', 'break', 'continue', 'try', 'catch',
-            'throw', 'new', 'this', 'super', 'class', 'extends', 'import', 'export',
-            'default', 'async', 'await', 'true', 'false', 'null', 'undefined',
-            'typeof', 'instanceof', 'void', 'delete', 'in', 'of', 'with'
-        }
-        
-        if param.lower() in js_keywords:
-            return False
-        
-        # Skip very common variable names
-        common_vars = {'i', 'j', 'k', 'x', 'y', 'z', 'a', 'b', 'c', 'e', 't', 'n', 'r', 's'}
-        if param.lower() in common_vars:
-            return False
-        
-        return True
-    
-    def _extract_html_input_names(self, content: str) -> Set[str]:
-        """
-        Extract name/id attributes from HTML input fields
-        
-        Args:
-            content: Content to search (may contain HTML in strings)
-            
-        Returns:
-            Set of parameter names from HTML inputs
-        """
-        params = set()
-        
-        # Patterns for HTML input fields
-        patterns = [
-            r'<input[^>]+name=["\']([^"\']+)["\']',
-            r'<input[^>]+id=["\']([^"\']+)["\']',
-            r'<textarea[^>]+name=["\']([^"\']+)["\']',
-            r'<select[^>]+name=["\']([^"\']+)["\']',
-            r'<form[^>]+name=["\']([^"\']+)["\']',
-            # Also check for data attributes
-            r'data-name=["\']([^"\']+)["\']',
-            r'data-field=["\']([^"\']+)["\']',
-        ]
-        
-        for pattern in patterns:
-            matches = re.findall(pattern, content, re.IGNORECASE)
-            for match in matches:
-                if self._is_valid_param(match):
-                    params.add(match)
-        
-        return params
-    
     async def _extract_links(self, content: str) -> List[str]:
         """Extracts internal document links"""
         links = set()
@@ -612,238 +430,6 @@ class ASTAnalyzer:
                 domains.add(match)
         
         return list(domains)
-    
-    def _generate_wordlist_sync(self, node, content: str) -> List[str]:
-        """Generates custom wordlist from identifiers (synchronous for executor)"""
-        words = set()
-        
-        def traverse(n):
-            if n.type in ['identifier', 'property_identifier']:
-                text = content[n.start_byte:n.end_byte]
-                if len(text) >= self.min_word_length and text.isalpha():
-                    words.add(text.lower())
-            
-            # Extract from string literals and comments
-            if n.type == 'string':
-                text = content[n.start_byte:n.end_byte].strip('"\'')
-                words.update(self._tokenize_text(text))
-            
-            if n.type == 'comment':
-                text = content[n.start_byte:n.end_byte]
-                words.update(self._tokenize_text(text))
-            
-            for child in n.children:
-                traverse(child)
-        
-        traverse(node)
-        
-        # NEW Phase 3a: Extract from HTML content
-        html_words = self._extract_words_from_html(content)
-        words.update(html_words)
-        
-        return list(self._filter_wordlist(words))
-    
-    def _tokenize_text(self, text: str) -> Set[str]:
-        """
-        Split text into words (Phase 3 enhancement)
-        
-        Args:
-            text: Text to tokenize
-            
-        Returns:
-            Set of words
-        """
-        # Remove HTML tags
-        text = re.sub(r'<[^>]+>', ' ', text)
-        
-        # Remove special characters, keep only letters
-        text = re.sub(r'[^a-zA-Z\s]', ' ', text)
-        
-        # Split on whitespace and extract words
-        tokens = set()
-        for word in text.split():
-            if len(word) >= self.min_word_length and word.isalpha():
-                tokens.add(word.lower())
-        
-        return tokens
-    
-    def _extract_words_from_html(self, content: str) -> Set[str]:
-        """
-        Extract words from HTML content (Phase 3a)
-        
-        Args:
-            content: Content possibly containing HTML
-            
-        Returns:
-            Set of words from HTML
-        """
-        words = set()
-        
-        # HTML Comments
-        comments = re.findall(r'<!--(.*?)-->', content, re.DOTALL)
-        for comment in comments:
-            words.update(self._tokenize_text(comment))
-        
-        # Image alt text
-        alts = re.findall(r'<img[^>]+alt=["\']([^"\']+)["\']', content, re.IGNORECASE)
-        for alt in alts:
-            words.update(self._tokenize_text(alt))
-        
-        # Meta tags
-        metas = re.findall(r'<meta[^>]+content=["\']([^"\']+)["\']', content, re.IGNORECASE)
-        for meta in metas:
-            words.update(self._tokenize_text(meta))
-        
-        # Title tags
-        titles = re.findall(r'<title[^>]*>([^<]+)</title>', content, re.IGNORECASE)
-        for title in titles:
-            words.update(self._tokenize_text(title))
-        
-        # Aria labels
-        aria_labels = re.findall(r'aria-label=["\']([^"\']+)["\']', content, re.IGNORECASE)
-        for label in aria_labels:
-            words.update(self._tokenize_text(label))
-        
-        # Placeholder text
-        placeholders = re.findall(r'placeholder=["\']([^"\']+)["\']', content, re.IGNORECASE)
-        for placeholder in placeholders:
-            words.update(self._tokenize_text(placeholder))
-        
-        return words
-    
-    # NEW Phase 3b: Stop words list
-    STOP_WORDS = {
-        'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her',
-        'was', 'one', 'our', 'out', 'this', 'that', 'from', 'with', 'have',
-        'has', 'had', 'been', 'were', 'said', 'there', 'what', 'when', 'where',
-        'which', 'who', 'will', 'more', 'than', 'other', 'some', 'time', 'into',
-        'could', 'them', 'see', 'him', 'your', 'come', 'its', 'now', 'than',
-        'like', 'just', 'know', 'take', 'people', 'year', 'good', 'some', 'would',
-        'make', 'their', 'about', 'many', 'then', 'such', 'also', 'only', 'over',
-        'think', 'back', 'after', 'use', 'two', 'how', 'work', 'first', 'well',
-        'way', 'even', 'want', 'because', 'any', 'these', 'give', 'most', 'should',
-        'very', 'being', 'through', 'here', 'each', 'much', 'before', 'however',
-        # Common web/programming terms (kept minimal - 'undefined' removed to PROGRAMMING_TERMS)
-        'var', 'let', 'const', 'function', 'return', 'void', 'null', 'true', 'false',
-        'typeof', 'instanceof', 'new', 'delete', 'class', 'extends',
-        'async', 'await', 'export', 'import', 'default', 'require', 'module',
-        # Generic words
-        'item', 'value', 'object', 'array', 'string', 'number', 'boolean', 'date',
-        'error', 'message', 'type', 'name', 'text', 'link', 'image', 'file'
-    }
-    
-    def _filter_wordlist(self, words: set) -> set:
-        """
-        Filter out low-quality words from extracted wordlist
-        
-        Enhanced in v3.0 with advanced fragment detection:
-        - Vowel density check (catch fragments like "ndicat")
-        - Consonant cluster detection (catch "tsplatformpaym")
-        - English suffix validation (catch "eAlignm")
-        """
-        filtered = set()
-        
-        for word in words:
-            # Skip very short words (<4 chars)
-            if len(word) < 4:
-                continue
-            
-            # Skip stop words
-            if word.lower() in self.STOP_WORDS:
-                continue
-            
-            # Skip words that are all the same character
-            if len(set(word)) == 1:
-                continue
-            
-            # Skip words with no vowels
-            if not any(c in 'aeiou' for c in word.lower()):
-                continue
-            
-            # ===== NEW v3.0: Vowel density check =====
-            # Words with <25% vowels are likely fragments
-            vowel_count = sum(1 for c in word.lower() if c in 'aeiou')
-            vowel_ratio = vowel_count / len(word) if len(word) > 0 else 0
-            if vowel_ratio < 0.25:
-                continue
-            
-            # ===== NEW v3.0: Consonant cluster check =====
-            # 4+ consonants in a row = fragment (e.g., "tsplatformpaym")
-            if re.search(r'[bcdfghjklmnpqrstvwxyz]{4,}', word.lower()):
-                continue
-            
-            # Skip words with excessive character repetition (>50% same char)
-            if any(word.count(c) > len(word) / 2 for c in set(word)):
-                continue
-            
-            # Skip fragment words ending in vowels (likely cut-off: "abili")
-            if len(word) < 6 and word[-1] in 'aeiouy':
-                continue
-            
-            # Skip words with too few vowels (<2 vowels)
-            if vowel_count < 2:
-                continue
-            
-            # Skip words that are mostly numbers
-            digit_count = sum(1 for c in word if c.isdigit())
-            if digit_count > len(word) / 2:
-                continue
-            
-            # Skip ALL uppercase words (likely acronyms/constants)
-            if word.isupper() and len(word) > 3:
-                continue
-            
-            # ===== NEW v3.0: English suffix validation =====
-            # Long words (6+ chars) should have recognizable endings
-            if len(word) >= 6:
-                valid_suffixes = (
-                    'ing', 'ed', 'er', 'est', 'ly', 'tion', 'sion', 'ment', 
-                    'ness', 'ity', 'able', 'ible', 'ful', 'less', 'ous', 'ive',
-                    'al', 'ent', 'ant', 'ence', 'ance', 'age', 'dom', 'ship',
-                    'hood', 'ist', 'ism', 'ize', 'ise', 'fy', 'en', 'ate'
-                )
-                
-                # Check if word ends with a valid suffix
-                has_valid_suffix = any(word.lower().endswith(s) for s in valid_suffixes)
-                
-                # Allow words that start with common prefixes even without suffix
-                common_prefixes = ('un', 're', 'in', 'dis', 'en', 'non', 'pre', 'pro', 
-                                  'anti', 'de', 'over', 'mis', 'sub', 'inter')
-                has_valid_prefix = any(word.lower().startswith(p) for p in common_prefixes)
-                
-                # Reject if neither valid suffix nor prefix
-                if not has_valid_suffix and not has_valid_prefix:
-                    # EXCEPTION: Allow if it's a recognized programming term
-                    programming_terms = {
-                        'button', 'header', 'footer', 'sidebar', 'navbar', 'modal',
-                        'input', 'output', 'select', 'option', 'checkbox', 'radio',
-                        'submit', 'cancel', 'confirm', 'alert', 'dialog', 'tooltip',
-                        'dropdown', 'menu', 'list', 'table', 'grid', 'column', 'panel',
-                        'section', 'container', 'wrapper', 'content', 'layout', 
-                        'template', 'component', 'module', 'plugin', 'widget', 'control',
-                        'field', 'label', 'icon', 'video', 'audio', 'upload', 'download',
-                        'anchor', 'href', 'source', 'target', 'parent', 'child', 'sibling',
-                        'node', 'tree', 'branch', 'leaf', 'root', 'path', 'route',
-                        'endpoint', 'request', 'response', 'status', 'success', 'warning',
-                        'info', 'debug', 'trace', 'logger', 'console', 'window', 'document',
-                        'element', 'attribute', 'property', 'method', 'callback', 'promise',
-                        'async', 'await', 'timeout', 'interval', 'event', 'listener',
-                        'handler', 'trigger', 'action', 'state', 'props', 'context',
-                        'reducer', 'dispatch', 'payload', 'middleware', 'store', 'provider',
-                        'platform', 'undefined', 'enable', 'disable', 'config', 'settings'
-                    }
-                    
-                    if word.lower() not in programming_terms:
-                        continue
-            
-            # Skip camelCase/PascalCase (likely variable names)
-            if word[0].isupper() or any(c.isupper() for c in word[1:]):
-                # These are likely variable names - skip them
-                continue
-            
-            filtered.add(word)
-        
-        return filtered
     
     def _is_valid_endpoint(self, endpoint: str) -> bool:
         """Validate endpoint before adding to results"""
@@ -956,25 +542,6 @@ class ASTAnalyzer:
                    self._is_valid_endpoint(endpoint):
                     endpoints.append(endpoint)
         
-        # PARAMETERS
-        param_patterns = [
-            r'[?&]([a-zA-Z_][a-zA-Z0-9_]{1,30})=',
-            r'\.(?:set|append|get|has)\s*\(\s*["\']([a-zA-Z_][a-zA-Z0-9_]{1,30})["\']',
-            r'params\s*:\s*\{[^}]*["\']([a-zA-Z_][a-zA-Z0-9_]{1,30})["\']',
-            r'FormData\s*\.\s*append\s*\(\s*["\']([a-zA-Z_][a-zA-Z0-9_]{1,30})["\']',
-        ]
-        
-        params = []
-        for pattern in param_patterns:
-            matches = re.findall(pattern, code)
-            for match in matches:
-                param = match if isinstance(match, str) else match[0]
-                
-                if (len(param) >= 2 and len(param) <= 30 and param[0].isalpha() and
-                    param not in ['null', 'this', 'true', 'false', 'undefined', 'render', 'return', 'import', 'export'] and
-                    not (len(param) == 2 and param[1].isdigit())):
-                    params.append(param)
-        
         # DOMAINS
         domain_patterns = [
             r'https?://([a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+)',
@@ -998,7 +565,6 @@ class ASTAnalyzer:
         
         result = {
             'endpoints': Counter(endpoints),
-            'params': Counter(params),
             'domains': Counter(domains),
             'links': Counter([]),
             'source_url': source_url,
@@ -1021,7 +587,7 @@ class ASTAnalyzer:
         extracted = self._extract_with_regex(content, source_url, source_domain)
         
         # Update global database with source tracking
-        for extract_type in ['endpoints', 'params', 'domains', 'links']:
+        for extract_type in ['endpoints', 'domains', 'links']:
             for value, count in extracted[extract_type].items():
                 if value not in self.extracts_db[extract_type]:
                     self.extracts_db[extract_type][value] = {
@@ -1045,12 +611,6 @@ class ASTAnalyzer:
             await FileOps.append_unique_lines(
                 str(extracts_path / 'endpoints.txt'),
                 list(extracted['endpoints'].keys())
-            )
-        
-        if extracted['params']:
-            await FileOps.append_unique_lines(
-                str(extracts_path / 'params.txt'),
-                list(extracted['params'].keys())
             )
         
         if extracted['domains']:
@@ -1088,14 +648,13 @@ class ASTAnalyzer:
         """Export extracts database with source information"""
         result = {
             'endpoints': [],
-            'params': [],
             'domains': [],
             'links': [],
             'domains_summary': {}
         }
         
         # Convert to list format with source info
-        for extract_type in ['endpoints', 'params', 'domains', 'links']:
+        for extract_type in ['endpoints', 'domains', 'links']:
             items = []
             for value, data in self.extracts_db[extract_type].items():
                 items.append({
@@ -1112,21 +671,18 @@ class ASTAnalyzer:
         
         # Build domains summary
         domains_summary = {}
-        for extract_type in ['endpoints', 'params']:
+        for extract_type in ['endpoints']:
             for item in result[extract_type]:
                 for source in item['sources']:
                     domain = source['domain']
                     if domain not in domains_summary:
                         domains_summary[domain] = {
                             'endpoints': set(),
-                            'params': set(),
                             'file_count': set()
                         }
                     
                     if extract_type == 'endpoints':
                         domains_summary[domain]['endpoints'].add(item['value'])
-                    elif extract_type == 'params':
-                        domains_summary[domain]['params'].add(item['value'])
                     
                     domains_summary[domain]['file_count'].add(source['file'])
         
@@ -1134,7 +690,6 @@ class ASTAnalyzer:
         for domain, data in domains_summary.items():
             result['domains_summary'][domain] = {
                 'endpoints': sorted(list(data['endpoints'])),
-                'params': sorted(list(data['params'])),
                 'file_count': len(data['file_count'])
             }
         

@@ -907,12 +907,23 @@ class ScanEngine:
                 # Check for corruption indicators
                 if ' ' in url or len(url) > 2000:
                     invalid_urls.append(url)
+                    self.logger.debug(f"Invalid URL (corrupted): {url[:100]}")
                     continue
                 
                 # Check if it looks like a valid domain
                 parsed = urlparse(url)
                 if not parsed.netloc:
                     invalid_urls.append(url)
+                    self.logger.debug(f"Invalid URL (no domain): {url[:100]}")
+                    continue
+                
+                # Reject malformed paths (e.g., ending with /.js or just .js)
+                if not parsed.path or parsed.path == '/':
+                    continue
+                path_parts = parsed.path.split('/')
+                if path_parts and path_parts[-1].startswith('.') and '.' not in path_parts[-1][1:]:
+                    invalid_urls.append(url)
+                    self.logger.debug(f"Invalid URL (malformed path): {url}")
                     continue
                 
                 # Create base URL without query params
@@ -1060,9 +1071,17 @@ class ScanEngine:
             # Check for obvious invalid patterns
             if ' ' in url:  # Spaces in URL
                 return False
-            if parsed.path.endswith(('/.js', '/.ts', '/.jsx', '/.tsx', '/.mjs', '/.cts', '/.mts')):  # Empty filename
+            
+            # Reject malformed paths like '/.js', '.js', or ending with only extension
+            path_parts = parsed.path.split('/')
+            if not path_parts or not path_parts[-1]:  # Empty filename
                 return False
-            if parsed.path in ('/.js', '/.ts', '/.jsx', '/.tsx', '/.mjs', '/.cts', '/.mts'):
+            
+            filename = path_parts[-1]
+            # Reject if filename is ONLY an extension (e.g., '.js', '.ts')
+            if filename.startswith('.') and '.' not in filename[1:]:
+                return False
+            if parsed.path.endswith(('/.js', '/.ts', '/.jsx', '/.tsx', '/.mjs', '/.cts', '/.mts')):
                 return False
                 
             # Must be JS/TS file (.js, .mjs, .ts, .tsx, .jsx, or with query params)

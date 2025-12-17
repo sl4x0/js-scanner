@@ -56,6 +56,7 @@ python -m jsscanner -t myproject -u https://example.com --source-maps
 ## Results Location
 
 `results/[target]/`
+
 - `extracts/endpoints.txt`
 - `extracts/params.txt`
 - `extracts/wordlist.txt`

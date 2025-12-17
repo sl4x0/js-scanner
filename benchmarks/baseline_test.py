@@ -47,15 +47,15 @@ async def run_baseline_scan():
             result_path = Path(f"results/{target.replace('https://', '').replace('http://', '')}")
             
             endpoints_file = result_path / 'extracts' / 'endpoints.txt'
-            params_file = result_path / 'extracts' / 'params.txt'
-            words_file = result_path / 'extracts' / 'wordlist.txt'
+            domains_file = result_path / 'extracts' / 'domains.txt'
+            links_file = result_path / 'extracts' / 'links.txt'
             
             metrics = {
                 'target': target,
                 'duration': time.time() - start,
                 'endpoints': len(open(endpoints_file).readlines()) if endpoints_file.exists() else 0,
-                'params': len(open(params_file).readlines()) if params_file.exists() else 0,
-                'words': len(open(words_file).readlines()) if words_file.exists() else 0,
+                'domains': len(open(domains_file).readlines()) if domains_file.exists() else 0,
+                'links': len(open(links_file).readlines()) if links_file.exists() else 0,
                 'domain_extracts_populated': len(list((result_path / 'extracts').glob('*/endpoints.json')))
             }
             
@@ -63,8 +63,8 @@ async def run_baseline_scan():
             
             print(f"\n✅ Baseline Metrics:")
             print(f"   Endpoints: {metrics['endpoints']}")
-            print(f"   Parameters: {metrics['params']}")
-            print(f"   Words: {metrics['words']}")
+            print(f"   Domains: {metrics['domains']}")
+            print(f"   Links: {metrics['links']}")
             print(f"   Duration: {metrics['duration']:.2f}s")
             print(f"   Domain files: {metrics['domain_extracts_populated']}")
             
