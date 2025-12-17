@@ -205,7 +205,7 @@ class ASTAnalyzer:
                     domains
                 )
             
-            self.logger.info(
+            self.logger.debug(
                 f"Extracted: {len(endpoints)} endpoints, {len(domains)} domains, {len(links)} links"
             )
             

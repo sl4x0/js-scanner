@@ -165,7 +165,7 @@ class Processor:
         match = re.search(external_pattern, content)
         
         if match:
-            self.logger.info(f"Found external source map reference: {match.group(1)}")
+            self.logger.debug(f"Found external source map reference: {match.group(1)}")
             # Note: External source map fetching would require additional logic
             # For now, we'll just note it was found
         
