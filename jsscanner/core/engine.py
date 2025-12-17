@@ -373,15 +373,13 @@ class ScanEngine:
         from ..modules.processor import Processor
         from ..modules.secret_scanner import SecretScanner
         from ..modules.ast_analyzer import ASTAnalyzer
-        from ..modules.crawler import Crawler
         from ..modules.source_map_recovery import SourceMapRecoverer
         
         self.fetcher = Fetcher(self.config, self.logger)
         skip_beautify = self.config.get('skip_beautification', False)
-        self.processor = Processor(self.logger, skip_beautification=skip_beautify)
+        self.processor = Processor(self.logger, skip_beautification=skip_beautify, config=self.config)
         self.secret_scanner = SecretScanner(self.config, self.logger, self.state, self.notifier)
         self.ast_analyzer = ASTAnalyzer(self.config, self.logger, self.paths)
-        self.crawler = Crawler(self.config, self.logger)
         self.source_map_recoverer = SourceMapRecoverer(self.config, self.logger, self.paths)
         
         # Initialize secrets organizer

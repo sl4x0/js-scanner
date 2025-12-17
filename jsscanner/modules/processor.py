@@ -12,22 +12,24 @@ from typing import Optional
 class Processor:
     """Processes JavaScript files (beautify, extract source maps, OR unpack bundles)"""
     
-    def __init__(self, logger, skip_beautification: bool = False) -> None:
+    def __init__(self, logger, skip_beautification: bool = False, config: dict = None) -> None:
         """
         Initialize processor
         
         Args:
             logger: Logger instance
             skip_beautification: If True, skip beautification step for faster scans
+            config: Configuration dictionary
         """
         self.logger = logger
         self.skip_beautification = skip_beautification
+        self.config = config or {}
         self.beautifier_options = jsbeautifier.default_options()
         self.beautifier_options.indent_size = 2
         
         # v3.0: Initialize bundle unpacker
         from .bundle_unpacker import BundleUnpacker
-        self.unpacker = BundleUnpacker(logger, config=config)
+        self.unpacker = BundleUnpacker(logger, config=self.config)
     
     async def process(self, content: str, file_path: str) -> str:
         """

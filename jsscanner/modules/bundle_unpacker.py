@@ -13,7 +13,7 @@ from typing import Optional, Dict, List
 class BundleUnpacker:
     """Unpacks modern JavaScript bundles into original structure"""
     
-def __init__(self, logger, temp_dir: str = 'temp/unpacked', config: dict = None):
+    def __init__(self, logger, temp_dir: str = 'temp/unpacked', config: dict = None):
         """
         Initialize bundle unpacker
 
