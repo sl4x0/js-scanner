@@ -87,13 +87,11 @@
     "*/ls.script*.js*",
     "*trekkie*.min.js*",
     "*shopify-perf-kit*.js*",
-    "*/chunk.*.js",
-    "*/chunk-*.js",
     "*/polyfills*.js",
     "*-legacy*.js",
-    "*/vendor*.js",
-    "*/vendors*.js",
-    "*/runtime*.js",
+    "*/vendor-*.js",
+    "*/vendors-*.js",
+    "*/runtime-*.js",
     "*/webpack-runtime*.js"
   ],
   "known_library_hashes": {
