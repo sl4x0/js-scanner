@@ -478,29 +478,15 @@ class Fetcher:
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
             
-            connector = aiohttp.TCPConnector(ssl=ssl_context if not verify_ssl else None)
+            # Use ssl_context for both connector and session.get
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
             async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30), ssl=ssl_context if not verify_ssl else True) as response:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=60), ssl=ssl_context) as response:
+                    # No retries - fail immediately on rate limiting
                     if response.status in [429, 503]:
-                        if retry_count < max_retries:
-                            retry_after = response.headers.get('Retry-After')
-                            if retry_after:
-                                try:
-                                    wait_time = int(retry_after)
-                                except ValueError:
-                                    wait_time = 2 ** retry_count
-                            else:
-                                wait_time = 2 ** retry_count
-
-                            self.logger.debug(
-                                f"[RATE LIMITED] {url} (status {response.status})\n"
-                                f"  Retrying in {wait_time}s (attempt {retry_count + 1}/{max_retries})"
-                            )
-                            await asyncio.sleep(wait_time)
-                            return await self.fetch_content(url, retry_count + 1)
-                        else:
-                            self.logger.debug(f"[RATE LIMITED] {url}: Max retries exceeded")
-                            return None
+                        self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")
+                        self.last_failure_reason = 'rate_limit'
+                        return None
 
                     if response.status == 200:
                         content_length = response.headers.get('Content-Length')
