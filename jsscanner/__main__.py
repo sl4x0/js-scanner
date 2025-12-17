@@ -131,8 +131,20 @@ async def main():
     
     # === NEW: Determine Input List ===
     targets_to_scan = []
-    use_subjs = args.subjs or args.subjs_only
-    subjs_only = args.subjs_only
+    
+    # SubJS: Respect config file setting unless explicitly overridden by CLI
+    if args.subjs or args.subjs_only:
+        # Explicit CLI flag - enable SubJS
+        use_subjs = True
+        subjs_only = args.subjs_only
+    elif args.no_live:
+        # --no-live implies SubJS only mode
+        use_subjs = True
+        subjs_only = True
+    else:
+        # No explicit CLI flag - use config file setting (defaults to true)
+        use_subjs = config.get('subjs', {}).get('enabled', True)
+        subjs_only = False
     
     if args.input:
         # Read from input file

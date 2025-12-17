@@ -7,6 +7,7 @@ import aiohttp
 import json
 import time
 import signal
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 from ..utils.file_ops import FileOps
@@ -88,7 +89,6 @@ class ScanEngine:
         self.start_time = time.time()
         
         # Update metadata with start time
-        from datetime import datetime
         self.state.update_metadata({
             'start_time': datetime.utcnow().isoformat() + 'Z',
             'use_subjs': use_subjs,
@@ -1264,7 +1264,6 @@ class ScanEngine:
             filename: Readable filename
         """
         import json
-        from datetime import datetime
         
         manifest_file = Path(self.paths['base']) / 'file_manifest.json'
         

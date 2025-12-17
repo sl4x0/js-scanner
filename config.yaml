@@ -53,7 +53,7 @@ ast:
 # Requires: npm install -g webcrack
 bundle_unpacker:
   enabled: false
-  min_file_size: 1 
+  min_file_size:  102400 # 100 KB 
   timeout: 300 # seconds
   temp_dir: "temp/unpacked"
 
