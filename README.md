@@ -6,7 +6,7 @@ High-performance JavaScript security scanner for bug bounty hunting with batch p
 
 ```mermaid
 flowchart TD
-    Start([Start Scan]) --> Phase1[📡 PHASE 1: Discovery & URL Collection]
+    Start([Start Scan]) --> Phase1[📡Discovery & URL Collection]
 
     Phase1 --> SubJS{SubJS Enabled?}
     SubJS -->|Yes| SubJSFetch[Fetch URLs with SubJS API]
@@ -14,35 +14,35 @@ flowchart TD
     SubJSFetch --> Merge[Merge & Deduplicate URLs]
     LiveScan --> Merge
 
-    Merge --> Phase2[⬇️ PHASE 2: Parallel Download]
-    Phase2 --> Download[Download 50 files concurrently]
+    Merge --> Phase2[⬇️Parallel Download]
+    Phase2 --> Download[Download 50 files]
     Download --> Filter{File Valid?}
     Filter -->|HTML/404| Skip1[Skip]
     Filter -->|Too Large| Skip1
     Filter -->|Cached| Skip1
-    Filter -->|Valid JS| Save[Save to files/minified or files/unminified]
+    Filter -->|Valid JS| Save[Save to minified or unminified]
 
     Save --> Phase2_5{Source Maps?}
-    Phase2_5 -->|Enabled| Recovery[🗺️ PHASE 2.5: Source Map Recovery]
+    Phase2_5 -->|Enabled| Recovery[🗺️Source Map Recovery]
     Phase2_5 -->|Disabled| Phase3
     Recovery --> Extract[Extract original sources]
     Extract --> Phase3
 
     Phase3[🔍 PHASE 3: Secret Scanning]
-    Phase3 --> TruffleHog[Run TruffleHog on ALL files in batch]
+    Phase3 --> TruffleHog[Run TruffleHog on ALL files]
     TruffleHog --> Secrets{Secrets Found?}
-    Secrets -->|Yes| Discord[📢 Send to Discord Webhook]
+    Secrets -->|Yes| Discord[📢Send to Discord]
     Secrets -->|No| Phase4
     Discord --> Phase4
 
-    Phase4[⚙️ PHASE 4: Data Extraction]
-    Phase4 --> AST[Parse with Tree-sitter AST]
+    Phase4[⚙️Data Extraction]
+    Phase4 --> AST[Parse with AST]
     AST --> ExtractData[Extract endpoints, domains, links]
     ExtractData --> Organize[Organize by domain folders]
 
     Organize --> Phase5{Beautify?}
     Phase5 -->|--no-beautify| Phase6
-    Phase5 -->|Enabled| Beautify[✨ PHASE 5: Beautification]
+    Phase5 -->|Enabled| Beautify[✨Beautification]
     Beautify --> Bundle{Bundle Detected?}
     Bundle -->|Yes & webcrack| Unpack[Unpack with webcrack]
     Bundle -->|No| JSBeautify[Beautify with jsbeautifier]
@@ -50,7 +50,7 @@ flowchart TD
     JSBeautify --> Phase6
 
     Phase6{Cleanup?}
-    Phase6 -->|cleanup_minified: true| Cleanup[🗑️ PHASE 6: Delete minified files]
+    Phase6 -->|cleanup_minified: true| Cleanup[🗑️Delete minified files]
     Phase6 -->|cleanup_minified: false| Stats
     Cleanup --> Stats
 

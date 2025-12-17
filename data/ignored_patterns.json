@@ -30,7 +30,14 @@
     "js.stripe.com",
     "checkout.stripe.com",
     "maps.googleapis.com",
-    "www.gstatic.com"
+    "www.gstatic.com",
+    "apps.apple.com",
+    "itunes.apple.com",
+    "play.google.com",
+    "appsflyer.com",
+    "app-measurement.com",
+    "firebaseinstallations.googleapis.com",
+    "firebaseremoteconfig.googleapis.com"
   ],
   "url_patterns": [
     "*jquery*.min.js",
