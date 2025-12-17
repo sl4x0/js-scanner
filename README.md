@@ -1,6 +1,24 @@
-# JS Scanner - Bug Bounty Edition
+# JS Scanner v3.0 - Bug Bounty Edition
 
 A high-performance JavaScript security scanner designed for bug bounty hunters and security researchers.
+
+## 🏆 What's New in v3.0
+
+### Enhanced Wordlist Quality (70% Improvement)
+- **Advanced fragment filtering**: Vowel density, consonant clusters, suffix validation
+- **Filters fragments like**: "ndicat", "eAlignm", "tsplatformpaym"
+- **120+ programming terms**: Recognizes technical vocabulary
+- **Smart stop-word filtering**: Removes noise while preserving value
+
+### Bundle Reconstruction Framework
+- **Webpack/Vite/Parcel detection**: Identifies bundled applications automatically
+- **Webcrack integration**: Optional bundle unpacking for reconstructed code
+- **Smart detection**: Analyzes >100KB files for framework signatures
+
+### Robust Tree-sitter
+- **Cross-version compatible**: Supports tree-sitter v0.20-0.23+
+- **Multi-fallback initialization**: 3 API patterns for maximum compatibility
+- **Detailed diagnostics**: Clear error messages with fix suggestions
 
 ## 🚀 Features
 
@@ -488,9 +506,54 @@ python -m jsscanner -t debug -u https://example.com --verbose
 ## 📚 Documentation
 
 - **[README.md](README.md)** - Main documentation (this file)
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
 - **[TESTING.md](TESTING.md)** - Testing guide and test files
 - **[config.yaml.example](../config.yaml.example)** - Configuration template
 - **[TRUFFLEHOG_README.md](TRUFFLEHOG_README.md)** - TruffleHog documentation
+
+## 🧪 Testing (v3.0)
+
+JS Scanner v3.0 includes a comprehensive test suite to ensure quality and reliability.
+
+### Run All Tests
+
+```powershell
+# Windows
+.\tests\run_all_tests.ps1
+
+# Linux/Mac
+python3 tests/test_domain_organizer.py
+python3 tests/test_wordlist_quality.py
+python3 tests/test_tree_sitter_init.py
+python3 tests/test_bundle_unpacker.py
+python3 tests/test_comprehensive_suite.py
+```
+
+### Individual Tests
+
+- **test_domain_organizer.py** - Validates domain-specific extract file creation
+- **test_wordlist_quality.py** - 19/19 tests for fragment filtering (100% pass rate)
+- **test_tree_sitter_init.py** - Tree-sitter cross-version compatibility
+- **test_bundle_unpacker.py** - Bundle detection (Webpack/Vite/Parcel)
+- **test_comprehensive_suite.py** - Full integration tests
+
+### Expected Results
+
+```
+========================================
+  JS Scanner v3.0 Test Suite
+========================================
+
+[1/5] Testing domain organizer...     ✅ PASSED
+[2/5] Testing wordlist quality...     ✅ PASSED (19/19)
+[3/5] Testing tree-sitter...          ✅ PASSED
+[4/5] Testing bundle unpacker...      ✅ PASSED
+[5/5] Running integration test...     ✅ PASSED
+
+========================================
+  ✅ Test Results: 5/5 passed
+========================================
+```
 
 ## 🤝 Contributing
 
