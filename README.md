@@ -1,3 +1,5 @@
+![!banner](./static/banner.png)
+
 # JS Scanner v3.0
 
 High-performance JavaScript security scanner for bug bounty hunting with batch processing, secret detection, and intelligent extraction.
@@ -164,7 +166,6 @@ results/[target]/
 └── file_manifest.json         # Downloaded file manifest
 ```
 
-
 ### Scan Types
 
 ```bash
@@ -207,4 +208,3 @@ python tests/test_direct.py
 python tests/test_comprehensive_suite.py
 python tests/test_bundle_unpacker.py
 ```
-
