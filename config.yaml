@@ -25,6 +25,7 @@ threads: 50 # Recommended: 50 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
 timeout: 30 # seconds
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
+verify_ssl: false # Set to false to bypass SSL certificate verification errors
 
 # Issue #8: Configurable timeouts
 timeouts:
@@ -65,6 +66,13 @@ bundle_unpacker:
 logging:
   level: "INFO" # DEBUG, INFO, WARNING, ERROR
   file_enabled: true
+
+# Beautification Performance
+beautification:
+  timeout_small: 120 # Timeout for files < 1MB (seconds)
+  timeout_medium: 300 # Timeout for files 1-5MB (seconds)
+  timeout_large: 900 # Timeout for files 5-10MB (seconds)
+  timeout_xlarge: 1800 # Timeout for files > 10MB (seconds)
 
 # Batch Processing Configuration
 batch_processing:

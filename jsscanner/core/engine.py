@@ -625,6 +625,14 @@ class ScanEngine:
             self.logger.info(f"  Breakdown: {failed_breakdown}")
         self.logger.info(f"{'='*60}\n")
         
+        # Send Discord notification for download completion
+        if len(downloaded_files) > 0:
+            await self.notifier.send_status(
+                f"📥 **Phase 2 Complete**\n"
+                f"Downloaded: **{len(downloaded_files)}** files\n"
+                f"Skipped: {total_filtered} (cached/invalid)"
+            )
+        
         return downloaded_files
     
     async def _recover_source_maps(self, files: List[dict]):

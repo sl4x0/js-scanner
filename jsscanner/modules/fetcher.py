@@ -468,10 +468,19 @@ class Fetcher:
         self.last_failure_reason = None
         max_size = self.config.get('max_file_size', 10485760)
         max_retries = 3
+        verify_ssl = self.config.get('verify_ssl', True)
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+            # Create SSL context based on config
+            import ssl
+            ssl_context = ssl.create_default_context()
+            if not verify_ssl:
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context if not verify_ssl else None)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30), ssl=ssl_context if not verify_ssl else True) as response:
                     if response.status in [429, 503]:
                         if retry_count < max_retries:
                             retry_after = response.headers.get('Retry-After')

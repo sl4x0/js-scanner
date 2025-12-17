@@ -94,16 +94,16 @@ class Processor:
             return content
         
         try:
-            # Issue #14 & #3: Practical timeout thresholds to prevent extreme scan times
-            # Small files (<1MB): 60s, Medium (<5MB): 180s (3min), Large (<10MB): 600s (10min), Very Large (20MB): 1800s (30min)
-            if content_size_mb < 1.0:
-                timeout = 60.0
-            elif content_size_mb < 5.0:
-                timeout = 180.0  # 3 minutes
-            elif content_size_mb < 10.0:
-                timeout = 600.0  # 10 minutes
+            # Configurable timeout thresholds from config.yaml
+            beautification_config = self.config.get('beautification', {})
+            if content_size_mb < 1:
+                timeout = beautification_config.get('timeout_small', 120)
+            elif content_size_mb < 5:
+                timeout = beautification_config.get('timeout_medium', 300)
+            elif content_size_mb < 10:
+                timeout = beautification_config.get('timeout_large', 900)
             else:
-                timeout = 1800.0  # 30 minutes max for 10-20MB files
+                timeout = beautification_config.get('timeout_xlarge', 1800)
             
             loop = asyncio.get_event_loop()
             beautified = await asyncio.wait_for(
