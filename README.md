@@ -6,6 +6,9 @@ High-performance JavaScript security scanner for bug bounty hunting with batch p
 
 ## 📊 Workflow
 
+<details>
+<summary><b>📊 Click to view workflow diagram</b></summary>
+
 ```mermaid
 flowchart TD
     Start([Start Scan]) --> Phase1[📡Discovery & URL Collection]
@@ -70,6 +73,8 @@ flowchart TD
     style Secrets fill:#ff9800
     style Bundle fill:#9c27b0,color:#fff
 ```
+
+</details>
 
 ## Quick Start
 
