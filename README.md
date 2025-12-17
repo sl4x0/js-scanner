@@ -124,14 +124,6 @@ python -m jsscanner -t myproject -u https://example.com --source-maps
 - ✅ **Domain organization** - Results organized by domain folders
 - ✅ **Smart filtering** - Noise reduction for CDNs and known libraries
 
-### Performance
-
-- 🚀 **50 concurrent downloads** (Phase 2)
-- 🚀 **Single batch TruffleHog scan** (Phase 3) - 10x faster than per-file scanning
-- 🚀 **Parallel AST extraction** (Phase 4)
-- 🚀 **Parallel beautification** (Phase 5)
-- 🚀 **Smart caching** - Skip already processed files
-
 ### v3.0 Updates
 
 - ✨ Streamlined extraction (endpoints, domains, links only)
@@ -140,39 +132,6 @@ python -m jsscanner -t myproject -u https://example.com --source-maps
 - ✨ Improved error handling and retry logic
 - ✨ Configurable cleanup (keep/delete minified files)
 - ⚠️ Removed params/wordlist features for better focus
-
-## Configuration
-
-### Key Settings (config.yaml)
-
-```yaml
-# Performance
-threads: 50 # Concurrent downloads
-batch_processing:
-  download_threads: 50 # Phase 2 concurrency
-  process_threads: 50 # Phase 4 concurrency
-  cleanup_minified: false # Keep both minified & unminified files
-
-# Discovery
-playwright:
-  headless: true
-  max_concurrent: 6 # Concurrent browsers
-  page_timeout: 60000 # 60s timeout
-
-subjs:
-  enabled: true
-  timeout: 60
-
-# Security
-discord_webhook: "YOUR_WEBHOOK_URL"
-trufflehog_max_concurrent: 5
-
-# Features
-bundle_unpacker:
-  enabled: false # Requires: npm install -g webcrack
-ast:
-  enabled: true
-```
 
 ## Results Location
 
@@ -205,54 +164,6 @@ results/[target]/
 └── file_manifest.json         # Downloaded file manifest
 ```
 
-## Output Examples
-
-### Phase-by-Phase Execution
-
-```
-============================================================
-📡 PHASE 1: DISCOVERY & URL COLLECTION (CONCURRENT)
-============================================================
-🚀 Processing 4403 domains with concurrency level: 10
-✓ SubJS found 33 URLs for https://example.com
-✓ Filtered to 31 in-scope URLs (removed 2 out-of-scope)
-
-============================================================
-⬇️  PHASE 2: DOWNLOADING ALL FILES
-============================================================
-🔄 Progress: 50/107 processed, 45 downloaded
-✅ Downloaded 107 files (skipped 15 invalid/cached)
-
-============================================================
-🔍 PHASE 3: SCANNING FOR SECRETS (TruffleHog)
-============================================================
-Running TruffleHog on 107 files...
-⚠️  Found 3 secrets
-📢 Sending Discord notification...
-
-============================================================
-⚙️  PHASE 4: EXTRACTING DATA (Parallel)
-============================================================
-Processing 107 files for AST extraction...
-✅ Processed 107 files
-
-============================================================
-✨ PHASE 5: BEAUTIFYING FILES
-============================================================
-Beautifying 107 files...
-✅ Beautified 107 files
-
-============================================================
-🗑️  PHASE 6: CLEANUP
-============================================================
-✅ Deleted 107 minified files (saved 45.2 MB)
-
-📊 SCAN COMPLETE
-Duration: 2m 34s
-Files: 107 | Secrets: 3 | Endpoints: 245
-```
-
-## Advanced Usage
 
 ### Scan Types
 
@@ -285,47 +196,7 @@ python -m jsscanner -t bulk-scan -i domains.txt --subjs --no-beautify
 | `--no-live`     | Skip live browser scanning              |
 | `-v, --verbose` | Verbose output                          |
 
-## Installation
-
-### Requirements
-
-- Python 3.8+
-- Node.js (for webcrack, optional)
-- TruffleHog v3+
-
-### Setup
-
-```bash
-# Clone repository
-git clone https://github.com/yourusername/js-scanner.git
-cd js-scanner
-
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Install Playwright browser
-playwright install chromium
-
-# Install TruffleHog (choose one)
-# Windows (Scoop)
-scoop bucket add trufflesecurity https://github.com/trufflesecurity/scoop-trufflehog.git
-scoop install trufflehog
-
-# Linux
-curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
-
-# macOS
-brew install trufflehog
-
-# Optional: Install webcrack for bundle unpacking
-npm install -g webcrack
-
-# Configure
-cp config.yaml.example config.yaml
-# Edit config.yaml - set Discord webhook, adjust settings
-```
-
-## Test
+# Testing & Validation
 
 ```bash
 # Run all tests (Windows)
@@ -337,71 +208,3 @@ python tests/test_comprehensive_suite.py
 python tests/test_bundle_unpacker.py
 ```
 
-## Troubleshooting
-
-### Common Issues
-
-**"webcrack failed: Output directory conflict"**
-
-- Fixed in v3.0 - webcrack now properly manages output directories
-- Ensure webcrack is installed: `npm install -g webcrack`
-
-**"TruffleHog not found"**
-
-- Verify installation: `trufflehog --version`
-- Check `config.yaml` - set `trufflehog_path: ""` for auto-detection
-
-**"Files not being deleted from minified folder"**
-
-- Set `cleanup_minified: true` in config.yaml to enable cleanup
-- Set `cleanup_minified: false` to keep both minified and unminified files
-
-**"Browser fails to launch"**
-
-- Run: `playwright install chromium`
-- Check `playwright.headless: true` in config.yaml
-
-**"SubJS returns no results"**
-
-- SubJS API may be rate-limited or down
-- Fallback to browser scanning (remove `--subjs-only` flag)
-
-### Performance Tuning
-
-For systems with limited RAM:
-
-```yaml
-threads: 25 # Reduce from 50
-batch_processing:
-  download_threads: 25
-  process_threads: 25
-playwright:
-  max_concurrent: 3 # Reduce from 6
-```
-
-For high-performance systems:
-
-```yaml
-threads: 100
-batch_processing:
-  download_threads: 100
-  process_threads: 100
-playwright:
-  max_concurrent: 10
-```
-
-## Contributing
-
-Issues and PRs welcome!
-
-## License
-
-MIT
-
-## Credits
-
-- [TruffleHog](https://github.com/trufflesecurity/trufflehog) - Secret scanning
-- [Playwright](https://playwright.dev/) - Browser automation
-- [tree-sitter](https://tree-sitter.github.io/) - AST parsing
-- [webcrack](https://github.com/j4k0xb/webcrack) - Bundle unpacking
-- [SubJS](https://github.com/lc/subjs) - JavaScript discovery
