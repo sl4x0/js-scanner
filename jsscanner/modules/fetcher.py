@@ -492,14 +492,14 @@ class Fetcher:
                             else:
                                 wait_time = 2 ** retry_count
 
-                            self.logger.warning(
+                            self.logger.debug(
                                 f"[RATE LIMITED] {url} (status {response.status})\n"
                                 f"  Retrying in {wait_time}s (attempt {retry_count + 1}/{max_retries})"
                             )
                             await asyncio.sleep(wait_time)
                             return await self.fetch_content(url, retry_count + 1)
                         else:
-                            self.logger.warning(f"[RATE LIMITED] {url}: Max retries exceeded")
+                            self.logger.debug(f"[RATE LIMITED] {url}: Max retries exceeded")
                             return None
 
                     if response.status == 200:
