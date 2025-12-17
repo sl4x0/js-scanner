@@ -118,9 +118,10 @@ class BundleUnpacker:
                     output_path.rename(temp_name)
                     shutil.rmtree(temp_name, ignore_errors=True)
                     await asyncio.sleep(0.2)
-            
-            output_path.mkdir(parents=True, exist_ok=True)
-            
+
+            # FIX: Only create parent directory. webcrack creates the final folder.
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
             # Run webcrack
             cmd = [
                 'webcrack',
