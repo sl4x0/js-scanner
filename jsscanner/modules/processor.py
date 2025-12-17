@@ -10,7 +10,7 @@ from typing import Optional
 
 
 class Processor:
-    """Processes JavaScript files (beautify, extract source maps)"""
+    """Processes JavaScript files (beautify, extract source maps, OR unpack bundles)"""
     
     def __init__(self, logger, skip_beautification: bool = False) -> None:
         """
@@ -24,18 +24,40 @@ class Processor:
         self.skip_beautification = skip_beautification
         self.beautifier_options = jsbeautifier.default_options()
         self.beautifier_options.indent_size = 2
+        
+        # v3.0: Initialize bundle unpacker
+        from .bundle_unpacker import BundleUnpacker
+        self.unpacker = BundleUnpacker(logger)
     
     async def process(self, content: str, file_path: str) -> str:
         """
-        Processes JavaScript content
+        Processes JavaScript content (v3.0: with bundle unpacking)
         
         Args:
             content: JavaScript content
             file_path: Path where file is saved
             
         Returns:
-            Processed (beautified) content
+            Processed (beautified or unpacked) content
         """
+        file_size = len(content)
+        
+        # v3.0: Check if should unpack bundle
+        if await self.unpacker.should_unpack(content, file_size):
+            from pathlib import Path
+            file_stem = Path(file_path).stem
+            output_dir = Path(file_path).parent.parent / 'unpacked' / file_stem
+            
+            # Attempt bundle unpacking
+            result = await self.unpacker.unpack_bundle(file_path, str(output_dir))
+            
+            if result and result['success']:
+                self.logger.info(f"✅ Bundle unpacked: {result['file_count']} files extracted")
+                # Return original content (unpacked files stored separately)
+                return content
+            else:
+                self.logger.warning("⚠️  Bundle unpacking failed, falling back to beautification")
+        
         # Try to extract source map first
         source_map_content = await self._extract_source_map(content, file_path)
         
