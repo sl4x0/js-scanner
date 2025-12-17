@@ -71,4 +71,4 @@ batch_processing:
   enabled: true # Enable new batch workflow
   download_threads: 50 # Max concurrent downloads in Phase 2
   process_threads: 50 # Max concurrent processing in Phase 4
-  cleanup_minified: true # Delete minified files after processing
+  cleanup_minified: false # Keep both minified and unminified files
