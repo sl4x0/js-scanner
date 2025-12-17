@@ -453,9 +453,10 @@ class Fetcher:
                 await page.goto(target, wait_until='domcontentloaded', timeout=30000)
                 self.logger.info(f"Page loaded, waiting for dynamic content...")
             except Exception as e:
-              NEW: Smart interactions to trigger lazy-loaded components
-            self.logger.info(f"🖱️  Triggering interactions for lazy-loaded content...")
-            await self._smart_interactions(pageovered files even if page didn't fully load
+                # Even if navigation times out, we may have discovered JS files via request handler
+                if 'Timeout' in str(e) or 'timeout' in str(e).lower():
+                    self.logger.warning(f"⚠️  Navigation timeout, but may have discovered JS files: {len(js_urls)} found")
+                    # Return discovered files even if page didn't fully load
                     if js_urls:
                         self.logger.info(f"🎯 Returning {len(js_urls)} JS files discovered before timeout")
                         return list(js_urls)
@@ -466,10 +467,9 @@ class Fetcher:
             # Wait extra time for dynamic content
             await asyncio.sleep(3)
             
-            # Scroll to trigger lazy-loaded scripts
-            self.logger.info(f"Scrolling to trigger lazy-loaded scripts...")
-            await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-            await asyncio.sleep(2)
+            # NEW: Smart interactions to trigger lazy-loaded components
+            self.logger.info(f"🖱️  Triggering interactions for lazy-loaded content...")
+            await self._smart_interactions(page)
             
             # Also extract from DOM
             scripts = await page.query_selector_all('script[src]')
