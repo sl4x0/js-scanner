@@ -287,7 +287,8 @@ class Fetcher:
             
         except Exception as e:
             self.logger.warning(f"⚠️  Interaction triggers failed: {e}")
-        async def cleanup(self) -> None:
+    
+    async def cleanup(self) -> None:
         """
         Cleanup Playwright resources
         
