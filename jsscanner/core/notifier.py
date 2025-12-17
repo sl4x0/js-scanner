@@ -203,7 +203,7 @@ class DiscordNotifier:
     
     def _create_embed(self, secret_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Creates an enhanced Discord embed with all data needed for manual verification
+        Creates a clean, minimal Discord embed for secret findings
         
         Args:
             secret_data: Dictionary containing secret information
@@ -217,130 +217,74 @@ class DiscordNotifier:
         
         # Get detector info
         detector_name = secret_data.get('DetectorName', secret_data.get('type', 'Unknown'))
-        detector_desc = secret_data.get('DetectorDescription', '')
-        
-        # Build rich description
-        description_parts = []
-        
-        # Status badge
-        status_badge = "🔴 VERIFIED CREDENTIAL" if verified else "🟠 POTENTIAL FINDING"
-        description_parts.append(f"**{status_badge}**\n")
-        
-        # Detector info
-        if detector_desc:
-            description_parts.append(f"_{detector_desc}_\n")
         
         # Get the actual secret
         raw_secret = secret_data.get('Raw', secret_data.get('RawV2', secret_data.get('secret', '')))
         redacted = secret_data.get('Redacted', '')
         
-        if raw_secret:
-            # Show redacted version if available, otherwise truncate
-            display_secret = redacted if redacted else raw_secret
-            if len(display_secret) > 200:
-                display_secret = display_secret[:200] + "..."
-            description_parts.append(f"**Secret:**\n```\n{display_secret}\n```")
+        # Use redacted version if available, otherwise show raw (truncated if needed)
+        display_secret = redacted if redacted else raw_secret
+        if len(display_secret) > 150:
+            display_secret = display_secret[:150] + "..."
         
-        # Verification error if present
-        verification_error = secret_data.get('VerificationError', '')
-        if verification_error and not verified:
-            description_parts.append(f"⚠️ **Verification Failed:** {verification_error}")
+        # Build minimal description with secret
+        description = f"```\n{display_secret}\n```"
         
-        description = '\n'.join(description_parts)
-        
-        # Build comprehensive fields
+        # Build minimal fields
         fields = []
         
         # Source metadata
         source_metadata = secret_data.get('SourceMetadata', {})
         
         if source_metadata:
-            # File information
+            # Combined File + URL in one field
             file_path = source_metadata.get('file', '')
-            if file_path:
+            url = source_metadata.get('url', '')
+            
+            if file_path and url:
                 from pathlib import Path
                 filename = Path(file_path).name
+                # Truncate URL for display
+                display_url = url if len(url) <= 80 else url[:77] + "..."
                 fields.append({
-                    'name': '📁 File',
-                    'value': f"`{filename}`",
+                    'name': '📄 Source',
+                    'value': f"`{filename}`\n{url}",
                     'inline': False
                 })
             
-            # Original URL
-            url = source_metadata.get('url', '')
-            if url:
-                # Make URL clickable and truncate if needed
-                display_url = url if len(url) <= 100 else url[:97] + "..."
-                fields.append({
-                    'name': '🔗 Source URL',
-                    'value': f"[{display_url}]({url})",
-                    'inline': False
-                })
-            
-            # Line number
+            # Line number and detector on same row
             line_num = source_metadata.get('line', 0)
             if line_num:
                 fields.append({
-                    'name': '📍 Line Number',
+                    'name': 'Line',
                     'value': f"`{line_num}`",
                     'inline': True
                 })
         
-        # Detection metadata
         fields.append({
-            'name': '🔍 Detector',
+            'name': 'Type',
             'value': f"`{detector_name}`",
             'inline': True
         })
         
-        decoder_name = secret_data.get('DecoderName', '')
-        if decoder_name:
-            fields.append({
-                'name': '🔓 Decoder',
-                'value': f"`{decoder_name}`",
-                'inline': True
-            })
-        
-        # Verification status with icon
-        verification_icon = "✅" if verified else "❌"
-        verification_text = "**VERIFIED**" if verified else "Not Verified"
+        # Verification status
+        status_text = "✅ Verified" if verified else "⚠️ Unverified"
         fields.append({
-            'name': f'{verification_icon} Status',
-            'value': verification_text,
+            'name': 'Status',
+            'value': status_text,
             'inline': True
         })
         
-        # Add verification from cache indicator
-        if secret_data.get('VerificationFromCache', False):
-            fields.append({
-                'name': '💾 Cache',
-                'value': 'Verified from cache',
-                'inline': True
-            })
-        
-        # Action items for manual verification
-        action_items = []
-        if not verified:
-            action_items.append("1️⃣ Check if secret is still active")
-            action_items.append("2️⃣ Test credential validity")
-            action_items.append("3️⃣ Verify scope and permissions")
-            
-            fields.append({
-                'name': '📋 Manual Verification Steps',
-                'value': '\n'.join(action_items),
-                'inline': False
-            })
-        
         # Create embed
-        title_icon = "🔴" if verified else "🟠"
+        title = f"{'🔴' if verified else '🟠'} {detector_name} Secret"
         embed = {
             'embeds': [{
-                'title': f'{title_icon} Secret Detected: {detector_name}',
+                'title': title,
                 'description': description,
                 'color': color,
                 'fields': fields,
                 'footer': {
-                    'text': f'JS-Scanner v3.0 | {"IMMEDIATE ACTION REQUIRED" if verified else "Review Recommended"}'
+                    'text': 'JS-Scanner v3.1'
                 },
                 'timestamp': datetime.utcnow().isoformat()
             }]
