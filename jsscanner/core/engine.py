@@ -163,6 +163,28 @@ class ScanEngine:
                 return
             
             # ============================================================
+            # PHASE 2.5: SOURCE MAP RECOVERY (Optional)
+            # ============================================================
+            if self.config.get('recover_source_maps', False):
+                self.logger.info(f"\n{'='*60}")
+                self.logger.info("🗺️  PHASE 2.5: RECOVERING SOURCE MAPS")
+                self.logger.info(f"{'='*60}")
+                
+                await self._recover_source_maps(downloaded_files)
+                
+                # Report stats
+                recovery_stats = self.source_map_recoverer.get_stats()
+                if recovery_stats['maps_found'] > 0:
+                    self.logger.info(f"✅ Source Map Recovery:")
+                    self.logger.info(f"  • Maps found: {recovery_stats['maps_found']}")
+                    self.logger.info(f"  • Maps downloaded: {recovery_stats['maps_downloaded']}")
+                    self.logger.info(f"  • Sources recovered: {recovery_stats['sources_recovered']}")
+                    self.logger.info(f"  • Recovery rate: {recovery_stats['recovery_rate']}")
+                else:
+                    self.logger.info("ℹ️  No source maps found")
+                self.logger.info("")
+            
+            # ============================================================
             # PHASE 3: SCANNING FOR SECRETS (TruffleHog)
             # ============================================================
             self.logger.info(f"\n{'='*60}")
@@ -353,6 +375,7 @@ class ScanEngine:
         from ..modules.secret_scanner import SecretScanner
         from ..modules.ast_analyzer import ASTAnalyzer
         from ..modules.crawler import Crawler
+        from ..modules.source_map_recovery import SourceMapRecoverer
         
         self.fetcher = Fetcher(self.config, self.logger)
         skip_beautify = self.config.get('skip_beautification', False)
@@ -360,6 +383,7 @@ class ScanEngine:
         self.secret_scanner = SecretScanner(self.config, self.logger, self.state, self.notifier)
         self.ast_analyzer = ASTAnalyzer(self.config, self.logger, self.paths)
         self.crawler = Crawler(self.config, self.logger)
+        self.source_map_recoverer = SourceMapRecoverer(self.config, self.logger, self.paths)
         
         # Initialize secrets organizer
         self.secret_scanner.initialize_organizer(self.paths['base'])
@@ -597,6 +621,46 @@ class ScanEngine:
         self.logger.info(f"{'='*60}\n")
         
         return downloaded_files
+    
+    async def _recover_source_maps(self, files: List[dict]):
+        """
+        PHASE 2.5: Recover source maps from downloaded JavaScript files
+        
+        Args:
+            files: List of file info dictionaries from _download_all_files()
+        """
+        semaphore = asyncio.Semaphore(self.config.get('threads', 50))
+        recovered_count = 0
+        
+        async def recover_one(file_info: dict):
+            nonlocal recovered_count
+            async with semaphore:
+                try:
+                    url = file_info['url']
+                    content = file_info['content']
+                    
+                    # Attempt to recover source map
+                    sources = await self.source_map_recoverer.recover_from_file(url, content)
+                    
+                    if sources:
+                        # Save recovered sources
+                        await self.source_map_recoverer.save_sources(url, sources)
+                        recovered_count += 1
+                        return True
+                    
+                    return False
+                
+                except Exception as e:
+                    self.logger.debug(f"Error recovering source map for {file_info.get('url', 'unknown')}: {e}")
+                    return False
+        
+        # Process all files in parallel
+        self.logger.info(f"Processing {len(files)} files for source maps...")
+        tasks = [recover_one(file_info) for file_info in files]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
+        if recovered_count > 0:
+            self.logger.info(f"✅ Recovered sources from {recovered_count} files")
     
     async def _process_all_files_parallel(self, files: List[dict]):
         """

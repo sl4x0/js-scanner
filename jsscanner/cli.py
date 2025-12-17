@@ -128,6 +128,12 @@ Performance Tips:
     )
     
     parser.add_argument(
+        '--source-maps',
+        action='store_true',
+        help='Attempt to recover original source code from source maps'
+    )
+    
+    parser.add_argument(
         '--threads',
         type=int,
         help='Number of concurrent threads (overrides config)'

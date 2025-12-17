@@ -101,6 +101,9 @@ async def main():
     if args.force:
         config['force_rescan'] = True
     
+    if args.source_maps:
+        config['recover_source_maps'] = True
+    
     # Add verbose flag to config
     if hasattr(args, 'verbose') and args.verbose:
         config['verbose'] = True
