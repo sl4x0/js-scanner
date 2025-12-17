@@ -22,14 +22,14 @@ trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 
 # Fetching
 threads: 100 # Recommended: 50 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
-timeout: 30 # seconds
+timeout: 10 # seconds
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
 verify_ssl: false # Set to false to bypass SSL certificate verification errors
 
 # Issue #8: Configurable timeouts
 timeouts:
-  http_request: 30
+  http_request: 10
   playwright_page: 60000
   trufflehog: 300
 
