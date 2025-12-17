@@ -561,7 +561,7 @@ class Fetcher:
                         self.last_failure_reason = 'http_error'
                         return None
         except asyncio.TimeoutError:
-            self.logger.warning(f"❌ [TIMEOUT] {url}")
+            self.logger.debug(f"❌ [TIMEOUT] {url}")
             self.last_failure_reason = 'timeout'
             return None
         except Exception as e:
