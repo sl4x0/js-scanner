@@ -213,7 +213,8 @@ class Fetcher:
             self.logger.info("Playwright browser manager initialized")
         else:
             self.logger.info("Playwright initialization skipped (--no-live flag)")
-        async def _smart_interactions(self, page) -> None:
+    
+    async def _smart_interactions(self, page) -> None:
         """
         Trigger lazy loaders through smart interactions (conservative approach)
         Implements scroll, hover, and tab switching without risky clicks
