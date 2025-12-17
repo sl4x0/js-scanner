@@ -723,9 +723,9 @@ class ASTAnalyzer:
         'think', 'back', 'after', 'use', 'two', 'how', 'work', 'first', 'well',
         'way', 'even', 'want', 'because', 'any', 'these', 'give', 'most', 'should',
         'very', 'being', 'through', 'here', 'each', 'much', 'before', 'however',
-        # Common web/programming terms
+        # Common web/programming terms (kept minimal - 'undefined' removed to PROGRAMMING_TERMS)
         'var', 'let', 'const', 'function', 'return', 'void', 'null', 'true', 'false',
-        'undefined', 'typeof', 'instanceof', 'new', 'delete', 'class', 'extends',
+        'typeof', 'instanceof', 'new', 'delete', 'class', 'extends',
         'async', 'await', 'export', 'import', 'default', 'require', 'module',
         # Generic words
         'item', 'value', 'object', 'array', 'string', 'number', 'boolean', 'date',
@@ -733,7 +733,14 @@ class ASTAnalyzer:
     }
     
     def _filter_wordlist(self, words: set) -> set:
-        """Filter out low-quality words from extracted wordlist"""
+        """
+        Filter out low-quality words from extracted wordlist
+        
+        Enhanced in v3.0 with advanced fragment detection:
+        - Vowel density check (catch fragments like "ndicat")
+        - Consonant cluster detection (catch "tsplatformpaym")
+        - English suffix validation (catch "eAlignm")
+        """
         filtered = set()
         
         for word in words:
@@ -741,7 +748,7 @@ class ASTAnalyzer:
             if len(word) < 4:
                 continue
             
-            # NEW Phase 3b: Skip stop words
+            # Skip stop words
             if word.lower() in self.STOP_WORDS:
                 continue
             
@@ -753,6 +760,18 @@ class ASTAnalyzer:
             if not any(c in 'aeiou' for c in word.lower()):
                 continue
             
+            # ===== NEW v3.0: Vowel density check =====
+            # Words with <25% vowels are likely fragments
+            vowel_count = sum(1 for c in word.lower() if c in 'aeiou')
+            vowel_ratio = vowel_count / len(word) if len(word) > 0 else 0
+            if vowel_ratio < 0.25:
+                continue
+            
+            # ===== NEW v3.0: Consonant cluster check =====
+            # 4+ consonants in a row = fragment (e.g., "tsplatformpaym")
+            if re.search(r'[bcdfghjklmnpqrstvwxyz]{4,}', word.lower()):
+                continue
+            
             # Skip words with excessive character repetition (>50% same char)
             if any(word.count(c) > len(word) / 2 for c in set(word)):
                 continue
@@ -762,7 +781,6 @@ class ASTAnalyzer:
                 continue
             
             # Skip words with too few vowels (<2 vowels)
-            vowel_count = sum(1 for c in word.lower() if c in 'aeiou')
             if vowel_count < 2:
                 continue
             
@@ -771,16 +789,57 @@ class ASTAnalyzer:
             if digit_count > len(word) / 2:
                 continue
             
-            # NEW: Skip ALL uppercase words (likely acronyms/constants)
+            # Skip ALL uppercase words (likely acronyms/constants)
             if word.isupper() and len(word) > 3:
                 continue
             
-            # NEW: Skip camelCase/PascalCase by splitting and checking each part
-            # But only if it would result in valid words
+            # ===== NEW v3.0: English suffix validation =====
+            # Long words (6+ chars) should have recognizable endings
+            if len(word) >= 6:
+                valid_suffixes = (
+                    'ing', 'ed', 'er', 'est', 'ly', 'tion', 'sion', 'ment', 
+                    'ness', 'ity', 'able', 'ible', 'ful', 'less', 'ous', 'ive',
+                    'al', 'ent', 'ant', 'ence', 'ance', 'age', 'dom', 'ship',
+                    'hood', 'ist', 'ism', 'ize', 'ise', 'fy', 'en', 'ate'
+                )
+                
+                # Check if word ends with a valid suffix
+                has_valid_suffix = any(word.lower().endswith(s) for s in valid_suffixes)
+                
+                # Allow words that start with common prefixes even without suffix
+                common_prefixes = ('un', 're', 'in', 'dis', 'en', 'non', 'pre', 'pro', 
+                                  'anti', 'de', 'over', 'mis', 'sub', 'inter')
+                has_valid_prefix = any(word.lower().startswith(p) for p in common_prefixes)
+                
+                # Reject if neither valid suffix nor prefix
+                if not has_valid_suffix and not has_valid_prefix:
+                    # EXCEPTION: Allow if it's a recognized programming term
+                    programming_terms = {
+                        'button', 'header', 'footer', 'sidebar', 'navbar', 'modal',
+                        'input', 'output', 'select', 'option', 'checkbox', 'radio',
+                        'submit', 'cancel', 'confirm', 'alert', 'dialog', 'tooltip',
+                        'dropdown', 'menu', 'list', 'table', 'grid', 'column', 'panel',
+                        'section', 'container', 'wrapper', 'content', 'layout', 
+                        'template', 'component', 'module', 'plugin', 'widget', 'control',
+                        'field', 'label', 'icon', 'video', 'audio', 'upload', 'download',
+                        'anchor', 'href', 'source', 'target', 'parent', 'child', 'sibling',
+                        'node', 'tree', 'branch', 'leaf', 'root', 'path', 'route',
+                        'endpoint', 'request', 'response', 'status', 'success', 'warning',
+                        'info', 'debug', 'trace', 'logger', 'console', 'window', 'document',
+                        'element', 'attribute', 'property', 'method', 'callback', 'promise',
+                        'async', 'await', 'timeout', 'interval', 'event', 'listener',
+                        'handler', 'trigger', 'action', 'state', 'props', 'context',
+                        'reducer', 'dispatch', 'payload', 'middleware', 'store', 'provider',
+                        'platform', 'undefined', 'enable', 'disable', 'config', 'settings'
+                    }
+                    
+                    if word.lower() not in programming_terms:
+                        continue
+            
+            # Skip camelCase/PascalCase (likely variable names)
             if word[0].isupper() or any(c.isupper() for c in word[1:]):
-                # Skip for now - these are likely variable names
-                # Could be enhanced to split and add both parts
-                pass
+                # These are likely variable names - skip them
+                continue
             
             filtered.add(word)
         
