@@ -95,11 +95,27 @@ class ScanEngine:
             'subjs_only': subjs_only
         })
         
-        # Setup signal handlers for graceful shutdown
+        # Setup signal handlers for graceful shutdown with timeout
         def signal_handler(signum, frame):
             if not self.shutdown_requested:
                 self.shutdown_requested = True
-                self.logger.warning("\n⚠️  Shutdown requested (Ctrl+C). Cleaning up...")
+                self.logger.warning("\n⚠️  Shutdown requested (Ctrl+C). Saving data and exiting...")
+                
+                # Start cleanup with timeout in background
+                import threading
+                cleanup_thread = threading.Thread(target=self._emergency_shutdown, daemon=True)
+                cleanup_thread.start()
+                cleanup_thread.join(timeout=10)  # 10-second timeout for cleanup
+                
+                # Force exit if cleanup takes too long
+                if cleanup_thread.is_alive():
+                    self.logger.error("⏱️  Cleanup timeout exceeded - forcing exit")
+                    import os
+                    os._exit(1)
+                else:
+                    self.logger.info("✅ Graceful shutdown complete")
+                    import sys
+                    sys.exit(0)
         
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
@@ -164,6 +180,11 @@ class ScanEngine:
             # ============================================================
             # PHASE 2.5: SOURCE MAP RECOVERY (Optional)
             # ============================================================
+            if self.shutdown_requested:
+                self.logger.warning("⚠️  Shutdown requested before source map recovery")
+                await self._save_current_progress()
+                return
+            
             if self.config.get('recover_source_maps', False):
                 self.logger.info(f"\n{'='*60}")
                 self.logger.info("🗺️  PHASE 2.5: RECOVERING SOURCE MAPS")
@@ -186,6 +207,11 @@ class ScanEngine:
             # ============================================================
             # PHASE 3: SCANNING FOR SECRETS (TruffleHog)
             # ============================================================
+            if self.shutdown_requested:
+                self.logger.warning("⚠️  Shutdown requested before secret scanning")
+                await self._save_current_progress()
+                return
+            
             self.logger.info(f"\n{'='*60}")
             self.logger.info("🔍 PHASE 3: SCANNING FOR SECRETS (TruffleHog)")
             self.logger.info(f"{'='*60}")
@@ -236,6 +262,11 @@ class ScanEngine:
             # ============================================================
             # PHASE 5: BEAUTIFYING FILES
             # ============================================================
+            if self.shutdown_requested:
+                self.logger.warning("⚠️  Shutdown requested before beautification")
+                await self._save_current_progress()
+                return
+            
             self.logger.info(f"\n{'='*60}")
             self.logger.info("✨ PHASE 5: BEAUTIFYING FILES")
             self.logger.info(f"{'='*60}")
@@ -245,6 +276,11 @@ class ScanEngine:
             # ============================================================
             # PHASE 6: CLEANUP
             # ============================================================
+            if self.shutdown_requested:
+                self.logger.warning("⚠️  Shutdown requested before cleanup")
+                await self._save_current_progress()
+                return
+            
             if self.config.get('batch_processing', {}).get('cleanup_minified', True):
                 self.logger.info(f"\n{'='*60}")
                 self.logger.info("🗑️  PHASE 6: CLEANUP")
@@ -378,7 +414,13 @@ class ScanEngine:
         self.fetcher = Fetcher(self.config, self.logger)
         skip_beautify = self.config.get('skip_beautification', False)
         self.processor = Processor(self.logger, skip_beautification=skip_beautify, config=self.config)
-        self.secret_scanner = SecretScanner(self.config, self.logger, self.state, self.notifier)
+        self.secret_scanner = SecretScanner(
+            self.config, 
+            self.logger, 
+            self.state, 
+            self.notifier,
+            shutdown_callback=lambda: self.shutdown_requested
+        )
         self.ast_analyzer = ASTAnalyzer(self.config, self.logger, self.paths)
         self.source_map_recoverer = SourceMapRecoverer(self.config, self.logger, self.paths)
         
@@ -470,6 +512,11 @@ class ScanEngine:
         # Process all domains concurrently
         tasks = [discover_one_domain(i, item) for i, item in enumerate(inputs)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Check shutdown before collecting URLs
+        if self.shutdown_requested:
+            self.logger.warning("⚠️  Discovery interrupted - shutting down")
+            return []
         
         # Collect all URLs
         for result in results:
@@ -603,9 +650,19 @@ class ScanEngine:
                         self.logger.debug(f"Network error for {url}: {str(e)}")
                     return None
         
+        # Check shutdown before downloading
+        if self.shutdown_requested:
+            self.logger.warning("⚠️  Download interrupted - shutting down")
+            return []
+        
         # Download all files in parallel
         tasks = [download_one(url) for url in urls]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Check shutdown after downloads complete
+        if self.shutdown_requested:
+            self.logger.warning("⚠️  Download processing interrupted - shutting down")
+            return downloaded_files
         
         # Filter successful downloads
         for result in results:
@@ -685,8 +742,18 @@ class ScanEngine:
                 except Exception as e:
                     self.logger.error(f"Processing failed {file_info['url']}: {e}")
         
+        # Check shutdown before extraction
+        if self.shutdown_requested:
+            self.logger.warning("⚠️  Extraction interrupted - shutting down")
+            return
+        
         tasks = [process_one(f) for f in files]
         await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Check shutdown before saving extracts
+        if self.shutdown_requested:
+            self.logger.warning("⚠️  Skipping extract save - shutting down")
+            return
         
         # Save organized extracts (domain-specific + legacy format)
         await self.ast_analyzer.save_organized_extracts()
@@ -744,6 +811,11 @@ class ScanEngine:
                         self.logger.warning(f"... suppressing further timeout warnings ...")
                 except Exception as e:
                     self.logger.error(f"Unminify failed {file_info['url']}: {e}")
+        
+        # Check shutdown before beautification
+        if self.shutdown_requested:
+            self.logger.warning("⚠️  Beautification interrupted - shutting down")
+            return
         
         tasks = [unminify_one(f) for f in files]
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -1232,6 +1304,66 @@ class ScanEngine:
             domains.add(clean.lower())
         
         return domains if domains else None
+    
+    async def _save_current_progress(self):
+        """
+        Save current scan progress and data before shutdown
+        Ensures no data loss when Ctrl+C is pressed
+        """
+        try:
+            self.logger.info("💾 Saving current progress...")
+            
+            # Save secrets if any were found
+            if hasattr(self.secret_scanner, 'all_secrets') and self.secret_scanner.all_secrets:
+                try:
+                    await self.secret_scanner.save_organized_secrets()
+                    trufflehog_output = Path(self.paths['base']) / 'trufflehog_full.json'
+                    self.secret_scanner.export_results(str(trufflehog_output))
+                    self.logger.info(f"  ✓ Saved {len(self.secret_scanner.all_secrets)} secrets")
+                except Exception as e:
+                    self.logger.error(f"  ✗ Failed to save secrets: {e}")
+            
+            # Save extracts if any were found
+            if hasattr(self.ast_analyzer, 'extracts') and self.ast_analyzer.extracts:
+                try:
+                    await self.ast_analyzer.save_organized_extracts()
+                    extract_count = sum(len(v) for v in self.ast_analyzer.extracts.values())
+                    self.logger.info(f"  ✓ Saved {extract_count} extracts")
+                except Exception as e:
+                    self.logger.error(f"  ✗ Failed to save extracts: {e}")
+            
+            # Update metadata with shutdown info
+            try:
+                duration = time.time() - self.start_time
+                self.state.update_metadata({
+                    'scan_duration': duration,
+                    'end_time': datetime.utcnow().isoformat() + 'Z',
+                    'shutdown_type': 'interrupted',
+                    'total_files': self.stats.get('total_files', 0),
+                    'total_secrets': self.stats.get('total_secrets', 0)
+                })
+                self.logger.info(f"  ✓ Updated metadata (duration: {duration:.1f}s)")
+            except Exception as e:
+                self.logger.error(f"  ✗ Failed to update metadata: {e}")
+            
+            self.logger.info("💾 Progress saved successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save progress: {e}")
+    
+    def _emergency_shutdown(self):
+        """
+        Emergency shutdown handler - runs in separate thread with timeout
+        Saves critical data synchronously before exit
+        """
+        try:
+            # Run async save in event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._save_current_progress())
+            loop.close()
+        except Exception as e:
+            self.logger.error(f"Emergency shutdown failed: {e}")
     
     def get_url_from_filename(self, filename: str) -> Optional[str]:
         """

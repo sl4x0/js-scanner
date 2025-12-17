@@ -14,7 +14,7 @@ from .secrets_organizer import DomainSecretsOrganizer
 class SecretScanner:
     """Scans files for secrets using TruffleHog"""
     
-    def __init__(self, config: dict, logger, state_manager, notifier):
+    def __init__(self, config: dict, logger, state_manager, notifier, shutdown_callback=None):
         """
         Initialize secret scanner
         
@@ -23,11 +23,13 @@ class SecretScanner:
             logger: Logger instance
             state_manager: State manager instance
             notifier: Discord notifier instance
+            shutdown_callback: Callable that returns True if shutdown requested
         """
         self.config = config
         self.logger = logger
         self.state = state_manager
         self.notifier = notifier
+        self.shutdown_callback = shutdown_callback
         
         # Cross-platform TruffleHog binary detection
         self.trufflehog_path = self._find_trufflehog_binary(config)
@@ -376,6 +378,11 @@ class SecretScanner:
             
             # Parse JSON output - save ALL findings
             for line in stdout.decode().splitlines():
+                # Check shutdown before processing each secret
+                if self.shutdown_callback and self.shutdown_callback():
+                    self.logger.warning("⚠️  Secret scanning interrupted - shutting down")
+                    return verified_findings
+                
                 if line.strip():
                     try:
                         finding = json.loads(line)

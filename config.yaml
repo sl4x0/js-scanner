@@ -52,8 +52,8 @@ ast:
 # Bundle Unpacker (v3.0 NEW)
 # Requires: npm install -g webcrack
 bundle_unpacker:
-  enabled: false # Set to true when webcrack is installed
-  min_file_size: 102400 # Only unpack files >100KB
+  enabled: false
+  min_file_size: 1 
   timeout: 300 # seconds
   temp_dir: "temp/unpacked"
 

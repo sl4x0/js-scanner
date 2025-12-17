@@ -44,11 +44,13 @@ class Processor:
         """
         file_size = len(content)
         
-        # v3.0: Check if should unpack bundle
+        # v3.0: Check if should unpack bundle (respects config.bundle_unpacker.enabled)
         if await self.unpacker.should_unpack(content, file_size):
             from pathlib import Path
             file_stem = Path(file_path).stem
             output_dir = Path(file_path).parent.parent / 'unpacked' / file_stem
+            
+            self.logger.info(f"🔧 Attempting bundle unpacking for {file_stem}")
             
             # Attempt bundle unpacking
             result = await self.unpacker.unpack_bundle(file_path, str(output_dir))

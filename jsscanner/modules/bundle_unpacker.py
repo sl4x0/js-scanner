@@ -60,13 +60,15 @@ class BundleUnpacker:
         Returns:
             True if should unpack, False for regular beautification
         """
-        # Check if bundle unpacking is enabled in config
+        # CRITICAL: Check if bundle unpacking is enabled in config
         bundle_config = self.config.get('bundle_unpacker', {})
         if not bundle_config.get('enabled', False):
+            # Bundle unpacking is disabled - skip without logging (normal behavior)
             return False
         
         # Check if webcrack is available
         if not self.webcrack_available:
+            self.logger.debug("Bundle unpacking enabled but webcrack not available")
             return False
         
         # Only unpack large files (>100KB by default)
