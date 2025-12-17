@@ -203,7 +203,7 @@ class DiscordNotifier:
     
     def _create_embed(self, secret_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Creates a Discord embed from secret data
+        Creates an enhanced Discord embed with all data needed for manual verification
         
         Args:
             secret_data: Dictionary containing secret information
@@ -211,42 +211,53 @@ class DiscordNotifier:
         Returns:
             Discord webhook payload
         """
-        # Determine color based on verification status
+        # Determine verification status and color
         verified = secret_data.get('Verified', secret_data.get('verified', False))
-        color = 0xFF0000 if verified else 0xFFA500  # Red for verified, Orange for unverified
+        color = 0xFF0000 if verified else 0xFFA500  # Red = verified, Orange = unverified
         
-        # Get detector name
+        # Get detector info
         detector_name = secret_data.get('DetectorName', secret_data.get('type', 'Unknown'))
+        detector_desc = secret_data.get('DetectorDescription', '')
         
-        # Build description
+        # Build rich description
         description_parts = []
         
-        if detector_name:
-            description_parts.append(f"**Detector:** {detector_name}")
+        # Status badge
+        status_badge = "🔴 VERIFIED CREDENTIAL" if verified else "🟠 POTENTIAL FINDING"
+        description_parts.append(f"**{status_badge}**\n")
         
-        if 'DecoderName' in secret_data:
-            description_parts.append(f"**Decoder:** {secret_data['DecoderName']}")
+        # Detector info
+        if detector_desc:
+            description_parts.append(f"_{detector_desc}_\n")
         
-        # Get secret preview
-        raw_secret = secret_data.get('Raw', secret_data.get('secret', ''))
+        # Get the actual secret
+        raw_secret = secret_data.get('Raw', secret_data.get('RawV2', secret_data.get('secret', '')))
+        redacted = secret_data.get('Redacted', '')
+        
         if raw_secret:
-            # Truncate if too long
-            if len(raw_secret) > 100:
-                raw_secret = raw_secret[:100] + "..."
-            description_parts.append(f"**Secret Preview:**\n```{raw_secret}```")
+            # Show redacted version if available, otherwise truncate
+            display_secret = redacted if redacted else raw_secret
+            if len(display_secret) > 200:
+                display_secret = display_secret[:200] + "..."
+            description_parts.append(f"**Secret:**\n```\n{display_secret}\n```")
+        
+        # Verification error if present
+        verification_error = secret_data.get('VerificationError', '')
+        if verification_error and not verified:
+            description_parts.append(f"⚠️ **Verification Failed:** {verification_error}")
         
         description = '\n'.join(description_parts)
         
-        # Build fields
+        # Build comprehensive fields
         fields = []
         
         # Source metadata
         source_metadata = secret_data.get('SourceMetadata', {})
         
         if source_metadata:
+            # File information
             file_path = source_metadata.get('file', '')
             if file_path:
-                # Show just filename if path is long
                 from pathlib import Path
                 filename = Path(file_path).name
                 fields.append({
@@ -255,44 +266,83 @@ class DiscordNotifier:
                     'inline': False
                 })
             
+            # Original URL
             url = source_metadata.get('url', '')
             if url:
-                # Truncate long URLs
-                display_url = url if len(url) < 100 else url[:97] + "..."
+                # Make URL clickable and truncate if needed
+                display_url = url if len(url) <= 100 else url[:97] + "..."
                 fields.append({
-                    'name': '🔗 URL',
-                    'value': display_url,
+                    'name': '🔗 Source URL',
+                    'value': f"[{display_url}]({url})",
                     'inline': False
                 })
             
+            # Line number
             line_num = source_metadata.get('line', 0)
             if line_num:
                 fields.append({
-                    'name': '📍 Line',
-                    'value': str(line_num),
+                    'name': '📍 Line Number',
+                    'value': f"`{line_num}`",
                     'inline': True
                 })
         
-        # Verification status
+        # Detection metadata
         fields.append({
-            'name': '✅ Verified',
-            'value': 'YES' if verified else 'NO',
+            'name': '🔍 Detector',
+            'value': f"`{detector_name}`",
             'inline': True
         })
         
-        # Timestamp
-        timestamp = secret_data.get('timestamp', datetime.utcnow().isoformat())
+        decoder_name = secret_data.get('DecoderName', '')
+        if decoder_name:
+            fields.append({
+                'name': '🔓 Decoder',
+                'value': f"`{decoder_name}`",
+                'inline': True
+            })
         
+        # Verification status with icon
+        verification_icon = "✅" if verified else "❌"
+        verification_text = "**VERIFIED**" if verified else "Not Verified"
+        fields.append({
+            'name': f'{verification_icon} Status',
+            'value': verification_text,
+            'inline': True
+        })
+        
+        # Add verification from cache indicator
+        if secret_data.get('VerificationFromCache', False):
+            fields.append({
+                'name': '💾 Cache',
+                'value': 'Verified from cache',
+                'inline': True
+            })
+        
+        # Action items for manual verification
+        action_items = []
+        if not verified:
+            action_items.append("1️⃣ Check if secret is still active")
+            action_items.append("2️⃣ Test credential validity")
+            action_items.append("3️⃣ Verify scope and permissions")
+            
+            fields.append({
+                'name': '📋 Manual Verification Steps',
+                'value': '\n'.join(action_items),
+                'inline': False
+            })
+        
+        # Create embed
+        title_icon = "🔴" if verified else "🟠"
         embed = {
             'embeds': [{
-                'title': f'🚨 Secret Found: {detector_name}',
+                'title': f'{title_icon} Secret Detected: {detector_name}',
                 'description': description,
                 'color': color,
                 'fields': fields,
                 'footer': {
-                    'text': 'JS Scanner | Bug Bounty Edition'
+                    'text': f'JS-Scanner v3.0 | {"IMMEDIATE ACTION REQUIRED" if verified else "Review Recommended"}'
                 },
-                'timestamp': timestamp if isinstance(timestamp, str) else datetime.utcnow().isoformat()
+                'timestamp': datetime.utcnow().isoformat()
             }]
         }
         

@@ -4,90 +4,118 @@
 
 ### 1. ✅ SSL Certificate Verification Errors
 
-**Problem:** 
+**Problem:**
+
 ```
 [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate
 ```
 
-**Root Cause:** 
+**Root Cause:**
 aiohttp was enforcing SSL certificate validation for all HTTPS requests, causing failures for domains with certificate issues.
 
 **Solution:**
 Added `verify_ssl` configuration option to bypass SSL verification.
 
 **Changes:**
+
 - **config.yaml**: Added `verify_ssl: false` option
 - **jsscanner/modules/fetcher.py**: Modified `fetch_content()` to use custom SSL context
 
 **Configuration:**
+
 ```yaml
 # config.yaml
-verify_ssl: false  # Bypass SSL certificate verification
+verify_ssl: false # Bypass SSL certificate verification
 ```
 
 **Impact:** Scanner can now download files from domains with SSL certificate issues (e.g., red1.buzzfeed.com, red2.buzzfeed.com)
 
 ---
 
-### 2. ✅ Missing Download Phase Notification
+### 2. ✅ Missing Secret Notifications
 
-**Problem:** 
-No Discord notification or prominent completion message when Phase 2 (download) finishes.
+**Problem:**
+Unverified secrets found by TruffleHog were not being sent to Discord webhook, even though they were saved to `trufflehog_full.json`.
 
-**Root Cause:** 
-Engine only sent notifications for secrets found, not for phase completions.
+**Example:**
+
+```json
+{
+  "DetectorName": "Box",
+  "Verified": false, // ❌ Not sent to Discord
+  "Raw": "jj7y3jPXzrR6Ov5lvOBYe5abVfpmHwex"
+}
+```
+
+**Root Cause:**
+Secret scanner only sent Discord notifications for **verified** secrets (`Verified: true`), filtering out unverified findings that could still be valuable for bug bounty hunting.
 
 **Solution:**
-Added Discord status notification after Phase 2 completion.
+Modified secret scanner to send **ALL** secrets to Discord (both verified and unverified).
 
 **Changes:**
-- **jsscanner/core/engine.py**: Added `await self.notifier.send_status()` call after download phase
+
+- **jsscanner/modules/secret_scanner.py**: Moved notification logic outside the `if self._is_verified()` check
 
 **Output:**
+
 ```
 Discord Notification:
-📥 **Phase 2 Complete**
-Downloaded: **179** files
-Skipped: 45 (cached/invalid)
+🚨 3 Secrets Found in vendor.js
+Secret #1: Box
+Verified: ❌ NO
+
+Secret #2: URI
+Verified: ❌ NO
 ```
 
-**Impact:** Users now get immediate feedback when downloads complete, even if `discord_status_enabled: false` (status messages sent regardless).
+**Impact:**
+
+- All secrets (verified + unverified) now trigger Discord notifications
+- Orange color for unverified, red color for verified
+- Users can investigate unverified secrets that may still be exploitable
+
+**Note:** Unverified secrets are often false positives (e.g., `http://user:password@example.com`), but can also be real secrets that TruffleHog couldn't verify due to network issues or rate limits.
 
 ---
 
 ### 3. ✅ Beautification Timeout Performance Issues
 
-**Problem:** 
+**Problem:**
 Beautification timing out after 60s for files, even on good hardware.
 
-**Root Cause:** 
+**Root Cause:**
 Hardcoded timeout values were too conservative for modern VPS hardware.
 
 **Solution:**
 Made beautification timeouts configurable via config.yaml.
 
 **Changes:**
+
 - **config.yaml**: Added `beautification` section with granular timeout controls
 - **jsscanner/modules/processor.py**: Read timeouts from config instead of hardcoded values
 
 **Default Timeouts:**
+
 - Files < 1MB: 120s (was 60s)
 - Files 1-5MB: 300s (was 180s)
 - Files 5-10MB: 900s (was 600s)
 - Files > 10MB: 1800s (was 1800s)
 
 **Configuration:**
+
 ```yaml
 # config.yaml
 beautification:
-  timeout_small: 120    # Files < 1MB
-  timeout_medium: 300   # Files 1-5MB
-  timeout_large: 900    # Files 5-10MB
-  timeout_xlarge: 1800  # Files > 10MB
+  timeout_small: 120 # Files < 1MB
+  timeout_medium: 300 # Files 1-5MB
+  timeout_large: 900 # Files 5-10MB
+  timeout_xlarge: 1800 # Files > 10MB
 ```
 
 **Performance Tuning:**
 For high-performance VPS, you can increase these values:
+
 ```yaml
 beautification:
   timeout_small: 300
@@ -102,22 +130,24 @@ beautification:
 
 ### 4. ✅ Extracted Files Clarification
 
-**Problem:** 
+**Problem:**
 Unclear whether extracted files from bundles are being scanned.
 
-**Root Cause:** 
+**Root Cause:**
 Lack of documentation about bundle unpacking workflow.
 
 **Solution:**
 Created comprehensive FAQ document explaining extracted files behavior.
 
 **Key Points:**
+
 - **Extracted files** = Individual modules unpacked from Webpack/Vite/Parcel bundles
 - **Currently NOT scanned** - Only original bundle is processed
 - **Location**: `results/target/files/unpacked/[bundle-name]/`
 - **Purpose**: Manual inspection, not automated scanning
 
 **Documentation:**
+
 - Created `EXTRACTED_FILES_FAQ.md` with detailed explanation
 - Explains why extracted files aren't scanned (performance, redundancy)
 - Provides workarounds for scanning extracted files manually
@@ -129,6 +159,7 @@ Created comprehensive FAQ document explaining extracted files behavior.
 ## Updated Configuration
 
 ### Minimal Performance Config (Low Resources)
+
 ```yaml
 threads: 25
 batch_processing:
@@ -146,6 +177,7 @@ verify_ssl: false
 ```
 
 ### Optimal VPS Config (High Performance)
+
 ```yaml
 threads: 100
 batch_processing:
@@ -163,13 +195,14 @@ verify_ssl: false
 ```
 
 ### Security-Focused Config
+
 ```yaml
 threads: 50
 batch_processing:
   download_threads: 50
   process_threads: 50
   cleanup_minified: false
-verify_ssl: true              # Enforce SSL validation
+verify_ssl: true # Enforce SSL validation
 beautification:
   timeout_small: 120
   timeout_medium: 300
@@ -182,24 +215,28 @@ beautification:
 ## Testing
 
 ### Test SSL Fix
+
 ```bash
 # Should now download successfully
 python -m jsscanner -t ssl-test -u https://red1.buzzfeed.com/some-file.js
 ```
 
 ### Test Download Notification
+
 ```bash
 # Check Discord for Phase 2 completion message
 python -m jsscanner -t notify-test -u https://example.com/app.js
 ```
 
 ### Test Beautification Timeouts
+
 ```bash
 # Monitor for fewer timeout warnings
 python -m jsscanner -t perf-test -i large-files.txt
 ```
 
 ### Verify Extracted Files
+
 ```bash
 # Check unpacked directory after scan
 ls -la results/target/files/unpacked/
@@ -212,6 +249,7 @@ cat EXTRACTED_FILES_FAQ.md
 ## Migration Notes
 
 ### Existing Users
+
 1. Update `config.yaml` with new settings:
    - Add `verify_ssl: false` if experiencing SSL errors
    - Add `beautification` section for timeout control
@@ -219,6 +257,7 @@ cat EXTRACTED_FILES_FAQ.md
 3. Review `EXTRACTED_FILES_FAQ.md` to understand bundle unpacking
 
 ### New Users
+
 - Default `config.yaml.example` includes all new settings
 - Copy and customize based on your VPS resources
 
@@ -226,13 +265,13 @@ cat EXTRACTED_FILES_FAQ.md
 
 ## Performance Improvements
 
-| Metric | Before | After |
-|--------|--------|-------|
-| SSL Error Failures | ❌ Failed | ✅ Bypassed |
-| Download Notification | ❌ None | ✅ Discord Alert |
-| Beautification Timeout (1MB) | 60s | 120s (configurable) |
-| Beautification Timeout (5MB) | 180s | 300s (configurable) |
-| Extracted Files Confusion | ❓ Unclear | ✅ Documented |
+| Metric                       | Before      | After               |
+| ---------------------------- | ----------- | ------------------- |
+| SSL Error Failures           | ❌ Failed   | ✅ Bypassed         |
+| Unverified Secret Alerts     | ❌ Not Sent | ✅ Sent to Discord  |
+| Beautification Timeout (1MB) | 60s         | 120s (configurable) |
+| Beautification Timeout (5MB) | 180s        | 300s (configurable) |
+| Extracted Files Confusion    | ❓ Unclear  | ✅ Documented       |
 
 ---
 
@@ -258,6 +297,7 @@ cat EXTRACTED_FILES_FAQ.md
 ## Support
 
 If you encounter any issues:
+
 1. Check logs in `results/target/logs/scan.log`
 2. Verify configuration in `config.yaml`
 3. Review FAQ documents (EXTRACTED_FILES_FAQ.md, README.md)

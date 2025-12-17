@@ -27,7 +27,7 @@ class Processor:
         
         # v3.0: Initialize bundle unpacker
         from .bundle_unpacker import BundleUnpacker
-        self.unpacker = BundleUnpacker(logger)
+        self.unpacker = BundleUnpacker(logger, config=config)
     
     async def process(self, content: str, file_path: str) -> str:
         """

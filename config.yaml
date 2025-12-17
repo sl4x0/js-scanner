@@ -21,7 +21,7 @@ trufflehog_timeout: 300 # seconds per file
 trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 
 # Fetching
-threads: 50 # Recommended: 50 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
+threads: 100 # Recommended: 50 (2GB RAM), 25 (4GB RAM), 50 (8GB+ RAM)
 timeout: 30 # seconds
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
@@ -36,19 +36,14 @@ timeouts:
 # Playwright
 playwright:
   headless: true
-  max_concurrent: 6 # Max concurrent browser instances
+  max_concurrent: 10 # Max concurrent browser instances
   restart_after: 100 # Restart browser after N pages
   page_timeout: 60000 # ms (increased to 60s for sites with anti-bot protection)
 
 # SubJS Configuration
 subjs:
   enabled: true # Enable SubJS by default
-  timeout: 60 # Timeout per domain (seconds)
-
-# Recursive Crawling
-recursion:
-  enabled: true
-  max_depth: 3 # Maximum crawl depth
+  timeout: 10 # Timeout per domain (seconds)
 
 # AST Analysis
 ast:
@@ -77,6 +72,6 @@ beautification:
 # Batch Processing Configuration
 batch_processing:
   enabled: true # Enable new batch workflow
-  download_threads: 50 # Max concurrent downloads in Phase 2
-  process_threads: 50 # Max concurrent processing in Phase 4
-  cleanup_minified: false # Keep both minified and unminified files
+  download_threads: 100 # Max concurrent downloads in Phase 2 - fetching
+  process_threads: 100 # Max concurrent processing in Phase 4 - beautification & analysis
+  cleanup_minified: false # Keep both minified and unminified files after processing

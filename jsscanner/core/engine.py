@@ -50,7 +50,6 @@ class ScanEngine:
         self.processor = None
         self.secret_scanner = None
         self.ast_analyzer = None
-        self.crawler = None
         
         # Shutdown flag for graceful exit
         self.shutdown_requested = False
@@ -624,14 +623,6 @@ class ScanEngine:
         if self.config.get('verbose', False) and total_filtered > 0:
             self.logger.info(f"  Breakdown: {failed_breakdown}")
         self.logger.info(f"{'='*60}\n")
-        
-        # Send Discord notification for download completion
-        if len(downloaded_files) > 0:
-            await self.notifier.send_status(
-                f"📥 **Phase 2 Complete**\n"
-                f"Downloaded: **{len(downloaded_files)}** files\n"
-                f"Skipped: {total_filtered} (cached/invalid)"
-            )
         
         return downloaded_files
     

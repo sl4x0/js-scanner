@@ -401,17 +401,17 @@ class SecretScanner:
                         # Track ALL findings for export (verified + unverified)
                         self.all_secrets.append(finding)
                         
-                        # Only process VERIFIED secrets for state and notifications
+                        # Send ALL secrets to Discord (verified and unverified)
+                        if self.notifier:
+                            # Extract file info for Discord notification
+                            source_metadata = finding.get('SourceMetadata', {})
+                            file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', 'unknown')
+                            await self.notifier.queue_batch_alert([finding], file_path)
+                        
+                        # Track verified secrets for state
                         if self._is_verified(finding):
                             verified_findings.append(finding)
                             self.state.add_secret(finding)
-                            
-                            # Send to Discord
-                            if self.notifier:
-                                # Extract file info for Discord notification
-                                source_metadata = finding.get('SourceMetadata', {})
-                                file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', 'unknown')
-                                await self.notifier.queue_batch_alert([finding], file_path)
                         
                     except json.JSONDecodeError:
                         continue

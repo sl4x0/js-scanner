@@ -110,12 +110,6 @@ Performance Tips:
     )
     
     parser.add_argument(
-        '--no-recursion',
-        action='store_true',
-        help='Disable recursive crawling'
-    )
-    
-    parser.add_argument(
         '--no-beautify',
         action='store_true',
         help='Skip file beautification (faster scans, runs extraction on minified files)'

@@ -13,15 +13,17 @@ from typing import Optional, Dict, List
 class BundleUnpacker:
     """Unpacks modern JavaScript bundles into original structure"""
     
-    def __init__(self, logger, temp_dir: str = 'temp/unpacked'):
+def __init__(self, logger, temp_dir: str = 'temp/unpacked', config: dict = None):
         """
         Initialize bundle unpacker
-        
+
         Args:
             logger: Logger instance
             temp_dir: Temporary directory for unpacked files
+            config: Configuration dictionary
         """
         self.logger = logger
+        self.config = config or {}
         self.temp_dir = Path(temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         
@@ -58,8 +60,18 @@ class BundleUnpacker:
         Returns:
             True if should unpack, False for regular beautification
         """
-        # Only unpack large files (>100KB)
-        if file_size < 100 * 1024:
+        # Check if bundle unpacking is enabled in config
+        bundle_config = self.config.get('bundle_unpacker', {})
+        if not bundle_config.get('enabled', False):
+            return False
+        
+        # Check if webcrack is available
+        if not self.webcrack_available:
+            return False
+        
+        # Only unpack large files (>100KB by default)
+        min_size = bundle_config.get('min_file_size', 102400)
+        if file_size < min_size:
             return False
         
         # Check for bundle signatures
