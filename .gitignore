@@ -14,10 +14,13 @@ pip-delete-this-directory.txt
 
 # AI Development & Testing (hidden from main view)
 .ai/
+.docs/
 test/
 dev-test/
 test_*/
+test_output/
 benchmark_*.js
+benchmark_*.txt
 *_test.py
 *.test.js
 .coverage
@@ -30,6 +33,10 @@ cache/
 logs/
 temp/
 *.log
+
+# Benchmarks (keep scripts, ignore results)
+benchmarks/*.json
+benchmarks/baseline_*.json
 
 # Security - IMPORTANT: Never commit these!
 config.yaml  # Contains Discord webhook

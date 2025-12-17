@@ -49,10 +49,19 @@ recursion:
   enabled: true
   max_depth: 3 # Maximum crawl depth
 
-# AST Analysis
+# AST Analysis (v3.0 Enhanced)
 ast:
   enabled: true
   min_word_length: 4 # minimum word length for wordlist
+  enable_fragment_filtering: true # v3.0: Advanced wordlist filtering (vowel density, consonant clusters, suffix validation)
+
+# Bundle Unpacker (v3.0 NEW)
+# Requires: npm install -g webcrack
+bundle_unpacker:
+  enabled: false # Set to true when webcrack is installed
+  min_file_size: 102400 # Only unpack files >100KB
+  timeout: 300 # seconds
+  temp_dir: "temp/unpacked"
 
 # Logging
 logging:

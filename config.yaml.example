@@ -47,6 +47,19 @@ subjs:
 recursion:
   enabled: true
   max_depth: 3  # Maximum crawl depth
+
+# AST Analysis (v3.0)
+ast:
+  min_word_length: 4  # Minimum word length for wordlist
+  enable_fragment_filtering: true  # Advanced wordlist filtering (v3.0)
+
+# Bundle Unpacker (v3.0)
+# Requires: npm install -g webcrack
+bundle_unpacker:
+  enabled: false  # Set to true to enable bundle unpacking
+  min_file_size: 102400  # Only unpack files >100KB
+  timeout: 300  # seconds
+  temp_dir: "temp/unpacked"
   
 # AST Analysis
 ast:
