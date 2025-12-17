@@ -166,11 +166,68 @@ class BundleUnpacker:
                     self.logger.warning(
                         f"⚠️  webcrack failed: Output directory conflict\n"
                         f"   Directory: {output_path}\n"
-                        f"   Attempting to clean and retry..."
+                        f"   Attempting aggressive cleanup and retry..."
                     )
-                    # Force cleanup and don't retry (will fallback to beautification)
-                    if output_path.exists():
-                        shutil.rmtree(output_path, ignore_errors=True)
+                    
+                    # Aggressive cleanup with multiple strategies
+                    try:
+                        # Strategy 1: Direct removal
+                        if output_path.exists():
+                            shutil.rmtree(output_path, ignore_errors=True)
+                            await asyncio.sleep(0.3)
+                        
+                        # Strategy 2: If still exists, rename and delete
+                        if output_path.exists():
+                            temp_name = output_path.with_suffix(f'.old.{int(asyncio.get_event_loop().time())}')
+                            output_path.rename(temp_name)
+                            shutil.rmtree(temp_name, ignore_errors=True)
+                            await asyncio.sleep(0.3)
+                        
+                        # Strategy 3: Final verification
+                        if output_path.exists():
+                            self.logger.warning(f"⚠️  Could not remove directory, trying one more time...")
+                            shutil.rmtree(output_path, ignore_errors=True)
+                            await asyncio.sleep(0.5)
+                        
+                        # Recreate directory
+                        output_path.mkdir(parents=True, exist_ok=True)
+                        
+                        # Retry webcrack
+                        self.logger.debug("Retrying webcrack after cleanup...")
+                        retry_process = await asyncio.create_subprocess_exec(
+                            *cmd,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+                        
+                        retry_stdout, retry_stderr = await asyncio.wait_for(
+                            retry_process.communicate(),
+                            timeout=300
+                        )
+                        
+                        if retry_process.returncode == 0:
+                            extracted_files = list(output_path.rglob('*.js'))
+                            self.logger.info(
+                                f"✅ Bundle unpacked successfully (after retry)\n"
+                                f"   Input: {Path(input_file).name}\n"
+                                f"   Output: {output_path}\n"
+                                f"   Files extracted: {len(extracted_files)}"
+                            )
+                            return {
+                                'success': True,
+                                'input_file': input_file,
+                                'output_dir': str(output_path),
+                                'extracted_files': [str(f) for f in extracted_files],
+                                'file_count': len(extracted_files)
+                            }
+                        else:
+                            retry_error = retry_stderr.decode().strip() if retry_stderr else "Unknown error"
+                            self.logger.warning(f"⚠️  Retry failed: {retry_error}")
+                            return None
+                    
+                    except Exception as retry_ex:
+                        self.logger.warning(f"⚠️  Cleanup/retry failed: {retry_ex}")
+                        return None
                 else:
                     self.logger.warning(f"⚠️  webcrack failed: {error_msg}")
                 return None
