@@ -356,21 +356,56 @@ class ASTAnalyzer:
         
         return list(links)
     
+    def _is_valid_domain(self, domain: str) -> bool:
+        """Validate domain to filter out JavaScript namespaces and invalid entries"""
+        # Must have at least one dot
+        if domain.count('.') < 1:
+            return False
+        
+        # Must have valid TLD (common extensions)
+        valid_tlds = (
+            'com', 'net', 'org', 'io', 'dev', 'ch', 'uk', 'fr', 'de', 'jp', 'cn',
+            'app', 'xyz', 'tech', 'co', 'me', 'ai', 'in', 'it', 'ca', 'au', 'br',
+            'ru', 'nl', 'se', 'no', 'es', 'kr', 'tw', 'sg', 'hk', 'nz', 'us'
+        )
+        if not any(domain.lower().endswith('.' + tld) for tld in valid_tlds):
+            return False
+        
+        # Reject JavaScript namespaces and event handlers
+        js_prefixes = (
+            'ui.', 'bs.', 'click.', 'show.', 'hide.', 'event.', 'data.',
+            'components.', 'sk.', 'jquery.', 'js.', 'window.', 'document.'
+        )
+        if any(domain.lower().startswith(prefix) for prefix in js_prefixes):
+            return False
+        
+        # Reject file extensions disguised as domains
+        if domain.startswith('.') or domain.endswith('.js') or domain.endswith('.css'):
+            return False
+        
+        # Require at least 2 characters before first dot
+        first_part = domain.split('.')[0]
+        if len(first_part) < 2:
+            return False
+        
+        return True
+    
     async def _extract_domains(self, content: str) -> List[str]:
-        """Extracts external domains"""
+        """Extracts external domains with strict validation"""
         domains = set()
         
-        # Pattern for URLs and domains
-        url_pattern = r'https?://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
-        matches = re.findall(url_pattern, content)
-        domains.update(matches)
-        
-        # Pattern for domain-like strings
-        domain_pattern = r'["\']([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["\']'
-        matches = re.findall(domain_pattern, content)
-        # Filter out obvious false positives
+        # Pattern for URLs and domains (stricter)
+        url_pattern = r'https?://([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,6}'
+        matches = re.findall(url_pattern, content, re.IGNORECASE)
         for match in matches:
-            if '.' in match and not match.endswith('.js'):
+            if self._is_valid_domain(match):
+                domains.add(match)
+        
+        # Pattern for domain-like strings (stricter)
+        domain_pattern = r'["\']([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,6}["\']'
+        matches = re.findall(domain_pattern, content, re.IGNORECASE)
+        for match in matches:
+            if self._is_valid_domain(match):
                 domains.add(match)
         
         return list(domains)

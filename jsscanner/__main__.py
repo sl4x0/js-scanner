@@ -95,6 +95,9 @@ async def main():
     if args.no_recursion:
         config.setdefault('recursion', {})['enabled'] = False
     
+    if args.no_beautify:
+        config['skip_beautification'] = True
+    
     # Add verbose flag to config
     if hasattr(args, 'verbose') and args.verbose:
         config['verbose'] = True

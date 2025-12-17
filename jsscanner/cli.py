@@ -116,6 +116,12 @@ Performance Tips:
     )
     
     parser.add_argument(
+        '--no-beautify',
+        action='store_true',
+        help='Skip file beautification (faster scans, runs extraction on minified files)'
+    )
+    
+    parser.add_argument(
         '--threads',
         type=int,
         help='Number of concurrent threads (overrides config)'

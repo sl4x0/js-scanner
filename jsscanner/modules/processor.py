@@ -12,14 +12,16 @@ from typing import Optional
 class Processor:
     """Processes JavaScript files (beautify, extract source maps)"""
     
-    def __init__(self, logger) -> None:
+    def __init__(self, logger, skip_beautification: bool = False) -> None:
         """
         Initialize processor
         
         Args:
             logger: Logger instance
+            skip_beautification: If True, skip beautification step for faster scans
         """
         self.logger = logger
+        self.skip_beautification = skip_beautification
         self.beautifier_options = jsbeautifier.default_options()
         self.beautifier_options.indent_size = 2
     
@@ -58,6 +60,10 @@ class Processor:
             ValueError: If content is invalid
         """
         import asyncio
+        
+        # Skip beautification if disabled globally
+        if self.skip_beautification:
+            return content
         
         # Skip beautification for very large files (>20MB) - too slow and memory-intensive
         content_size_mb = len(content) / (1024 * 1024)

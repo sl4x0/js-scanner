@@ -336,7 +336,8 @@ class ScanEngine:
         from ..modules.crawler import Crawler
         
         self.fetcher = Fetcher(self.config, self.logger)
-        self.processor = Processor(self.logger)
+        skip_beautify = self.config.get('skip_beautification', False)
+        self.processor = Processor(self.logger, skip_beautification=skip_beautify)
         self.secret_scanner = SecretScanner(self.config, self.logger, self.state, self.notifier)
         self.ast_analyzer = ASTAnalyzer(self.config, self.logger, self.paths)
         self.crawler = Crawler(self.config, self.logger)
