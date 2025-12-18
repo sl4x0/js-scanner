@@ -403,10 +403,11 @@ class ScanEngine:
             
             if secrets:
                 self.logger.info(f"✅ Found {len(secrets)} secrets\n")
-                # Flush Discord notifications immediately to send secrets before Phase 4
-                await self.notifier.flush_queue(timeout=90)
             else:
                 self.logger.info(f"✅ No secrets found\n")
+            
+            # Flush Discord notifications immediately (verified + unverified findings)
+            await self.notifier.flush_queue(timeout=90)
             
             # ============================================================
             # PHASE 4: EXTRACTING DATA (Parallel)
