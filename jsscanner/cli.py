@@ -194,7 +194,7 @@ Performance Tips:
 
 def validate_config(config: dict) -> bool:
     """
-    Validates configuration
+    Validates configuration with comprehensive checks
     
     Args:
         config: Configuration dictionary
@@ -202,17 +202,89 @@ def validate_config(config: dict) -> bool:
     Returns:
         True if valid, False otherwise
     """
-    required_fields = ['discord_webhook']
+    errors = []
+    warnings = []
     
-    for field in required_fields:
-        if field not in config or not config[field]:
-            print(f"Error: '{field}' not configured in config.yaml")
-            return False
+    # 1. Discord webhook validation
+    webhook = config.get('discord_webhook', '')
+    if not webhook:
+        errors.append("❌ Discord webhook not configured")
+        errors.append("   → Set 'discord_webhook' in config.yaml")
+        errors.append("   → Get webhook from: Discord Server > Settings > Integrations > Webhooks")
+    elif webhook == "YOUR_DISCORD_WEBHOOK_URL_HERE" or not webhook.startswith('https://discord.com/api/webhooks/'):
+        errors.append("❌ Invalid Discord webhook URL")
+        errors.append("   → Must start with: https://discord.com/api/webhooks/")
+        errors.append("   → Example: https://discord.com/api/webhooks/123456789/abcdefg")
     
-    # Check if webhook looks valid
-    webhook = config['discord_webhook']
-    if webhook == "YOUR_WEBHOOK_URL" or not webhook.startswith('https://discord'):
-        print("Error: Please configure a valid Discord webhook URL in config.yaml")
+    # 2. Numeric range validations
+    numeric_validations = {
+        'threads': (1, 200, "Concurrent threads"),
+        'timeout': (5, 300, "HTTP timeout (seconds)"),
+        'max_file_size': (1024, 1073741824, "Max file size (1KB - 1GB)"),
+        'discord_rate_limit': (1, 60, "Discord messages per minute"),
+    }
+    
+    for field, (min_val, max_val, desc) in numeric_validations.items():
+        value = config.get(field)
+        if value is not None:
+            if not isinstance(value, (int, float)) or value < min_val or value > max_val:
+                errors.append(f"❌ Invalid {desc}: {value}")
+                errors.append(f"   → Must be between {min_val} and {max_val}")
+    
+    # 3. TruffleHog path validation (if specified)
+    trufflehog_path = config.get('trufflehog_path', '')
+    if trufflehog_path:  # Only validate if user specified custom path
+        from pathlib import Path
+        import shutil
+        
+        path = Path(trufflehog_path)
+        if not path.exists() and not shutil.which(trufflehog_path):
+            warnings.append(f"⚠️  TruffleHog not found at: {trufflehog_path}")
+            warnings.append("   → Will attempt auto-detection")
+    
+    # 4. Retry configuration validation
+    retry_config = config.get('retry', {})
+    if retry_config.get('http_requests', 2) < 1:
+        errors.append("❌ retry.http_requests must be >= 1")
+    if retry_config.get('backoff_base', 1.0) < 0.1:
+        errors.append("❌ retry.backoff_base must be >= 0.1")
+    
+    # 5. Checkpoint configuration validation
+    checkpoint_config = config.get('checkpoint', {})
+    if checkpoint_config.get('frequency', 10) < 1:
+        errors.append("❌ checkpoint.frequency must be >= 1")
+    
+    # 6. Notification batching validation
+    batch_config = config.get('notification_batching', {})
+    batch_size = batch_config.get('batch_size', 10)
+    if batch_size < 1 or batch_size > 25:
+        errors.append("❌ notification_batching.batch_size must be 1-25")
+        errors.append("   → Discord embed limit is 25 fields")
+    
+    # 7. Playwright configuration
+    playwright_config = config.get('playwright', {})
+    max_concurrent = playwright_config.get('max_concurrent', 10)
+    if max_concurrent < 1 or max_concurrent > 50:
+        warnings.append(f"⚠️  playwright.max_concurrent ({max_concurrent}) is unusual")
+        warnings.append("   → Recommended: 3-10 for optimal performance")
+    
+    # Print results
+    if errors:
+        print("\n" + "="*70)
+        print("❌ CONFIGURATION VALIDATION FAILED")
+        print("="*70)
+        for error in errors:
+            print(error)
+        print("\n💡 Fix these errors in config.yaml and try again")
+        print("="*70 + "\n")
         return False
+    
+    if warnings:
+        print("\n" + "="*70)
+        print("⚠️  CONFIGURATION WARNINGS")
+        print("="*70)
+        for warning in warnings:
+            print(warning)
+        print("="*70 + "\n")
     
     return True

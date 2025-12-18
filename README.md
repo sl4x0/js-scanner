@@ -1,10 +1,24 @@
 ![banner](./static/banner.png)
 
-# JS Scanner v3.1
+# JS Scanner v3.2
 
 High-performance JavaScript security scanner for bug bounty hunting with batch processing, secret detection, intelligent extraction, and enhanced reliability.
 
-## ✨ What's New in v3.1
+## ✨ What's New in v3.2
+
+- ✅ **Config Validation on Startup** - Comprehensive validation with helpful error messages
+- 📊 **Progress Reporting & ETA** - Real-time progress bars with throughput metrics and time estimates
+- 🔒 **Enhanced Browser Cleanup** - Thread-safe Playwright cleanup prevents orphaned processes
+- 🌲 **Improved Tree-sitter Messages** - User-friendly fallback messages (no more alarming warnings)
+- 🔔 **Notification Queue Limits** - Discord queue size limit (1000) prevents memory exhaustion
+- 🔁 **Smart Rate Limit Recovery** - Max 3 retries on 429 errors with backoff
+- 🎯 **Config Change Detection** - Warns when resuming scans with modified configs
+- 📝 **Structured Logging** - Optional context-aware logging with extra fields
+- 💬 **Better Error Messages** - Specific Discord webhook errors (404/400/429) with solutions
+
+### Previous Versions
+
+**v3.1**
 
 - 🔄 **Automatic Retry Logic** - Resilient HTTP/subprocess operations with exponential backoff
 - 💾 **Checkpoint System** - Resume interrupted scans with `--resume` flag
@@ -141,7 +155,18 @@ python -m jsscanner -t myproject -u https://example.com --source-maps
 
 ### Recent Updates
 
-**v3.1 (Current)**
+**v3.2 (Current)**
+
+- ✅ Config validation on startup with detailed error messages
+- 📊 Progress tracking with ETA calculation and throughput metrics
+- 🔒 Thread-safe browser cleanup with proper error handling
+- 🌲 User-friendly tree-sitter fallback messages
+- 🔔 Discord notification queue limits (prevents memory issues)
+- 🔁 Rate limit recovery (max 3 retries on 429 errors)
+- 🎯 Config change detection for resume operations
+- 📝 Structured logging support with context fields
+
+**v3.1**
 
 - 🔄 Automatic retry with exponential backoff (HTTP + subprocess)
 - 💾 Checkpoint system for resumable scans

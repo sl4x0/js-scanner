@@ -44,7 +44,8 @@ class ScanEngine:
         # Initialize Discord notifier
         webhook_url = config.get('discord_webhook')
         rate_limit = config.get('discord_rate_limit', 30)
-        self.notifier = DiscordNotifier(webhook_url, rate_limit, self.logger)
+        max_queue_size = config.get('discord_max_queue', 1000)
+        self.notifier = DiscordNotifier(webhook_url, rate_limit, max_queue_size, self.logger)
         
         # Modules will be initialized when needed
         self.fetcher = None
@@ -77,6 +78,81 @@ class ScanEngine:
             }
         }
     
+    def _log_progress(self, phase_name: str, current: int, total: int, extra_info: str = ""):
+        """
+        Log progress with ETA calculation
+        
+        Args:
+            phase_name: Name of current phase
+            current: Current progress count
+            total: Total items to process
+            extra_info: Additional information to display
+        """
+        if total == 0:
+            return
+        
+        # Update phase if changed
+        if phase_name != self.current_phase:
+            self.current_phase = phase_name
+            self.phase_start_time = time.time()
+            self.phase_progress = {'current': 0, 'total': total}
+        
+        # Update progress
+        self.phase_progress = {'current': current, 'total': total}
+        
+        # Calculate progress percentage
+        progress_pct = (current / total) * 100
+        
+        # Calculate ETA (only after processing a few items)
+        eta_str = ""
+        if current > 0 and self.phase_start_time:
+            elapsed = time.time() - self.phase_start_time
+            if elapsed > 0:
+                rate = current / elapsed
+                if rate > 0:
+                    remaining = total - current
+                    eta_seconds = remaining / rate
+                    
+                    # Format ETA nicely
+                    if eta_seconds < 60:
+                        eta_str = f", ETA: {int(eta_seconds)}s"
+                    elif eta_seconds < 3600:
+                        minutes = int(eta_seconds / 60)
+                        seconds = int(eta_seconds % 60)
+                        eta_str = f", ETA: {minutes}m {seconds}s"
+                    else:
+                        hours = int(eta_seconds / 3600)
+                        minutes = int((eta_seconds % 3600) / 60)
+                        eta_str = f", ETA: {hours}h {minutes}m"
+                    
+                    # Add throughput
+                    if rate >= 1:
+                        eta_str += f" ({rate:.1f} items/s)"
+                    else:
+                        eta_str += f" ({1/rate:.1f}s/item)"
+        
+        # Build progress bar
+        bar_width = 30
+        filled = int(bar_width * current / total)
+        bar = '█' * filled + '░' * (bar_width - filled)
+        
+        # Log only every 5% or on completion to avoid spam
+        progress_key = int(progress_pct / 5) * 5
+        current_time = time.time()
+        
+        # Throttle updates to once per 2 seconds, except for milestones
+        should_log = (
+            current == total or  # Always log completion
+            current == 1 or  # Always log first item
+            progress_key % 10 == 0 or  # Log every 10%
+            (current_time - self._last_progress_update) >= 2  # Or every 2 seconds
+        )
+        
+        if should_log:
+            extra = f" - {extra_info}" if extra_info else ""
+            self.logger.info(f"📊 {phase_name}: [{bar}] {current}/{total} ({progress_pct:.1f}%){eta_str}{extra}")
+            self._last_progress_update = current_time
+    
     async def run(self, inputs: List[str], use_subjs: bool = False, subjs_only: bool = False, resume: bool = False):
         """
         Main execution method with BATCH PROCESSING and checkpoint support
@@ -94,6 +170,17 @@ class ScanEngine:
         resume_state = None
         
         if resume and checkpoint_enabled and self.state.has_checkpoint():
+            # Check if config has changed
+            config_changed = self.state.check_config_changed(self.config)
+            if config_changed:
+                self.logger.warning("\n⚠️  WARNING: Configuration has changed since last scan!")
+                self.logger.warning("   Resuming with modified config may produce inconsistent results.")
+                self.logger.warning("   Consider starting a fresh scan instead.")
+                self.logger.warning("   Continuing anyway in 3 seconds... (Ctrl+C to cancel)\n")
+                
+                import asyncio
+                await asyncio.sleep(3)
+            
             resume_state = self.state.get_resume_state()
             self.logger.info(f"\n{'='*60}")
             self.logger.info("📂 RESUMING FROM CHECKPOINT")
@@ -101,6 +188,8 @@ class ScanEngine:
             self.logger.info(f"Last checkpoint: {resume_state.get('timestamp', 'unknown')}")
             self.logger.info(f"Phase: {resume_state.get('phase', 'unknown')}")
             self.logger.info(f"Progress: Phase {resume_state['phase_progress']['current_phase']}/{resume_state['phase_progress']['total_phases']}")
+            if config_changed:
+                self.logger.warning("⚠️  Config modified - results may be inconsistent")
             self.logger.info(f"{'='*60}\n")
         elif resume and checkpoint_enabled:
             self.logger.warning("⚠️  --resume specified but no checkpoint found, starting fresh scan")
@@ -746,9 +835,8 @@ class ScanEngine:
                     # Update progress
                     async with lock:
                         completed += 1
-                        if completed % 10 == 0 or completed == total_urls:
-                            success_count = len(downloaded_files) + 1  # +1 for current
-                            self.logger.info(f"🔄 Progress: {completed}/{total_urls} processed, {success_count} downloaded")
+                        success_count = len(downloaded_files) + 1  # +1 for current
+                        self._log_progress("Download Files", completed, total_urls, f"{success_count} saved")
                     
                     return {
                         'url': url,

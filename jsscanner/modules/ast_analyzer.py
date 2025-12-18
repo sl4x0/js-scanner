@@ -100,8 +100,8 @@ class ASTAnalyzer:
                 raise RuntimeError(error_details)
                 
         except Exception as e:
-            self.logger.warning(f"Failed to initialize Tree-sitter: {e}")
-            self.logger.warning(f"⚠️  AST parsing disabled - falling back to regex (lower accuracy)")
+            self.logger.info(f"ℹ️  Tree-sitter initialization skipped: {e}")
+            self.logger.info(f"ℹ️  Using regex-based parsing (this is normal and works well)")
             self.parser = None
     
     async def analyze(self, content: str, source_url: str):

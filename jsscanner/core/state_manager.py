@@ -586,3 +586,68 @@ class StateManager:
             'PHASE_6_COMPLETE': 6
         }
         return phase_map.get(phase, 0)
+    
+    def _calculate_config_hash(self, config: Dict[str, Any]) -> str:
+        """
+        Calculate hash of relevant config fields that affect scanning
+        
+        Args:
+            config: Configuration dictionary
+            
+        Returns:
+            SHA256 hash of config
+        """
+        # Only hash fields that affect scan results
+        relevant_fields = {
+            'threads': config.get('threads'),
+            'timeout': config.get('timeout'),
+            'min_file_size': config.get('min_file_size'),
+            'max_file_size': config.get('max_file_size'),
+            'recover_source_maps': config.get('recover_source_maps'),
+            'trufflehog_path': config.get('trufflehog_path'),
+            'trufflehog_extra_args': config.get('trufflehog_extra_args'),
+            'wordlist_extraction': config.get('wordlist_extraction'),
+            'beautify': config.get('beautify'),
+            'unpack_bundles': config.get('unpack_bundles')
+        }
+        
+        # Serialize to JSON and hash
+        config_str = json.dumps(relevant_fields, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()
+    
+    def check_config_changed(self, current_config: Dict[str, Any]) -> bool:
+        """
+        Check if config has changed since last scan
+        
+        Args:
+            current_config: Current configuration dictionary
+            
+        Returns:
+            True if config changed, False otherwise
+        """
+        current_hash = self._calculate_config_hash(current_config)
+        
+        try:
+            metadata = self.get_metadata()
+            last_config_hash = metadata.get('config_hash')
+            
+            if not last_config_hash:
+                # First scan, store hash
+                self.update_metadata({'config_hash': current_hash})
+                return False
+            
+            return current_hash != last_config_hash
+            
+        except (FileNotFoundError, json.JSONDecodeError):
+            # No previous scan
+            return False
+    
+    def update_config_hash(self, config: Dict[str, Any]):
+        """
+        Update stored config hash
+        
+        Args:
+            config: Current configuration dictionary
+        """
+        config_hash = self._calculate_config_hash(config)
+        self.update_metadata({'config_hash': config_hash})

@@ -127,6 +127,7 @@ class Fetcher:
         self.browser_manager = None
         self.last_failure_reason = None
         self.verbose = config.get('verbose', False)
+        self._browser_lock = asyncio.Lock()  # Prevent concurrent cleanup
 
         # Initialize noise filter
         self.noise_filter = NoiseFilter(logger=logger)
@@ -295,12 +296,21 @@ class Fetcher:
                 self.logger.warning(f"⚠️  Interaction triggers failed: {e}")
     
     async def cleanup(self) -> None:
-        """Cleanup Playwright resources"""
-        if self.browser_manager:
-            await self.browser_manager.close()
-        if self.playwright:
-            await self.playwright.stop()
-        self.logger.info("Playwright browser closed")
+        """Cleanup Playwright resources - thread-safe with lock"""
+        async with self._browser_lock:
+            if self.browser_manager:
+                try:
+                    await self.browser_manager.close()
+                    self.logger.info("Browser manager closed successfully")
+                except Exception as e:
+                    self.logger.warning(f"Browser manager cleanup error: {e}")
+            
+            if self.playwright:
+                try:
+                    await self.playwright.stop()
+                    self.logger.info("Playwright stopped successfully")
+                except Exception as e:
+                    self.logger.warning(f"Playwright cleanup error: {e}")
     
     async def fetch_live(self, target: str) -> List[str]:
         """Fetch JavaScript URLs from live site using Playwright"""

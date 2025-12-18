@@ -18,22 +18,26 @@ from datetime import datetime
 class DiscordNotifier:
     """Handles Discord webhook notifications with rate limiting"""
     
-    def __init__(self, webhook_url: str, rate_limit: int = 30, logger=None):
+    def __init__(self, webhook_url: str, rate_limit: int = 30, max_queue_size: int = 1000, logger=None):
         """
         Initialize Discord notifier
         
         Args:
             webhook_url: Discord webhook URL
             rate_limit: Maximum messages per minute (default: 30)
+            max_queue_size: Maximum queue size to prevent memory issues (default: 1000)
             logger: Logger instance for error reporting
         """
         self.webhook_url = webhook_url
         self.rate_limit = rate_limit
+        self.max_queue_size = max_queue_size
         self.queue = deque()
         self.message_times = deque()
+        self.message_retry_counts = {}  # Track retry attempts per message
         self.running = False
         self._task = None
         self.logger = logger
+        self._messages_dropped = 0
     
     async def start(self):
         """Starts the notification worker"""
@@ -74,6 +78,18 @@ class DiscordNotifier:
         Args:
             secret_data: Dictionary containing secret information
         """
+        # Check queue size limit
+        if len(self.queue) >= self.max_queue_size:
+            self._messages_dropped += 1
+            if self._messages_dropped % 100 == 1:  # Log every 100 drops
+                if self.logger:
+                    self.logger.warning(
+                        f"⚠️  Discord queue full ({self.max_queue_size}), "
+                        f"dropped {self._messages_dropped} messages. "
+                        f"Increase 'discord_max_queue' in config or reduce notification volume."
+                    )
+            return
+        
         embed = self._create_embed(secret_data)
         self.queue.append(embed)
     
@@ -235,20 +251,54 @@ class DiscordNotifier:
             timeout = aiohttp.ClientTimeout(total=10)
             async with session.post(self.webhook_url, json=embed, timeout=timeout) as response:
                 if response.status == 429:
-                    # Rate limited by Discord
-                    retry_after = int(response.headers.get('Retry-After', 5))
-                    await asyncio.sleep(retry_after)
-                    # Re-queue the message
-                    self.queue.appendleft(embed)
+                    # Rate limited by Discord - implement retry limit
+                    embed_id = id(embed)
+                    retry_count = self.message_retry_counts.get(embed_id, 0)
+                    
+                    if retry_count < 3:  # Max 3 retries per message
+                        retry_after = int(response.headers.get('Retry-After', 5))
+                        self.message_retry_counts[embed_id] = retry_count + 1
+                        
+                        if self.logger:
+                            self.logger.warning(
+                                f"⚠️  Discord rate limit (429), retry {retry_count + 1}/3 in {retry_after}s"
+                            )
+                        
+                        await asyncio.sleep(retry_after)
+                        self.queue.appendleft(embed)
+                    else:
+                        # Max retries reached - drop message
+                        if self.logger:
+                            self.logger.error(
+                                f"❌ Discord message dropped after 3 rate limit retries. "
+                                f"Consider reducing notification volume or increasing rate_limit."
+                            )
+                        self.message_retry_counts.pop(embed_id, None)
                 elif response.status not in [200, 204]:
                     error_text = await response.text()
                     if self.logger:
-                        self.logger.error(
-                            f"❌ Discord webhook failed!\n"
-                            f"   Status: {response.status}\n"
-                            f"   Error: {error_text[:200]}\n"
-                            f"   Check your webhook URL in config.yaml"
-                        )
+                        if response.status == 404:
+                            self.logger.error(
+                                f"❌ Discord webhook not found (404)\n"
+                                f"   The webhook URL is invalid or was deleted.\n"
+                                f"   Please check:\n"
+                                f"   1. Go to Discord Server > Settings > Integrations > Webhooks\n"
+                                f"   2. Copy the correct webhook URL\n"
+                                f"   3. Update 'discord_webhook' in config.yaml"
+                            )
+                        elif response.status == 400:
+                            self.logger.error(
+                                f"❌ Discord webhook bad request (400)\n"
+                                f"   Error: {error_text[:200]}\n"
+                                f"   The message format may be invalid or too large\n"
+                                f"   Discord limits: 2000 chars description, 6000 chars total"
+                            )
+                        else:
+                            self.logger.error(
+                                f"❌ Discord webhook failed (HTTP {response.status})\n"
+                                f"   Error: {error_text[:200]}\n"
+                                f"   Check your webhook URL in config.yaml"
+                            )
                     else:
                         print(f"Discord webhook error: {response.status}")
         except Exception as e:
