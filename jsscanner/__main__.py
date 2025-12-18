@@ -188,8 +188,8 @@ async def main():
             # Initialize engine for this target
             engine = ScanEngine(config, target)
             
-            # Run scan with new parameters
-            await engine.run(targets_to_scan, use_subjs=use_subjs, subjs_only=subjs_only)
+            # Run scan with new parameters (including resume)
+            await engine.run(targets_to_scan, use_subjs=use_subjs, subjs_only=subjs_only, resume=args.resume)
             
             if len(targets) > 1 and idx < len(targets):
                 print(f"\n✓ Completed scan {idx}/{len(targets)} for {target}")

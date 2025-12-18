@@ -1,13 +1,21 @@
 ![banner](./static/banner.png)
 
-# JS Scanner v3.0
+# JS Scanner v3.1
 
-High-performance JavaScript security scanner for bug bounty hunting with batch processing, secret detection, and intelligent extraction.
+High-performance JavaScript security scanner for bug bounty hunting with batch processing, secret detection, intelligent extraction, and enhanced reliability.
+
+## ✨ What's New in v3.1
+
+- 🔄 **Automatic Retry Logic** - Resilient HTTP/subprocess operations with exponential backoff
+- 💾 **Checkpoint System** - Resume interrupted scans with `--resume` flag
+- 🎯 **Enhanced Minification Detection** - 5-heuristic scoring for accurate detection
+- 📢 **Smart Discord Notifications** - Verified secrets sent immediately, unverified batched by domain
+- 🧩 **Dynamic Import Detection** - Detects code splitting patterns (import(), React.lazy(), webpack chunks)
 
 ## 📊 Workflow
 
 <details>
-<summary><b>📊 Click to view workflow diagram</b></summary>
+<summary><b>CLICK TO VIEW!</b></summary>
 
 ```mermaid
 flowchart TD
@@ -131,12 +139,20 @@ python -m jsscanner -t myproject -u https://example.com --source-maps
 - ✅ **Domain organization** - Results organized by domain folders
 - ✅ **Smart filtering** - Noise reduction for CDNs and known libraries
 
-### v3.0 Updates
+### Recent Updates
 
+**v3.1 (Current)**
+- 🔄 Automatic retry with exponential backoff (HTTP + subprocess)
+- 💾 Checkpoint system for resumable scans
+- 🎯 Multi-heuristic minification detection (5 metrics)
+- 📢 Smart Discord notifications (verified immediate, unverified batched)
+- 🧩 Dynamic import detection (9 patterns)
+- ⚡ Configurable batching strategy per domain
+
+**v3.0**
 - ✨ Streamlined extraction (endpoints, domains, links only)
 - ✨ Bundle detection with webcrack support
 - ✨ Cross-version tree-sitter compatibility
-- ✨ Improved error handling and retry logic
 - ✨ Configurable cleanup (keep/delete minified files)
 - ⚠️ Removed params/wordlist features for better focus
 
@@ -197,6 +213,7 @@ python -m jsscanner -t bulk-scan -i domains.txt --subjs --no-beautify
 | `--subjs`       | Use SubJS for discovery + live scan     |
 | `--subjs-only`  | Use ONLY SubJS (skip browser)           |
 | `--source-maps` | Attempt to recover source maps          |
+| `--resume`      | Resume from last checkpoint (v3.1)      |
 | `--no-beautify` | Skip beautification (faster)            |
 | `--force`       | Force rescan (ignore cache)             |
 | `--no-live`     | Skip live browser scanning              |

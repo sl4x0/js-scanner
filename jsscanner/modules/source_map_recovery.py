@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from typing import Dict, List, Optional, Tuple
 import re
+from ..utils.retry import retry_async, RETRY_CONFIG_LIGHT
 
 
 class SourceMapRecoverer:
@@ -109,7 +110,8 @@ class SourceMapRecoverer:
 
     async def _fetch_map(self, map_url: str) -> Optional[str]:
         """
-        Download source map file
+        Download source map file with retry on failures.
+        Uses lighter retry config (2 attempts) since maps are optional.
 
         Args:
             map_url: URL of source map
@@ -117,7 +119,21 @@ class SourceMapRecoverer:
         Returns:
             Source map content, or None
         """
-        try:
+        # Get retry config
+        retry_config = self.config.get('retry', {})
+        max_attempts = retry_config.get('http_requests', 3)
+        # Use lighter retry for source maps (optional resources)
+        max_attempts = min(max_attempts, 2)
+        backoff_base = retry_config.get('backoff_base', 0.5)
+        
+        # Define retry wrapper
+        @retry_async(
+            max_attempts=max_attempts,
+            backoff_base=backoff_base,
+            retry_on=(asyncio.TimeoutError, aiohttp.ClientError),
+            operation_name=f"fetch_map({map_url[:50]}...)"
+        )
+        async def _do_fetch_map():
             # Handle inline maps (data: URLs)
             if map_url.startswith('data:'):
                 # Extract base64 data
@@ -136,9 +152,15 @@ class SourceMapRecoverer:
                     if response.status == 200:
                         return await response.text()
                     else:
+                        # Non-200 status - don't retry
                         self.logger.debug(f"Failed to fetch map (HTTP {response.status}): {map_url}")
                         return None
-
+        
+        try:
+            return await _do_fetch_map()
+        except (asyncio.TimeoutError, aiohttp.ClientError):
+            self.logger.debug(f"Source map fetch failed after retries: {map_url}")
+            return None
         except Exception as e:
             self.logger.debug(f"Error fetching map {map_url}: {e}")
             return None
@@ -192,15 +214,32 @@ class SourceMapRecoverer:
             return {}
 
     async def _fetch_source(self, source_url: str) -> Optional[str]:
-        """Fetch a single source file"""
-        try:
+        """
+        Fetch a single source file with retry on failures.
+        Uses lighter retry config (2 attempts) since individual sources are optional.
+        """
+        # Get retry config
+        retry_config = self.config.get('retry', {})
+        max_attempts = min(retry_config.get('http_requests', 3), 2)  # Max 2 attempts
+        backoff_base = retry_config.get('backoff_base', 0.5)
+        
+        @retry_async(
+            max_attempts=max_attempts,
+            backoff_base=backoff_base,
+            retry_on=(asyncio.TimeoutError, aiohttp.ClientError),
+            operation_name=f"fetch_source({source_url[:40]}...)"
+        )
+        async def _do_fetch_source():
             async with aiohttp.ClientSession() as session:
                 async with session.get(source_url, timeout=aiohttp.ClientTimeout(total=5)) as response:
                     if response.status == 200:
                         return await response.text()
+                    return None
+        
+        try:
+            return await _do_fetch_source()
         except Exception:
-            pass
-        return None
+            return None
 
     @staticmethod
     def _clean_source_path(path: str) -> str:

@@ -77,57 +77,106 @@ class DiscordNotifier:
         embed = self._create_embed(secret_data)
         self.queue.append(embed)
     
-    async def queue_batch_alert(self, secrets: list, file_path: str):
+    async def queue_batch_alert(self, secrets: list, file_path: str = None, domain: str = None):
         """
-        Queue multiple secrets from same file as single notification
+        Queue multiple secrets as a single batched notification
         This reduces Discord spam and improves notification efficiency
         
         Args:
             secrets: List of secret data dictionaries
-            file_path: Path to the file containing the secrets
+            file_path: Path to the file containing the secrets (optional)
+            domain: Domain for grouping (optional)
         """
         from pathlib import Path
+        from urllib.parse import urlparse
+        
+        if not secrets:
+            return
         
         # If only one secret, use regular alert
         if len(secrets) == 1:
             await self.queue_alert(secrets[0])
             return
         
-        # Determine if any are verified
-        has_verified = any(s.get('Verified', s.get('verified', False)) for s in secrets)
-        color = 0xFF0000 if has_verified else 0xFFA500  # Red if any verified, orange otherwise
+        # Count verified vs unverified
+        verified_count = sum(1 for s in secrets if s.get('Verified', s.get('verified', False)))
+        unverified_count = len(secrets) - verified_count
         
-        # Create batch embed
-        filename = Path(file_path).name
+        # Color: Red if any verified, orange otherwise
+        color = 0xFF0000 if verified_count > 0 else 0xFFA500
         
-        # Build fields (max 25 fields per Discord embed, limit to 10 for readability)
+        # Extract domain if not provided
+        if not domain and secrets:
+            source_metadata = secrets[0].get('SourceMetadata', {})
+            url = source_metadata.get('url', '')
+            if url:
+                try:
+                    parsed = urlparse(url)
+                    domain = parsed.netloc or 'Multiple Sources'
+                except:
+                    domain = 'Multiple Sources'
+            else:
+                domain = 'Multiple Sources'
+        
+        # Create summary description
+        summary_parts = []
+        if verified_count > 0:
+            summary_parts.append(f"✅ **{verified_count} Verified**")
+        if unverified_count > 0:
+            summary_parts.append(f"⚠️ **{unverified_count} Unverified**")
+        
+        description = " • ".join(summary_parts)
+        
+        # Build compact fields (max 25 fields, limit to 15 for readability)
         fields = []
-        for i, secret in enumerate(secrets[:10], 1):
+        display_limit = min(len(secrets), 15)
+        
+        for i, secret in enumerate(secrets[:display_limit], 1):
             detector_name = secret.get('DetectorName', secret.get('type', 'Unknown'))
             verified = secret.get('Verified', secret.get('verified', False))
+            status_icon = "✅" if verified else "⚠️"
+            
+            # Get source URL for this secret
+            source_metadata = secret.get('SourceMetadata', {})
+            secret_url = source_metadata.get('url', '')
+            line_num = source_metadata.get('line', '')
+            
+            # Create compact value with URL
+            value_parts = [f"{status_icon} {detector_name}"]
+            if line_num:
+                value_parts.append(f"Line {line_num}")
+            if secret_url and len(secret_url) <= 60:
+                value_parts.append(secret_url)
             
             fields.append({
-                'name': f'Secret #{i}: {detector_name}',
-                'value': f'Verified: {"✅ YES" if verified else "❌ NO"}',
+                'name': f'#{i}',
+                'value': '\n'.join(value_parts),
                 'inline': True
             })
         
-        # Add overflow message if more than 10
-        if len(secrets) > 10:
+        # Add overflow indicator if more secrets exist
+        if len(secrets) > display_limit:
             fields.append({
-                'name': '⚠️ More Secrets',
-                'value': f'+ {len(secrets) - 10} additional secrets (check logs)',
+                'name': '➕ More',
+                'value': f'+ {len(secrets) - display_limit} additional secrets\n(check scan results)',
                 'inline': False
             })
         
+        # Create title
+        title_icon = "🔴" if verified_count > 0 else "🟠"
+        title = f"{title_icon} {len(secrets)} Secrets Found • {domain}"
+        if len(title) > 256:
+            title = title[:253] + "..."
+        
+        # Create embed
         embed = {
             'embeds': [{
-                'title': f'🚨 {len(secrets)} Secrets Found in {filename}',
-                'description': f'Multiple secrets detected in the same file',
+                'title': title,
+                'description': description,
                 'color': color,
                 'fields': fields,
                 'footer': {
-                    'text': f'File: {file_path}'
+                    'text': f'JS-Scanner v3.1 • {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}'
                 },
                 'timestamp': datetime.utcnow().isoformat()
             }]
@@ -148,8 +197,13 @@ class DiscordNotifier:
                     embed = self.queue.popleft()
                     await self._send_webhook(session, embed)
                     self.message_times.append(time.time())
+                    
+                    # Add configurable delay between messages to avoid bursts
+                    # This helps with rate limiting and readability
+                    if self.queue:  # Only delay if more messages are pending
+                        await asyncio.sleep(0.5)  # 500ms default delay
                 else:
-                    # Wait a bit before checking again
+                    # Wait before checking rate limit again
                     await asyncio.sleep(2)
     
     async def _can_send(self) -> bool:
@@ -213,6 +267,9 @@ class DiscordNotifier:
         Returns:
             Discord webhook payload
         """
+        from urllib.parse import urlparse
+        from pathlib import Path
+        
         # Determine verification status and color
         verified = secret_data.get('Verified', secret_data.get('verified', False))
         color = 0xFF0000 if verified else 0xFFA500  # Red = verified, Orange = unverified
@@ -220,65 +277,71 @@ class DiscordNotifier:
         # Get detector info
         detector_name = secret_data.get('DetectorName', secret_data.get('type', 'Unknown'))
         
+        # Get source metadata
+        source_metadata = secret_data.get('SourceMetadata', {})
+        url = source_metadata.get('url', '')
+        
+        # Extract domain from URL
+        domain = 'Unknown'
+        if url:
+            try:
+                parsed = urlparse(url)
+                domain = parsed.netloc or 'Unknown'
+            except:
+                pass
+        
         # Get the actual secret
         raw_secret = secret_data.get('Raw', secret_data.get('RawV2', secret_data.get('secret', '')))
         redacted = secret_data.get('Redacted', '')
         
         # Use redacted version if available, otherwise show raw (truncated if needed)
         display_secret = redacted if redacted else raw_secret
-        if len(display_secret) > 150:
-            display_secret = display_secret[:150] + "..."
+        # Respect Discord's description limit (4096 chars) - keep it short and readable
+        if len(display_secret) > 200:
+            display_secret = display_secret[:200] + "..."
         
-        # Build minimal description with secret
+        # Build description with secret in code block
         description = f"```\n{display_secret}\n```"
         
-        # Build minimal fields
+        # Build compact fields
         fields = []
         
-        # Source metadata
-        source_metadata = secret_data.get('SourceMetadata', {})
+        # Source: Just the URL (clean and clickable)
+        if url:
+            # Truncate very long URLs but keep them functional
+            display_url = url if len(url) <= 100 else url[:97] + "..."
+            fields.append({
+                'name': '🔗 Source',
+                'value': display_url,
+                'inline': False
+            })
         
-        if source_metadata:
-            # Combined File + URL in one field
-            file_path = source_metadata.get('file', '')
-            url = source_metadata.get('url', '')
-            
-            if file_path and url:
-                from pathlib import Path
-                filename = Path(file_path).name
-                # Truncate URL for display
-                display_url = url if len(url) <= 80 else url[:77] + "..."
-                fields.append({
-                    'name': '📄 Source',
-                    'value': f"`{filename}`\n{url}",
-                    'inline': False
-                })
-            
-            # Line number and detector on same row
-            line_num = source_metadata.get('line', 0)
-            if line_num:
-                fields.append({
-                    'name': 'Line',
-                    'value': f"`{line_num}`",
-                    'inline': True
-                })
-        
-        fields.append({
-            'name': 'Type',
-            'value': f"`{detector_name}`",
-            'inline': True
-        })
+        # Line number (if available)
+        line_num = source_metadata.get('line', 0)
+        if line_num:
+            fields.append({
+                'name': 'Line',
+                'value': f"`{line_num}`",
+                'inline': True
+            })
         
         # Verification status
-        status_text = "✅ Verified" if verified else "⚠️ Unverified"
+        status_icon = "✅" if verified else "⚠️"
+        status_text = "Verified" if verified else "Unverified"
         fields.append({
             'name': 'Status',
-            'value': status_text,
+            'value': f"{status_icon} {status_text}",
             'inline': True
         })
         
-        # Create embed
-        title = f"{'🔴' if verified else '🟠'} {detector_name} Secret"
+        # Create title with secret type and domain
+        title_icon = "🔴" if verified else "🟠"
+        title = f"{title_icon} {detector_name} • {domain}"
+        # Discord title limit is 256 chars
+        if len(title) > 256:
+            title = title[:253] + "..."
+        
+        # Create embed with footer
         embed = {
             'embeds': [{
                 'title': title,
@@ -286,13 +349,59 @@ class DiscordNotifier:
                 'color': color,
                 'fields': fields,
                 'footer': {
-                    'text': 'JS-Scanner v3.1'
+                    'text': f'JS-Scanner v3.1 • {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}'
                 },
                 'timestamp': datetime.utcnow().isoformat()
             }]
         }
         
         return embed
+    
+    async def flush_batched_secrets(self, unverified_secrets: list, batch_size: int = 10, group_by_domain: bool = True):
+        """
+        Flush batched unverified secrets at phase end
+        Groups secrets intelligently and respects Discord limits
+        
+        Args:
+            unverified_secrets: List of unverified secret data dictionaries
+            batch_size: Maximum secrets per message (default: 10)
+            group_by_domain: Whether to group by domain (default: True)
+        """
+        if not unverified_secrets:
+            return
+        
+        from urllib.parse import urlparse
+        
+        if group_by_domain:
+            # Group secrets by domain
+            domain_groups = {}
+            for secret in unverified_secrets:
+                source_metadata = secret.get('SourceMetadata', {})
+                url = source_metadata.get('url', '')
+                
+                domain = 'unknown'
+                if url:
+                    try:
+                        parsed = urlparse(url)
+                        domain = parsed.netloc or 'unknown'
+                    except:
+                        pass
+                
+                if domain not in domain_groups:
+                    domain_groups[domain] = []
+                domain_groups[domain].append(secret)
+            
+            # Send batches per domain
+            for domain, secrets in domain_groups.items():
+                # Split into chunks if needed
+                for i in range(0, len(secrets), batch_size):
+                    batch = secrets[i:i + batch_size]
+                    await self.queue_batch_alert(batch, domain=domain)
+        else:
+            # Send in batches without domain grouping
+            for i in range(0, len(unverified_secrets), batch_size):
+                batch = unverified_secrets[i:i + batch_size]
+                await self.queue_batch_alert(batch)
     
     async def send_status(self, message: str, status_type: str = 'info'):
         """

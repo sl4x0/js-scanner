@@ -1,16 +1,14 @@
 # Discord Integration
-# 🔴 CRITICAL SECURITY ALERT 🔴
-# The Discord webhook URL below is EXPOSED in your Git history!
-# IMMEDIATE ACTIONS REQUIRED:
-#   1. Go to Discord → Server Settings → Integrations → Webhooks
-#   2. DELETE the webhook ending in ...ljO7M3
-#   3. CREATE a new webhook and update this file
-#   4. NEVER commit config.yaml to Git again (it's in .gitignore)
-#   5. Use config.yaml.example as template for sharing
-# ⚠️ Consider using environment variable: DISCORD_WEBHOOK
 discord_webhook: "https://discord.com/api/webhooks/1450082381934362726/IAgRuWMbRnzpHaAezmqVPJdg05L3yYe9nG48RCV5Io6ob9ekytIqpCYxQDg6z-ljO7M3"
 discord_rate_limit: 30 # messages per minute
 discord_status_enabled: false # Only send secret alerts, no start/complete notifications
+
+# Notification Batching Strategy
+notification_batching:
+  strategy: "verified_immediate" # verified_immediate = send verified instantly, batch unverified at phase end
+  batch_size: 10 # Max secrets to show per batch message (Discord has 25 field limit)
+  group_by_domain: true # Group secrets by domain in batch messages
+  min_delay: 1 # Minimum delay between messages (seconds) to avoid rate limits
 
 # TruffleHog
 # Cross-platform: Use relative path or leave empty to auto-detect
@@ -22,7 +20,7 @@ trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 
 # Fetching
 threads: 50 # Reduced to avoid rate limiting (was 100)
-timeout: 60 # seconds (increased for slow servers)
+timeout: 30 # seconds (increased for slow servers)
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
 verify_ssl: false # Set to false to bypass SSL certificate verification errors
@@ -53,7 +51,7 @@ ast:
 # Requires: npm install -g webcrack
 bundle_unpacker:
   enabled: false
-  min_file_size:  102400 # 100 KB 
+  min_file_size: 102400 # 100 KB
   timeout: 300 # seconds
   temp_dir: "temp/unpacked"
 
@@ -75,3 +73,36 @@ batch_processing:
   download_threads: 100 # Max concurrent downloads in Phase 2 - fetching
   process_threads: 100 # Max concurrent processing in Phase 4 - beautification & analysis
   cleanup_minified: false # Keep both minified and unminified files after processing
+
+# Retry Configuration (NEW)
+retry:
+  http_requests: 2 # Max retry attempts for HTTP operations
+  subprocess_calls: 2 # Max retry attempts for subprocess operations
+  backoff_base: 1.0 # Base delay in seconds for exponential backoff (1s -> 2s -> 4s)
+  backoff_multiplier: 2.0 # Multiplier for exponential backoff
+  jitter: true # Add random jitter to prevent thundering herd
+
+# Minification Detection (ENHANCED)
+minification_detection:
+  sample_size: 10000 # Characters to analyze for minification detection
+  threshold_score: 5 # Score threshold (0-10) to classify as minified
+  # Scoring weights (for reference - hardcoded in engine.py):
+  # avg_line_length > 200: +3 points
+  # semicolon_density > 5: +2 points
+  # whitespace_ratio < 0.15: +2 points
+  # short_var_ratio > 0.3: +2 points
+  # no_comments: +1 point
+
+# Checkpoint System (NEW)
+checkpoint:
+  enabled: true # Enable checkpoint system for resumable scans
+  frequency: 10 # Save checkpoint every N files (also saves every 30 seconds)
+  auto_cleanup: true # Delete checkpoint on successful completion
+
+# Code Splitting Detection (NEW)
+code_splitting:
+  detect_dynamic_imports: true # Detect import(), require(), lazy loading patterns
+  extract_chunk_map: true # Parse webpack/vite chunk manifests
+  follow_import_chain: false # Recursively fetch discovered imports (expensive - disabled by default)
+  max_import_depth: 2 # Maximum recursion depth if follow_import_chain enabled
+  probe_common_locales: ["en", "es", "fr", "de", "ja", "zh"] # For template literal imports like ./locales/${lang}.js

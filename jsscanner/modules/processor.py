@@ -209,3 +209,84 @@ class Processor:
         content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
         
         return content
+    
+    async def assess_beautification_quality(self, original: str, beautified: str) -> dict:
+        """
+        Assess beautification quality by comparing original and beautified content.
+        
+        Provides metrics to evaluate how well the beautification process worked,
+        which helps identify cases where:
+        - Code was already well-formatted (minimal improvement)
+        - Beautification was highly effective (large improvement)
+        - Potential issues with the beautification process
+        
+        Args:
+            original: Original (potentially minified) JavaScript content
+            beautified: Beautified JavaScript content
+            
+        Returns:
+            Dictionary with quality metrics:
+            {
+                'expansion_ratio': float,  # beautified_size / original_size
+                'avg_line_length_before': float,
+                'avg_line_length_after': float,
+                'line_count_before': int,
+                'line_count_after': int,
+                'quality_score': str,  # 'excellent', 'good', 'poor', 'failed'
+                'recommendations': list  # List of recommended actions
+            }
+        """
+        # Prevent division by zero
+        if not original or not beautified:
+            return {
+                'expansion_ratio': 0.0,
+                'avg_line_length_before': 0.0,
+                'avg_line_length_after': 0.0,
+                'line_count_before': 0,
+                'line_count_after': 0,
+                'quality_score': 'failed',
+                'recommendations': ['Empty content - beautification failed']
+            }
+        
+        orig_lines = original.split('\n')
+        beau_lines = beautified.split('\n')
+        
+        # Calculate metrics
+        expansion_ratio = len(beautified) / len(original) if len(original) > 0 else 0
+        avg_line_before = sum(len(l) for l in orig_lines) / len(orig_lines) if orig_lines else 0
+        avg_line_after = sum(len(l) for l in beau_lines) / len(beau_lines) if beau_lines else 0
+        
+        metrics = {
+            'expansion_ratio': round(expansion_ratio, 2),
+            'avg_line_length_before': round(avg_line_before, 1),
+            'avg_line_length_after': round(avg_line_after, 1),
+            'line_count_before': len(orig_lines),
+            'line_count_after': len(beau_lines),
+            'recommendations': []
+        }
+        
+        # Quality assessment based on expansion ratio and line length
+        if expansion_ratio > 2.0 and avg_line_after < 100:
+            # Excellent: Significant expansion with reasonable line lengths
+            metrics['quality_score'] = 'excellent'
+            metrics['recommendations'].append('Beautification highly effective')
+        elif expansion_ratio > 1.5 and avg_line_after < 150:
+            # Good: Moderate expansion with good formatting
+            metrics['quality_score'] = 'good'
+            metrics['recommendations'].append('Beautification successful')
+        elif expansion_ratio > 1.1:
+            # Poor: Minimal expansion suggests limited improvement
+            metrics['quality_score'] = 'poor'
+            metrics['recommendations'].append('Limited improvement - file may be already formatted or heavily obfuscated')
+            if avg_line_after > 200:
+                metrics['recommendations'].append('Consider manual formatting - lines still very long')
+        else:
+            # Failed: No expansion suggests beautification had no effect
+            metrics['quality_score'] = 'failed'
+            metrics['recommendations'].append('Beautification had minimal effect')
+            if expansion_ratio < 1.0:
+                metrics['recommendations'].append('Content reduced in size - possible data loss')
+            else:
+                metrics['recommendations'].append('File may already be formatted or use custom minification')
+        
+        return metrics

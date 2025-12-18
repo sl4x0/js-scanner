@@ -266,9 +266,20 @@ class SecretScanner:
                         except Exception as e:
                             self.logger.error(f"Failed to force kill process: {e}")
             
-            # ✅ OPTIMIZATION: Send batch notification instead of individual alerts
+            # ✅ OPTIMIZATION: Separate verified (immediate) from unverified (batched)
             if file_secrets:
-                await self.notifier.queue_batch_alert(file_secrets, file_path)
+                verified_secrets = [s for s in file_secrets if s.get('Verified', s.get('verified', False))]
+                unverified_secrets = [s for s in file_secrets if not s.get('Verified', s.get('verified', False))]
+                
+                # Send verified secrets immediately
+                if verified_secrets:
+                    await self.notifier.queue_batch_alert(verified_secrets, file_path)
+                
+                # Store unverified secrets for batch sending at phase end
+                if unverified_secrets:
+                    if not hasattr(self, 'pending_unverified'):
+                        self.pending_unverified = []
+                    self.pending_unverified.extend(unverified_secrets)
             
             if secrets_found > 0:
                 self.logger.info(f"Found {secrets_found} verified secrets in {file_path}")

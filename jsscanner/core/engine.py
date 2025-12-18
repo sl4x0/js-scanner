@@ -77,22 +77,41 @@ class ScanEngine:
             }
         }
     
-    async def run(self, inputs: List[str], use_subjs: bool = False, subjs_only: bool = False):
+    async def run(self, inputs: List[str], use_subjs: bool = False, subjs_only: bool = False, resume: bool = False):
         """
-        Main execution method with BATCH PROCESSING
+        Main execution method with BATCH PROCESSING and checkpoint support
         
         Args:
             inputs: List of URLs or domains to scan
             use_subjs: If True, use SubJS for additional URL discovery
             subjs_only: If True, only use SubJS (skip live browser scan)
+            resume: If True, resume from last checkpoint if available
         """
         self.start_time = time.time()
+        
+        # Check for resumable checkpoint
+        checkpoint_enabled = self.config.get('checkpoint', {}).get('enabled', True)
+        resume_state = None
+        
+        if resume and checkpoint_enabled and self.state.has_checkpoint():
+            resume_state = self.state.get_resume_state()
+            self.logger.info(f"\n{'='*60}")
+            self.logger.info("📂 RESUMING FROM CHECKPOINT")
+            self.logger.info(f"{'='*60}")
+            self.logger.info(f"Last checkpoint: {resume_state.get('timestamp', 'unknown')}")
+            self.logger.info(f"Phase: {resume_state.get('phase', 'unknown')}")
+            self.logger.info(f"Progress: Phase {resume_state['phase_progress']['current_phase']}/{resume_state['phase_progress']['total_phases']}")
+            self.logger.info(f"{'='*60}\n")
+        elif resume and checkpoint_enabled:
+            self.logger.warning("⚠️  --resume specified but no checkpoint found, starting fresh scan")
+            resume = False
         
         # Update metadata with start time
         self.state.update_metadata({
             'start_time': datetime.utcnow().isoformat() + 'Z',
             'use_subjs': use_subjs,
-            'subjs_only': subjs_only
+            'subjs_only': subjs_only,
+            'resumed': resume
         })
         
         # Setup signal handlers for graceful shutdown with timeout
@@ -159,8 +178,23 @@ class ScanEngine:
                 except:
                     pass
             
-            # Process domains concurrently
-            urls_to_scan = await self._discover_all_domains_concurrent(inputs, use_subjs, subjs_only)
+            # Resume logic: Skip discovery if already completed
+            if resume_state and resume_state.get('discovery', {}).get('completed'):
+                urls_to_scan = resume_state['discovery']['urls_discovered']
+                self.logger.info(f"➩ Skipping Phase 1 (already completed) - loaded {len(urls_to_scan)} URLs from checkpoint")
+            else:
+                # Process domains concurrently
+                urls_to_scan = await self._discover_all_domains_concurrent(inputs, use_subjs, subjs_only)
+                
+                # Save checkpoint after Phase 1
+                if checkpoint_enabled:
+                    self.state.save_checkpoint('PHASE_1_COMPLETE', {
+                        'discovery': {
+                            'completed': True,
+                            'urls_discovered': urls_to_scan,
+                            'total_urls': len(urls_to_scan)
+                        }
+                    })
             
             if not urls_to_scan:
                 self.logger.warning("No JavaScript files found to scan")
@@ -173,7 +207,23 @@ class ScanEngine:
             self.logger.info("⬇️  PHASE 2: DOWNLOADING ALL FILES")
             self.logger.info(f"{'='*60}")
             
-            downloaded_files = await self._download_all_files(urls_to_scan)
+            # Resume logic: Skip download if already completed
+            if resume_state and resume_state.get('download', {}).get('completed'):
+                downloaded_files = resume_state['download'].get('downloaded_files', [])
+                self.logger.info(f"➩ Skipping Phase 2 (already completed) - loaded {len(downloaded_files)} files from checkpoint")
+            else:
+                downloaded_files = await self._download_all_files(urls_to_scan)
+                
+                # Save checkpoint after Phase 2
+                if checkpoint_enabled:
+                    self.state.save_checkpoint('PHASE_2_COMPLETE', {
+                        'download': {
+                            'completed': True,
+                            'downloaded_files': [str(f) for f in downloaded_files],
+                            'total_downloaded': len(downloaded_files)
+                        }
+                    })
+            
             self.logger.info(f"✅ Downloaded {len(downloaded_files)} files\n")
             
             if not downloaded_files:
@@ -248,6 +298,18 @@ class ScanEngine:
             trufflehog_output = Path(self.paths['base']) / 'trufflehog_full.json'
             self.secret_scanner.export_results(str(trufflehog_output))
             
+            # Flush pending unverified notifications at phase end
+            await self.secret_scanner.flush_pending_notifications()
+            
+            # Save checkpoint after Phase 3
+            if checkpoint_enabled:
+                self.state.save_checkpoint('PHASE_3_COMPLETE', {
+                    'scanning': {
+                        'completed': True,
+                        'secrets_found': len(secrets)
+                    }
+                })
+            
             if secrets:
                 self.logger.info(f"✅ Found {len(secrets)} secrets\n")
             else:
@@ -262,6 +324,15 @@ class ScanEngine:
             
             await self._process_all_files_parallel(downloaded_files)
             
+            # Save checkpoint after Phase 4
+            if checkpoint_enabled:
+                self.state.save_checkpoint('PHASE_4_COMPLETE', {
+                    'extraction': {
+                        'completed': True,
+                        'processed_files': len(downloaded_files)
+                    }
+                })
+            
             # ============================================================
             # PHASE 5: BEAUTIFYING FILES
             # ============================================================
@@ -275,6 +346,15 @@ class ScanEngine:
             self.logger.info(f"{'='*60}")
             
             await self._unminify_all_files(downloaded_files)
+            
+            # Save checkpoint after Phase 5
+            if checkpoint_enabled:
+                self.state.save_checkpoint('PHASE_5_COMPLETE', {
+                    'beautification': {
+                        'completed': True,
+                        'beautified_files': len(downloaded_files)
+                    }
+                })
             
             # ============================================================
             # PHASE 6: CLEANUP
@@ -304,6 +384,21 @@ class ScanEngine:
                 'total_files': self.stats['total_files'],
                 'total_secrets': self.stats['total_secrets']
             })
+            
+            # Mark scan as complete and cleanup checkpoint
+            if checkpoint_enabled:
+                self.state.save_checkpoint('PHASE_6_COMPLETE', {
+                    'stats': {
+                        'elapsed_time': duration,
+                        'total_files': self.stats['total_files'],
+                        'total_secrets': self.stats['total_secrets']
+                    }
+                })
+                
+                # Auto cleanup checkpoint on success
+                if self.config.get('checkpoint', {}).get('auto_cleanup', True):
+                    self.state.delete_checkpoint()
+                    self.logger.debug("🧹 Checkpoint cleaned up after successful scan")
             
             # Log and send final stats
             log_stats(self.logger, self.stats)
@@ -874,45 +969,82 @@ class ScanEngine:
     
     def _is_minified(self, content: str) -> bool:
         """
-        Detect if JavaScript file is minified
+        Detect if JavaScript file is minified using multi-heuristic scoring system.
+        
+        Uses 5 heuristics with weighted scoring:
+        1. Average line length (weight: 3)
+        2. Semicolon density (weight: 2)
+        3. Whitespace ratio (weight: 2)
+        4. Short variable ratio (weight: 2)
+        5. Comment presence (weight: 1)
         
         Args:
             content: JavaScript content
             
         Returns:
-            True if file appears to be minified
+            True if file appears to be minified (score >= threshold)
         """
         # Skip empty files
         if not content or len(content) < 100:
             return False
         
-        # Sample first 5000 characters for performance
-        sample = content[:5000]
+        # Get configuration
+        minification_config = self.config.get('minification_detection', {})
+        sample_size = minification_config.get('sample_size', 10000)
+        threshold_score = minification_config.get('threshold_score', 5)
+        
+        # Sample for performance (increased from 5000 to 10000)
+        sample = content[:sample_size]
         lines = sample.split('\n')
         
-        # Calculate average line length
+        # Very few lines strongly suggests minification
         if len(lines) < 3:
-            # Very few lines suggests minification
             return True
         
+        # Initialize score
+        score = 0
+        
+        # Heuristic 1: Average line length (weight: 3)
         total_chars = sum(len(line) for line in lines)
         avg_line_length = total_chars / len(lines) if lines else 0
-        
-        # Minified files typically have very long lines (>200 chars average)
         if avg_line_length > 200:
-            return True
+            score += 3
         
-        # Check for common minification patterns
-        # - Very long lines (>500 chars)
-        # - Lack of whitespace
-        # - Few newlines relative to length
-        long_lines = sum(1 for line in lines if len(line) > 500)
-        newline_ratio = sample.count('\n') / len(sample) if sample else 0
+        # Heuristic 2: Semicolon density - minified has more semicolons per line (weight: 2)
+        semicolon_count = sample.count(';')
+        semicolon_density = semicolon_count / len(lines) if lines else 0
+        if semicolon_density > 5:
+            score += 2
         
-        if long_lines > len(lines) * 0.3 or newline_ratio < 0.01:
-            return True
+        # Heuristic 3: Whitespace ratio - minified has less whitespace (weight: 2)
+        whitespace_chars = sum(1 for c in sample if c in ' \t\n\r')
+        whitespace_ratio = whitespace_chars / len(sample) if sample else 0
+        if whitespace_ratio < 0.15:
+            score += 2
         
-        return False
+        # Heuristic 4: Short variable ratio - minified uses short vars (weight: 2)
+        import re
+        # Match single-letter variables (common in minified code)
+        short_vars = len(re.findall(r'\b[a-z]\b', sample))
+        total_words = len(sample.split())
+        short_var_ratio = short_vars / total_words if total_words else 0
+        if short_var_ratio > 0.3:
+            score += 2
+        
+        # Heuristic 5: Comment presence - minified removes comments (weight: 1)
+        has_comments = '//' in sample or '/*' in sample
+        if not has_comments:
+            score += 1
+        
+        # Debug logging
+        self.logger.debug(
+            f"Minification detection score: {score}/{threshold_score} "
+            f"(avg_line: {avg_line_length:.0f}, semicolon_density: {semicolon_density:.1f}, "
+            f"whitespace: {whitespace_ratio:.2f}, short_vars: {short_var_ratio:.2f}, comments: {has_comments})"
+        )
+        
+        # Threshold: default 5+ points = minified
+        return score >= threshold_score
     
     def _is_in_scope(self, url: str) -> bool:
         """

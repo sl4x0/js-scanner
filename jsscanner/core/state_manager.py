@@ -35,9 +35,13 @@ class StateManager:
         self.secrets_file = self.target_path / 'secrets.json'
         self.metadata_file = self.target_path / 'metadata.json'
         self.state_file = self.target_path / 'state.json'
+        self.checkpoint_file = self.target_path / 'checkpoint.json'  # NEW
         
         # In-memory state cache for incremental scanning
         self.state = self._load_state()
+        
+        # Checkpoint tracking (NEW)
+        self.last_checkpoint_time = time.time()
     
     def _lock_file(self, file_obj, exclusive=True):
         """
@@ -390,3 +394,195 @@ class StateManager:
             'endpoints_found': self.state.get('stats', {}).get('endpoints_found', 0),
             'secrets_found': self.state.get('stats', {}).get('secrets_found', 0)
         }
+    
+    # ========== CHECKPOINT SYSTEM (NEW) ==========
+    
+    def _load_checkpoint(self) -> dict:
+        """
+        Load checkpoint from disk if it exists.
+        
+        Returns:
+            Checkpoint dictionary or empty template
+        """
+        if self.checkpoint_file.exists():
+            try:
+                with open(self.checkpoint_file, 'r', encoding='utf-8') as f:
+                    checkpoint = json.load(f)
+                    return checkpoint
+            except Exception as e:
+                # Corrupted checkpoint - return empty
+                return self._create_empty_checkpoint()
+        return self._create_empty_checkpoint()
+    
+    def _create_empty_checkpoint(self) -> dict:
+        """Create empty checkpoint structure"""
+        return {
+            'version': '1.0',
+            'timestamp': self._get_timestamp(),
+            'phase': 'PHASE_0_START',
+            'phase_progress': {
+                'current_phase': 0,
+                'total_phases': 6,
+                'phase_completion': 0.0
+            },
+            'discovery': {
+                'completed': False,
+                'urls_discovered': [],
+                'total_urls': 0
+            },
+            'download': {
+                'completed': False,
+                'downloaded_urls': [],
+                'pending_urls': [],
+                'failed_urls': {},
+                'total_downloaded': 0,
+                'total_pending': 0
+            },
+            'scanning': {
+                'completed': False,
+                'scanned_files': [],
+                'pending_files': [],
+                'secrets_found': 0
+            },
+            'extraction': {
+                'completed': False,
+                'processed_files': 0,
+                'pending_files': 0,
+                'extracts': {}
+            },
+            'beautification': {
+                'completed': False,
+                'beautified_files': 0,
+                'pending_files': 0
+            },
+            'stats': {
+                'elapsed_time': 0.0,
+                'files_per_second': 0.0,
+                'estimated_remaining': 0.0
+            }
+        }
+    
+    def save_checkpoint(self, phase: str, progress: dict) -> None:
+        """
+        Save checkpoint with current phase and progress.
+        Uses atomic write (temp file + rename) to prevent corruption.
+        
+        Args:
+            phase: Current phase identifier (e.g., 'PHASE_2_DOWNLOADING')
+            progress: Dictionary with phase-specific progress data
+        """
+        checkpoint = self._load_checkpoint()
+        
+        # Update checkpoint
+        checkpoint['phase'] = phase
+        checkpoint['timestamp'] = self._get_timestamp()
+        
+        # Merge progress data
+        for key, value in progress.items():
+            if key in checkpoint:
+                if isinstance(checkpoint[key], dict) and isinstance(value, dict):
+                    checkpoint[key].update(value)
+                else:
+                    checkpoint[key] = value
+            else:
+                checkpoint[key] = value
+        
+        # Calculate phase completion
+        phase_number = self._get_phase_number(phase)
+        checkpoint['phase_progress']['current_phase'] = phase_number
+        
+        # Atomic write: write to temp file, then rename
+        temp_file = self.checkpoint_file.with_suffix('.tmp')
+        try:
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(checkpoint, f, indent=2)
+            
+            # Atomic rename (overwrites existing checkpoint)
+            temp_file.replace(self.checkpoint_file)
+            
+            self.last_checkpoint_time = time.time()
+        except Exception as e:
+            # Clean up temp file on error
+            if temp_file.exists():
+                temp_file.unlink()
+            # Log error but don't fail scan
+            pass
+    
+    def has_checkpoint(self) -> bool:
+        """
+        Check if a resumable checkpoint exists.
+        
+        Returns:
+            True if checkpoint exists and scan is not complete
+        """
+        if not self.checkpoint_file.exists():
+            return False
+        
+        try:
+            checkpoint = self._load_checkpoint()
+            # Check if scan was completed
+            phase = checkpoint.get('phase', '')
+            if phase == 'PHASE_6_COMPLETE':
+                return False
+            
+            # Check if checkpoint is recent (within 7 days)
+            timestamp_str = checkpoint.get('timestamp', '')
+            if timestamp_str:
+                checkpoint_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                days_old = (datetime.now(checkpoint_time.tzinfo) - checkpoint_time).days
+                if days_old > 7:
+                    return False
+            
+            return True
+        except Exception:
+            return False
+    
+    def get_resume_state(self) -> dict:
+        """
+        Get checkpoint state for resuming scan.
+        
+        Returns:
+            Checkpoint dictionary with all saved progress
+        """
+        return self._load_checkpoint()
+    
+    def delete_checkpoint(self) -> None:
+        """Delete checkpoint file (call on successful scan completion)"""
+        if self.checkpoint_file.exists():
+            try:
+                self.checkpoint_file.unlink()
+            except Exception:
+                pass
+    
+    def should_save_checkpoint(self, frequency: int = 10) -> bool:
+        """
+        Determine if checkpoint should be saved based on time/frequency.
+        
+        Args:
+            frequency: Minimum seconds between checkpoints (default: 30s)
+            
+        Returns:
+            True if enough time has passed since last checkpoint
+        """
+        # Also save based on time (every 30 seconds)
+        time_threshold = frequency
+        return (time.time() - self.last_checkpoint_time) >= time_threshold
+    
+    @staticmethod
+    def _get_phase_number(phase: str) -> int:
+        """Extract phase number from phase string"""
+        phase_map = {
+            'PHASE_0_START': 0,
+            'PHASE_1_DISCOVERY': 1,
+            'PHASE_1_COMPLETE': 1,
+            'PHASE_2_DOWNLOADING': 2,
+            'PHASE_2_COMPLETE': 2,
+            'PHASE_3_SCANNING': 3,
+            'PHASE_3_COMPLETE': 3,
+            'PHASE_4_EXTRACTION': 4,
+            'PHASE_4_COMPLETE': 4,
+            'PHASE_5_BEAUTIFICATION': 5,
+            'PHASE_5_COMPLETE': 5,
+            'PHASE_6_COMPLETE': 6
+        }
+        return phase_map.get(phase, 0)

@@ -6,6 +6,7 @@ import subprocess
 import logging
 from typing import List, Set, Optional
 from urllib.parse import urlparse
+from ..utils.retry import retry_sync, RETRY_CONFIG_SUBPROCESS
 
 
 class SubJSFetcher:
@@ -25,18 +26,30 @@ class SubJSFetcher:
         self.enabled = config.get('subjs', {}).get('enabled', True)
         
     def fetch_urls(self, target: str, scope_domains: Optional[Set[str]] = None) -> List[str]:
-        """Fetch JS URLs for a target using SubJS"""
+        """Fetch JS URLs for a target using SubJS with retry on subprocess failures"""
         if not self.enabled:
             self.logger.debug("SubJS is disabled in configuration")
             return []
-            
-        try:
-            # Ensure full URL with protocol
-            if not target.startswith(('http://', 'https://')):
-                target = 'https://' + target
-            
-            self.logger.info(f"🔍 Fetching JS URLs with SubJS for {target}")
-            
+        
+        # Get retry config
+        retry_config = self.config.get('retry', {})
+        max_attempts = retry_config.get('subprocess_calls', 2)
+        backoff_base = retry_config.get('backoff_base', 2.0)
+        
+        # Ensure full URL with protocol
+        if not target.startswith(('http://', 'https://')):
+            target = 'https://' + target
+        
+        self.logger.info(f"🔍 Fetching JS URLs with SubJS for {target}")
+        
+        # Wrap SubJS call with retry logic
+        @retry_sync(
+            max_attempts=max_attempts,
+            backoff_base=backoff_base,
+            retry_on=(subprocess.SubprocessError, subprocess.TimeoutExpired),
+            operation_name=f"SubJS({target})"
+        )
+        def _run_subjs():
             # Run SubJS with full URL
             result = subprocess.run(
                 ['subjs'],
@@ -48,12 +61,17 @@ class SubJSFetcher:
             
             if result.returncode != 0:
                 error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                self.logger.warning(f"SubJS failed for {target}: {error_msg}")
-                return []
+                # Raise exception to trigger retry
+                raise subprocess.SubprocessError(f"SubJS failed: {error_msg}")
+            
+            return result.stdout
+            
+        try:
+            stdout = _run_subjs()
             
             # Parse output
             urls = []
-            for line in result.stdout.strip().split('\n'):
+            for line in stdout.strip().split('\n'):
                 url = line.strip()
                 if url and self._is_valid_url(url):
                     urls.append(url)
@@ -72,14 +90,15 @@ class SubJSFetcher:
             
             return urls
             
-        except subprocess.TimeoutExpired:
-            self.logger.warning(f"⏰ SubJS timeout for {target} after {self.timeout}s")
-            return []
         except FileNotFoundError:
             self.logger.error(
                 "❌ SubJS not installed. Install with:\n"
                 "   go install -v github.com/lc/subjs@latest"
             )
+            return []
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+            # All retries exhausted
+            self.logger.warning(f"⚠️ SubJS failed after {max_attempts} attempts for {target}")
             return []
         except Exception as e:
             self.logger.error(f"❌ SubJS error for {target}: {str(e)}")

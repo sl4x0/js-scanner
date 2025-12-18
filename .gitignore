@@ -13,6 +13,7 @@ pip-delete-this-directory.txt
 .pytest_cache/
 
 # AI Development & Testing (hidden from main view)
+.dev/
 .ai/
 .docs/
 .workspace/

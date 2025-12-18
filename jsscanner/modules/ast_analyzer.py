@@ -130,6 +130,11 @@ class ASTAnalyzer:
             links = await self._extract_links(content)
             domains = await self._extract_domains(content)
             
+            # NEW: Extract dynamic imports if enabled
+            code_splitting_config = self.config.get('code_splitting', {})
+            if code_splitting_config.get('detect_dynamic_imports', True):
+                await self.extract_and_save_dynamic_imports(content, source_url)
+            
             # Extract domain from source URL for tracking
             from urllib.parse import urlparse
             try:
@@ -710,3 +715,254 @@ class ASTAnalyzer:
     def get_domain_summary(self) -> Dict[str, Any]:
         """Get summary of domain-specific extracts"""
         return self.domain_organizer.get_domain_summary()
+    
+    # ========== DYNAMIC IMPORT DETECTION (NEW) ==========
+    
+    def _extract_dynamic_imports(self, node, content: str) -> List[Dict]:
+        """
+        Extract dynamic import patterns from AST for code splitting detection.
+        
+        Detects 9 import patterns:
+        1. import() - ES6 dynamic imports
+        2. require() - CommonJS
+        3. __webpack_require__.e() - Webpack chunk loading
+        4. React.lazy() - React lazy loading
+        5. loadable() - loadable-components
+        6. System.import() - SystemJS
+        7. require() - AMD/RequireJS
+        8. dynamic() - Next.js dynamic imports
+        9. import.meta.glob() - Vite glob imports
+        
+        Args:
+            node: AST root node
+            content: JavaScript source code
+            
+        Returns:
+            List of import dictionaries with type, target, line, etc.
+        """
+        imports = []
+        
+        def traverse(n):
+            if not n:
+                return
+            
+            # 1. Dynamic import() calls
+            if n.type == 'call_expression':
+                callee = n.child_by_field_name('function')
+                if callee:
+                    callee_text = content[callee.start_byte:callee.end_byte]
+                    
+                    # ES6 dynamic import
+                    if callee_text == 'import':
+                        args = n.child_by_field_name('arguments')
+                        if args and args.named_children:
+                            arg = args.named_children[0]
+                            module_path = self._get_string_value(arg, content)
+                            imports.append({
+                                'type': 'dynamic_import',
+                                'target': module_path,
+                                'line': n.start_point[0] + 1,
+                                'is_template': '${' in module_path or 'EXPR' in module_path,
+                                'pattern': 'import()'
+                            })
+                    
+                    # 2. CommonJS require()
+                    elif callee_text == 'require':
+                        args = n.child_by_field_name('arguments')
+                        if args and args.named_children:
+                            module_path = self._get_string_value(args.named_children[0], content)
+                            imports.append({
+                                'type': 'commonjs_require',
+                                'target': module_path,
+                                'line': n.start_point[0] + 1,
+                                'is_template': '${' in module_path,
+                                'pattern': 'require()'
+                            })
+                    
+                    # 3. Webpack chunk loading: __webpack_require__.e(chunkId)
+                    elif '__webpack_require__.e' in callee_text:
+                        imports.append({
+                            'type': 'webpack_chunk',
+                            'target': f'CHUNK_{n.start_point[0]}',
+                            'line': n.start_point[0] + 1,
+                            'is_template': False,
+                            'pattern': '__webpack_require__.e()'
+                        })
+                    
+                    # 4. React.lazy()
+                    elif 'lazy' in callee_text and ('React.lazy' in callee_text or callee_text == 'lazy'):
+                        imports.append({
+                            'type': 'react_lazy',
+                            'target': 'LAZY_COMPONENT',
+                            'line': n.start_point[0] + 1,
+                            'is_template': False,
+                            'pattern': 'React.lazy()'
+                        })
+                    
+                    # 5. loadable() from loadable-components
+                    elif 'loadable' in callee_text:
+                        imports.append({
+                            'type': 'loadable_component',
+                            'target': 'LOADABLE_COMPONENT',
+                            'line': n.start_point[0] + 1,
+                            'is_template': False,
+                            'pattern': 'loadable()'
+                        })
+                    
+                    # 6. SystemJS: System.import()
+                    elif 'System.import' in callee_text:
+                        args = n.child_by_field_name('arguments')
+                        if args and args.named_children:
+                            module_path = self._get_string_value(args.named_children[0], content)
+                            imports.append({
+                                'type': 'systemjs_import',
+                                'target': module_path,
+                                'line': n.start_point[0] + 1,
+                                'is_template': False,
+                                'pattern': 'System.import()'
+                            })
+                    
+                    # 8. Next.js dynamic()
+                    elif callee_text == 'dynamic':
+                        imports.append({
+                            'type': 'nextjs_dynamic',
+                            'target': 'DYNAMIC_COMPONENT',
+                            'line': n.start_point[0] + 1,
+                            'is_template': False,
+                            'pattern': 'dynamic()'
+                        })
+            
+            # 9. Vite glob imports: import.meta.glob()
+            if n.type == 'call_expression':
+                callee = n.child_by_field_name('function')
+                if callee:
+                    callee_text = content[callee.start_byte:callee.end_byte]
+                    if 'import.meta.glob' in callee_text:
+                        args = n.child_by_field_name('arguments')
+                        if args and args.named_children:
+                            glob_pattern = self._get_string_value(args.named_children[0], content)
+                            imports.append({
+                                'type': 'vite_glob',
+                                'target': glob_pattern,
+                                'line': n.start_point[0] + 1,
+                                'is_template': False,
+                                'pattern': 'import.meta.glob()'
+                            })
+            
+            # Recursively traverse children
+            for child in n.children:
+                traverse(child)
+        
+        traverse(node)
+        return imports
+    
+    def _extract_chunk_relationships(self, content: str) -> Dict:
+        """
+        Extract webpack/vite chunk loading patterns and relationships.
+        
+        Parses:
+        - Webpack manifests (webpackJsonp, webpackChunk)
+        - Chunk loading calls (__webpack_require__.e)
+        - Chunk filenames and IDs
+        
+        Args:
+            content: JavaScript source code
+            
+        Returns:
+            Dictionary with entry_chunks, lazy_chunks, chunk_files
+        """
+        relationships = {
+            'entry_chunks': [],
+            'lazy_chunks': [],
+            'chunk_files': [],
+            'chunk_dependencies': {}
+        }
+        
+        # Pattern 1: Webpack manifest - webpackJsonp([chunkIds], modules)
+        manifest_pattern = r'webpackJsonp\\s*\\(\\s*\\[([^\\]]+)\\]'
+        matches = re.findall(manifest_pattern, content)
+        for match in matches:
+            chunk_ids = [int(x.strip()) for x in match.split(',') if x.strip().isdigit()]
+            relationships['entry_chunks'].extend(chunk_ids)
+        
+        # Pattern 2: Chunk loading calls - __webpack_require__.e(chunkId)
+        chunk_load_pattern = r'__webpack_require__\\.e\\s*\\(\\s*(\\d+)\\s*\\)'
+        chunk_loads = re.findall(chunk_load_pattern, content)
+        relationships['lazy_chunks'] = list(set(int(x) for x in chunk_loads))
+        
+        # Pattern 3: Chunk filenames - [hash].chunk.js or [name].chunk.js
+        chunk_file_pattern = r'["\']([a-zA-Z0-9\\-_]+\\.chunk\\.js)["\']'
+        chunk_files = re.findall(chunk_file_pattern, content)
+        relationships['chunk_files'] = list(set(chunk_files))
+        
+        # Pattern 4: Vite chunks - [hash].js in import.meta.url contexts
+        vite_chunk_pattern = r'import\\.meta\\.url.*?["\']([a-zA-Z0-9\\-_]+\\.js)["\']'
+        vite_chunks = re.findall(vite_chunk_pattern, content)
+        relationships['chunk_files'].extend(list(set(vite_chunks)))
+        
+        return relationships
+    
+    async def extract_and_save_dynamic_imports(self, content: str, source_url: str) -> None:
+        """
+        Extract dynamic imports and chunk relationships, save to dynamic_imports.json.
+        
+        Args:
+            content: JavaScript source code
+            source_url: Source URL for attribution
+        """
+        # Only run if enabled in config
+        code_splitting_config = self.config.get('code_splitting', {})
+        if not code_splitting_config.get('detect_dynamic_imports', True):
+            return
+        
+        dynamic_imports = []
+        chunk_map = {}
+        
+        try:
+            # Parse content and extract dynamic imports
+            if self.parser:
+                tree = self.parser.parse(bytes(content, 'utf8'))
+                if tree and tree.root_node:
+                    dynamic_imports = self._extract_dynamic_imports(tree.root_node, content)
+            
+            # Extract chunk relationships if enabled
+            if code_splitting_config.get('extract_chunk_map', True):
+                chunk_map = self._extract_chunk_relationships(content)
+            
+            # Save results if anything found
+            if dynamic_imports or any(chunk_map.values()):
+                import json
+                from urllib.parse import urlparse
+                source_domain = urlparse(source_url).netloc or 'unknown'
+                
+                # Load existing data
+                output_file = Path(self.paths['extracts']) / 'dynamic_imports.json'
+                existing_data = {'imports': [], 'chunk_maps': {}}
+                
+                if output_file.exists():
+                    try:
+                        with open(output_file, 'r', encoding='utf-8') as f:
+                            existing_data = json.load(f)
+                    except:
+                        pass
+                
+                # Append new imports
+                for imp in dynamic_imports:
+                    imp['source_file'] = source_url
+                    imp['source_domain'] = source_domain
+                    existing_data['imports'].append(imp)
+                
+                # Add chunk map for this file
+                if chunk_map and any(chunk_map.values()):
+                    existing_data['chunk_maps'][source_url] = chunk_map
+                
+                # Save atomically
+                temp_file = output_file.with_suffix('.tmp')
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    json.dump(existing_data, f, indent=2)
+                temp_file.replace(output_file)
+                
+                self.logger.debug(f"Found {len(dynamic_imports)} dynamic imports in {source_url}")
+        
+        except Exception as e:
+            self.logger.debug(f"Dynamic import extraction failed for {source_url}: {e}")

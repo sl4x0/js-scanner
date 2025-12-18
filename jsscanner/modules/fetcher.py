@@ -10,6 +10,7 @@ from typing import List, Optional
 from urllib.parse import urljoin, urlparse
 import re
 from .noise_filter import NoiseFilter
+from ..utils.retry import retry_async, RETRY_CONFIG_HTTP
 
 
 class BrowserManager:
@@ -510,8 +511,18 @@ class Fetcher:
     
     async def fetch_content(self, url: str, retry_count: int = 0) -> Optional[str]:
         """
-        Fetches the content of a JavaScript file
+        Fetches the content of a JavaScript file with automatic retry on transient failures.
+        
+        Retries on:
+        - Network timeouts (asyncio.TimeoutError)
+        - Connection errors (aiohttp.ClientError)
+        - DNS resolution failures
+        
+        Does NOT retry on:
+        - Rate limiting (429, 503) - to avoid API bans
+        - Client errors (4xx) - won't be fixed by retry
         """
+        # Pre-flight noise filter check (no network call)
         should_skip, reason = self.noise_filter.should_skip_url(url)
         if should_skip:
             self.logger.debug(f"⏭️  Filtered (noise): {url} - {reason}")
@@ -519,94 +530,127 @@ class Fetcher:
             return None
 
         self.last_failure_reason = None
+        
+        # Get retry config from global config
+        retry_config = self.config.get('retry', {})
+        max_attempts = retry_config.get('http_requests', 3)
+        backoff_base = retry_config.get('backoff_base', 1.0)
+        
+        # Define retry exceptions (network-related only)
+        retry_exceptions = (
+            asyncio.TimeoutError,
+            aiohttp.ClientError,
+            aiohttp.ServerTimeoutError,
+            aiohttp.ClientConnectorError,
+            ConnectionError,
+        )
+        
+        # Wrap the actual fetch logic with retry decorator
+        @retry_async(
+            max_attempts=max_attempts,
+            backoff_base=backoff_base,
+            retry_on=retry_exceptions,
+            operation_name=f"fetch({url[:50]}...)"
+        )
+        async def _do_fetch():
+            return await self._fetch_content_impl(url)
+        
+        try:
+            return await _do_fetch()
+        except retry_exceptions:
+            # All retries exhausted
+            self.logger.debug(f"❌ [RETRY EXHAUSTED] {url}")
+            self.last_failure_reason = 'retry_exhausted'
+            return None
+        except Exception as e:
+            # Non-retryable error
+            self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url}: {e}")
+            self.last_failure_reason = 'non_retryable_error'
+            return None
+    
+    async def _fetch_content_impl(self, url: str) -> Optional[str]:
+        """
+        Internal implementation of fetch_content (separated for retry logic).
+        This method may raise exceptions that trigger retries.
+        """
         max_size = self.config.get('max_file_size', 10485760)
-        max_retries = 3
         verify_ssl = self.config.get('verify_ssl', True)
 
-        try:
-            # Create SSL context based on config
-            import ssl
-            ssl_context = ssl.create_default_context()
-            if not verify_ssl:
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-            
-            # Use ssl_context for both connector and session.get
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-            async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=60), ssl=ssl_context) as response:
-                    # No retries - fail immediately on rate limiting
-                    if response.status in [429, 503]:
-                        self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")
-                        self.last_failure_reason = 'rate_limit'
+        # Create SSL context based on config
+        import ssl
+        ssl_context = ssl.create_default_context()
+        if not verify_ssl:
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+        
+        # Use ssl_context for both connector and session.get
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=60), ssl=ssl_context) as response:
+                # No retries - fail immediately on rate limiting (return None, not exception)
+                if response.status in [429, 503]:
+                    self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")
+                    self.last_failure_reason = 'rate_limit'
+                    return None
+
+                if response.status == 200:
+                    content_length = response.headers.get('Content-Length')
+                    if content_length and int(content_length) > max_size:
+                        self.logger.warning(
+                            f"❌ File too large: {url} ({int(content_length) / 1024 / 1024:.2f} MB)"
+                        )
+                        self.last_failure_reason = 'too_large'
                         return None
 
-                    if response.status == 200:
-                        content_length = response.headers.get('Content-Length')
-                        if content_length and int(content_length) > max_size:
+                    chunks = []
+                    total_size = 0
+
+                    async for chunk in response.content.iter_chunked(8192):
+                        total_size += len(chunk)
+                        if total_size > max_size:
                             self.logger.warning(
-                                f"❌ File too large: {url} ({int(content_length) / 1024 / 1024:.2f} MB)"
+                                f"❌ File exceeded size during download: {url}"
                             )
                             self.last_failure_reason = 'too_large'
                             return None
+                        chunks.append(chunk)
 
-                        chunks = []
-                        total_size = 0
+                    content = b''.join(chunks).decode('utf-8', errors='ignore')
 
-                        async for chunk in response.content.iter_chunked(8192):
-                            total_size += len(chunk)
-                            if total_size > max_size:
-                                self.logger.warning(
-                                    f"❌ File exceeded size during download: {url}"
-                                )
-                                self.last_failure_reason = 'too_large'
-                                return None
-                            chunks.append(chunk)
-
-                        content = b''.join(chunks).decode('utf-8', errors='ignore')
-
-                        should_skip, reason = self.noise_filter.should_skip_content(content, url)
-                        if should_skip:
-                            self.logger.debug(f"⏭️  Filtered (known lib): {url} - {reason}")
-                            self.last_failure_reason = 'filtered_known_library'
-                            return None
-
-                        content_start = content.strip()[:500].lower()
-                        if ('<!doctype html' in content_start or
-                            '<html' in content_start or
-                            '<head>' in content_start or
-                            content_start.startswith('<!')):
-                            if self.verbose:
-                                self.logger.warning(f"❌ HTML instead of JS: {url}")
-                            else:
-                                self.logger.debug(f"Filtered HTML response: {url}")
-                            self.last_failure_reason = 'html_not_js'
-                            return None
-
-                        if not content or len(content.strip()) < 50:
-                            if self.verbose:
-                                self.logger.warning(f"❌ Content too short: {url}")
-                            else:
-                                self.logger.debug(f"Filtered short content: {url}")
-                            self.last_failure_reason = 'too_short'
-                            return None
-
-                        return content
-                    else:
-                        if self.verbose:
-                            self.logger.warning(f"❌ HTTP {response.status}: {url}")
-                        else:
-                            self.logger.debug(f"HTTP {response.status}: {url}")
-                        self.last_failure_reason = 'http_error'
+                    should_skip, reason = self.noise_filter.should_skip_content(content, url)
+                    if should_skip:
+                        self.logger.debug(f"⏭️  Filtered (known lib): {url} - {reason}")
+                        self.last_failure_reason = 'filtered_known_library'
                         return None
-        except asyncio.TimeoutError:
-            self.logger.debug(f"❌ [TIMEOUT] {url}")
-            self.last_failure_reason = 'timeout'
-            return None
-        except Exception as e:
-            self.logger.error(f"❌ [ERROR] {url}: {e}")
-            self.last_failure_reason = 'http_error'
-            return None
+
+                    content_start = content.strip()[:500].lower()
+                    if ('<!doctype html' in content_start or
+                        '<html' in content_start or
+                        '<head>' in content_start or
+                        content_start.startswith('<!')):
+                        if self.verbose:
+                            self.logger.warning(f"❌ HTML instead of JS: {url}")
+                        else:
+                            self.logger.debug(f"Filtered HTML response: {url}")
+                        self.last_failure_reason = 'html_not_js'
+                        return None
+
+                    if not content or len(content.strip()) < 50:
+                        if self.verbose:
+                            self.logger.warning(f"❌ Content too short: {url}")
+                        else:
+                            self.logger.debug(f"Filtered short content: {url}")
+                        self.last_failure_reason = 'too_short'
+                        return None
+
+                    return content
+                else:
+                    if self.verbose:
+                        self.logger.warning(f"❌ HTTP {response.status}: {url}")
+                    else:
+                        self.logger.debug(f"HTTP {response.status}: {url}")
+                    self.last_failure_reason = 'http_error'
+                    return None
     
     async def fetch_with_playwright(self, url: str) -> Optional[str]:
         """Fetches content using Playwright"""
