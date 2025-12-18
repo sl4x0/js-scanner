@@ -116,6 +116,12 @@ Performance Tips:
     )
     
     parser.add_argument(
+        '--no-extraction',
+        action='store_true',
+        help='Skip data extraction (endpoints, params, domains) - only scan for secrets'
+    )
+    
+    parser.add_argument(
         '--force',
         action='store_true',
         help='Force rescan all files (ignore incremental scan state/cache)'

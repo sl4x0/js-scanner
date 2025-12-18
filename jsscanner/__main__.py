@@ -95,6 +95,9 @@ async def main():
     if args.no_beautify:
         config['skip_beautification'] = True
     
+    if args.no_extraction:
+        config['skip_extraction'] = True
+    
     if args.force:
         config['force_rescan'] = True
     

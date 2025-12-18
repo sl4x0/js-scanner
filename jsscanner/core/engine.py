@@ -412,20 +412,26 @@ class ScanEngine:
             # ============================================================
             # PHASE 4: EXTRACTING DATA (Parallel)
             # ============================================================
-            self.logger.info(f"\n{'='*60}")
-            self.logger.info("⚙️  PHASE 4: EXTRACTING DATA (Parallel)")
-            self.logger.info(f"{'='*60}")
-            
-            await self._process_all_files_parallel(downloaded_files)
-            
-            # Save checkpoint after Phase 4
-            if checkpoint_enabled:
-                self.state.save_checkpoint('PHASE_4_COMPLETE', {
-                    'extraction': {
-                        'completed': True,
-                        'processed_files': len(downloaded_files)
-                    }
-                })
+            # Skip if --no-extraction flag is set
+            if not self.config.get('skip_extraction', False):
+                self.logger.info(f"\n{'='*60}")
+                self.logger.info("⚙️  PHASE 4: EXTRACTING DATA (Parallel)")
+                self.logger.info(f"{'='*60}")
+                
+                await self._process_all_files_parallel(downloaded_files)
+                
+                # Save checkpoint after Phase 4
+                if checkpoint_enabled:
+                    self.state.save_checkpoint('PHASE_4_COMPLETE', {
+                        'extraction': {
+                            'completed': True,
+                            'processed_files': len(downloaded_files)
+                        }
+                    })
+            else:
+                self.logger.info(f"\n{'='*60}")
+                self.logger.info("⏭️  PHASE 4: SKIPPED (--no-extraction enabled)")
+                self.logger.info(f"{'='*60}")
             
             # ============================================================
             # PHASE 5: BEAUTIFYING FILES
@@ -554,13 +560,18 @@ class ScanEngine:
                 'statistics': self.stats,
                 'files_scanned': urls_to_scan,
                 'secrets_found': self.state.get_total_secrets(),
-                'extracts': self.stats.get('extracts_detailed', {}),  # NEW: Detailed extracts with source tracking
-                'extracts_legacy': {  # OLD: For backwards compatibility
+            }
+            
+            # Only include extraction data if extraction was performed
+            if not self.config.get('skip_extraction', False):
+                results_json['extracts'] = self.stats.get('extracts_detailed', {})  # NEW: Detailed extracts with source tracking
+                results_json['extracts_legacy'] = {  # OLD: For backwards compatibility
                     'endpoints': self._read_extract_file('endpoints.txt'),
                     'params': self._read_extract_file('params.txt'),
                     'domains': self._read_extract_file('domains.txt')
                 }
-            }
+            else:
+                results_json['extraction_skipped'] = True
             
             json_output = Path(self.paths['base']) / 'scan_results.json'
             with open(json_output, 'w') as f:
@@ -599,19 +610,32 @@ class ScanEngine:
         """Verify all required external dependencies are available before starting scan."""
         import shutil
         
-        required_tools = ['trufflehog', 'subjs', 'webcrack']
-        missing = []
+        # TruffleHog is always required for secret scanning
+        required_tools = ['trufflehog']
+        # SubJS and webcrack are optional (warnings only)
+        optional_tools = ['subjs', 'webcrack']
+        
+        missing_required = []
+        missing_optional = []
         
         for tool in required_tools:
             if not shutil.which(tool):
-                missing.append(tool)
+                missing_required.append(tool)
         
-        if missing:
-            self.logger.error(f"❌ Missing required dependencies: {', '.join(missing)}")
+        for tool in optional_tools:
+            if not shutil.which(tool):
+                missing_optional.append(tool)
+        
+        if missing_required:
+            self.logger.error(f"❌ Missing required dependencies: {', '.join(missing_required)}")
             self.logger.error("Please install missing tools before running the scanner.")
-            raise RuntimeError(f"Missing dependencies: {', '.join(missing)}")
+            raise RuntimeError(f"Missing dependencies: {', '.join(missing_required)}")
         
-        self.logger.info("✅ All dependencies verified")
+        if missing_optional:
+            self.logger.warning(f"⚠️  Optional tools not found: {', '.join(missing_optional)}")
+            self.logger.warning("Some features may be limited (SubJS discovery, bundle unpacking)")
+        
+        self.logger.info("✅ Core dependencies verified")
     
     async def _initialize_modules(self):
         """Initializes all scanning modules"""
@@ -1386,7 +1410,9 @@ class ScanEngine:
             
             # Check against all allowed domains
             for allowed in self.allowed_domains:
-                allowed_clean = allowed.replace('www.', '')
+                # Remove port and www. from allowed domain for comparison
+                allowed_no_port = allowed.split(':')[0]
+                allowed_clean = allowed_no_port.replace('www.', '')
                 
                 # Exact match or subdomain match
                 if domain_clean == allowed_clean or domain_clean.endswith('.' + allowed_clean):
