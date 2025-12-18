@@ -59,6 +59,11 @@ class ScanEngine:
         # Track allowed domains from input file
         self.allowed_domains = set()
         
+        # Progress tracking for _log_progress
+        self.current_phase = None
+        self.phase_start_time = None
+        self.phase_progress = {'current': 0, 'total': 0}
+        
         # Statistics
         self.start_time = None
         self.stats = {
