@@ -142,6 +142,7 @@ python -m jsscanner -t myproject -u https://example.com --source-maps
 ### Recent Updates
 
 **v3.1 (Current)**
+
 - 🔄 Automatic retry with exponential backoff (HTTP + subprocess)
 - 💾 Checkpoint system for resumable scans
 - 🎯 Multi-heuristic minification detection (5 metrics)
@@ -150,6 +151,7 @@ python -m jsscanner -t myproject -u https://example.com --source-maps
 - ⚡ Configurable batching strategy per domain
 
 **v3.0**
+
 - ✨ Streamlined extraction (endpoints, domains, links only)
 - ✨ Bundle detection with webcrack support
 - ✨ Cross-version tree-sitter compatibility
