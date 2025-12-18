@@ -28,6 +28,9 @@ class ASTAnalyzer:
         self.paths = paths
         self._tree_sitter_warning_logged = False  # Only warn once
         
+        # Configurable max file size for AST parsing (default 15MB)
+        self.max_file_size = config.get('ast', {}).get('max_file_size_mb', 15) * 1024 * 1024
+        
         # Track sources for each extract
         self.extracts_db = {
             'endpoints': {},  # {endpoint: {sources: [], total_count: 0, domains: set()}}
@@ -227,8 +230,9 @@ class ASTAnalyzer:
     def _parse_content(self, content: str):
         """Synchronous tree-sitter parsing (CPU-bound)"""
         # Prevent memory issues with very large files
-        if len(content) > 15 * 1024 * 1024:  # 15MB
-            self.logger.warning(f"Skipping AST parsing for file >15MB (too large)")
+        max_size_mb = self.max_file_size / (1024 * 1024)
+        if len(content) > self.max_file_size:
+            self.logger.warning(f"Skipping AST parsing for file >{max_size_mb:.0f}MB (too large)")
             raise ValueError("File too large for AST parsing")
         
         # Skip empty or nearly empty files

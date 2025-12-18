@@ -596,7 +596,9 @@ class Fetcher:
         # Use ssl_context for both connector and session.get
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=60), ssl=ssl_context) as response:
+            # Use configured timeout instead of hardcoded value
+            timeout_value = self.config.get('timeouts', {}).get('http_request', 60)
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_value), ssl=ssl_context) as response:
                 # No retries - fail immediately on rate limiting (return None, not exception)
                 if response.status in [429, 503]:
                     self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")

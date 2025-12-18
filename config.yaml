@@ -27,16 +27,16 @@ verify_ssl: false # Set to false to bypass SSL certificate verification errors
 
 # Issue #8: Configurable timeouts
 timeouts:
-  http_request: 60 # for asyncio HTTP requests (seconds)
-  playwright_page: 60000 # ms
+  http_request: 20 # for asyncio HTTP requests (seconds) - reduced from 60s to speed up scans
+  playwright_page: 30000 # ms - reduced from 60000ms to avoid long hangs
   trufflehog: 300 # seconds per file
 
 # Playwright
 playwright:
   headless: true # Run browser in headless mode
-  max_concurrent: 10 # Max concurrent browser instances
+  max_concurrent: 4 # Max concurrent browser instances - reduced from 10 to keep event loop responsive
   restart_after: 100 # Restart browser after N pages
-  page_timeout: 60000 # ms (increased to 60s for sites with anti-bot protection)
+  page_timeout: 30000 # ms - reduced from 60000ms to avoid long hangs on slow/blocked sites
 
 # SubJS Configuration
 subjs:
@@ -46,6 +46,7 @@ subjs:
 # AST Analysis
 ast:
   enabled: true
+  max_file_size_mb: 20 # Maximum file size for AST parsing (in MB)
 
 # Bundle Unpacker (v3.0 NEW)
 # Requires: npm install -g webcrack

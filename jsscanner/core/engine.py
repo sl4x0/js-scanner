@@ -656,7 +656,12 @@ class ScanEngine:
         max_concurrent_domains = self.config.get('max_concurrent_domains', 10)
         semaphore = asyncio.Semaphore(max_concurrent_domains)
         
+        # Log concurrency settings to clarify expected timeout behavior
+        playwright_max_concurrent = self.config.get('playwright', {}).get('max_concurrent', 3)
+        playwright_timeout_ms = self.config.get('playwright', {}).get('page_timeout', 30000)
+        max_total_wait = (playwright_max_concurrent * playwright_timeout_ms) / 1000
         self.logger.info(f"🚀 Processing {len(inputs)} domains with concurrency level: {max_concurrent_domains}")
+        self.logger.info(f"   Browser: {playwright_max_concurrent} concurrent instances, {playwright_timeout_ms/1000:.0f}s timeout each (max total wait: {max_total_wait:.0f}s)")
         
         async def discover_one_domain(index: int, item: str) -> List[str]:
             """Discover JS files for a single domain/URL"""

@@ -54,12 +54,12 @@ class DiscordNotifier:
         """
         self.running = False
         
-        # Wait for queue to drain with dynamic timeout (2 seconds per message + 60 second buffer)
+        # Wait for queue to drain with dynamic timeout (8 seconds per message + 120 second buffer)
         if drain_queue and self.queue:
             if self.logger:
                 self.logger.info(f"📤 Sending {len(self.queue)} queued Discord messages...")
-            # Dynamic timeout: 2 seconds per message + 60 second buffer
-            timeout_duration = (len(self.queue) * 2) + 60
+            # Dynamic timeout: 8 seconds per message + 120 second buffer (accounts for rate limits + slow Discord API)
+            timeout_duration = (len(self.queue) * 8) + 120
             deadline = time.time() + timeout_duration
             
             while self.queue and time.time() < deadline:
@@ -254,8 +254,8 @@ class DiscordNotifier:
             embed: Embed data to send
         """
         try:
-            # Issue #4: Add timeout to prevent hanging if Discord is down
-            timeout = aiohttp.ClientTimeout(total=10)
+            # Issue #4: Add timeout to prevent hanging if Discord is down (increased to 30s for slow API responses)
+            timeout = aiohttp.ClientTimeout(total=30)
             async with session.post(self.webhook_url, json=embed, timeout=timeout) as response:
                 if response.status == 429:
                     # Rate limited by Discord - implement retry limit
