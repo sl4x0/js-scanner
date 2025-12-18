@@ -43,9 +43,6 @@ class SecretScanner:
         
         # Initialize domain organizer for secrets
         self.secrets_organizer = None  # Will be initialized with base_path
-        
-        # Validate TruffleHog installation (Issue #7)
-        self._validate_trufflehog()
     
     def initialize_organizer(self, base_path: str):
         """
