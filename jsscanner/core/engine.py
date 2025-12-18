@@ -836,7 +836,16 @@ class ScanEngine:
                     async with lock:
                         completed += 1
                         success_count = len(downloaded_files) + 1  # +1 for current
-                        self._log_progress("Download Files", completed, total_urls, f"{success_count} saved")
+                        
+                        # Show detailed progress every 50 files or at completion
+                        if completed % 50 == 0 or completed == total_urls:
+                            total_skipped = sum(failed_breakdown.values())
+                            extra = f"{success_count} saved, {total_skipped} skipped"
+                            if total_skipped > 0 and failed_breakdown['duplicate'] > total_skipped * 0.9:
+                                extra += " (mostly cached)"
+                            self._log_progress("Download Files", completed, total_urls, extra)
+                        else:
+                            self._log_progress("Download Files", completed, total_urls, f"{success_count} saved")
                     
                     return {
                         'url': url,
@@ -878,9 +887,20 @@ class ScanEngine:
         # Show clean summary
         total_filtered = sum(failed_breakdown.values())
         self.logger.info(f"\n{'='*60}")
-        self.logger.info(f"✅ Downloaded {len(downloaded_files)} files (skipped {total_filtered} invalid/cached)")
-        if self.config.get('verbose', False) and total_filtered > 0:
-            self.logger.info(f"  Breakdown: {failed_breakdown}")
+        self.logger.info(f"✅ Downloaded {len(downloaded_files)} files (skipped {total_filtered})")
+        
+        # Always show breakdown if many files were skipped
+        if total_filtered > 0:
+            self.logger.info(f"   📊 Breakdown:")
+            if failed_breakdown['invalid_url'] > 0:
+                self.logger.info(f"      • Invalid URLs: {failed_breakdown['invalid_url']}")
+            if failed_breakdown['out_of_scope'] > 0:
+                self.logger.info(f"      • Out of scope: {failed_breakdown['out_of_scope']}")
+            if failed_breakdown['fetch_failed'] > 0:
+                self.logger.info(f"      • Fetch failed: {failed_breakdown['fetch_failed']}")
+            if failed_breakdown['duplicate'] > 0:
+                self.logger.info(f"      • Duplicates (cached): {failed_breakdown['duplicate']}")
+        
         self.logger.info(f"{'='*60}\n")
         
         return downloaded_files
