@@ -403,6 +403,8 @@ class ScanEngine:
             
             if secrets:
                 self.logger.info(f"✅ Found {len(secrets)} secrets\n")
+                # Flush Discord notifications immediately to send secrets before Phase 4
+                await self.notifier.flush_queue(timeout=90)
             else:
                 self.logger.info(f"✅ No secrets found\n")
             
@@ -960,8 +962,12 @@ class ScanEngine:
             files: List of file info dictionaries from _download_all_files()
         """
         semaphore = asyncio.Semaphore(self.config.get('threads', 50))
+        processed_count = 0
+        total_files = len(files)
+        progress_lock = asyncio.Lock()
         
         async def process_one(file_info: dict):
+            nonlocal processed_count
             async with semaphore:
                 try:
                     content = file_info['content']
@@ -969,6 +975,14 @@ class ScanEngine:
                     
                     # Run AST analysis on MINIFIED content (faster!)
                     await self.ast_analyzer.analyze(content, url)
+                    
+                    # Update progress counter and log periodically
+                    async with progress_lock:
+                        processed_count += 1
+                        # Log every 30 files to show progress without spam
+                        if processed_count % 30 == 0 or processed_count == total_files:
+                            percent = (processed_count / total_files * 100) if total_files > 0 else 0
+                            self.logger.info(f"⚙️  Extracting: {processed_count}/{total_files} files ({percent:.1f}%)")
                     
                 except Exception as e:
                     self.logger.error(f"Processing failed {file_info['url']}: {e}")

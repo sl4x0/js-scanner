@@ -71,6 +71,33 @@ class DiscordNotifier:
         if self._task:
             await self._task
     
+    async def flush_queue(self, timeout: int = 60):
+        """
+        Flush all queued messages immediately without stopping the worker.
+        Useful for sending notifications at phase boundaries.
+        
+        Args:
+            timeout: Maximum seconds to wait for queue to drain (default: 60)
+        """
+        if not self.queue:
+            return
+        
+        if self.logger:
+            self.logger.info(f"📤 Flushing {len(self.queue)} queued Discord messages...")
+        
+        deadline = time.time() + timeout
+        initial_count = len(self.queue)
+        
+        while self.queue and time.time() < deadline:
+            await asyncio.sleep(0.5)
+        
+        sent_count = initial_count - len(self.queue)
+        if self.logger:
+            if self.queue:
+                self.logger.warning(f"⚠️  Sent {sent_count}/{initial_count} messages (timeout after {timeout}s)")
+            else:
+                self.logger.info(f"✅ Sent all {sent_count} queued messages")
+    
     async def queue_alert(self, secret_data: Dict[str, Any]):
         """
         Queues a secret alert for sending
@@ -165,11 +192,8 @@ class DiscordNotifier:
                     full_source = f"{secret_url}:{line_num}"
                 else:
                     full_source = secret_url
-                # Truncate if too long for readability
-                if len(full_source) <= 80:
-                    value_parts.append(full_source)
-                else:
-                    value_parts.append(full_source[:77] + "...")
+                # Show full URL without truncation (important for bug bounty work)
+                value_parts.append(full_source)
             
             fields.append({
                 'name': f'#{i}',
@@ -254,8 +278,8 @@ class DiscordNotifier:
             embed: Embed data to send
         """
         try:
-            # Issue #4: Add timeout to prevent hanging if Discord is down (increased to 30s for slow API responses)
-            timeout = aiohttp.ClientTimeout(total=30)
+            # Issue #4: Add timeout to prevent hanging if Discord is down (increased to 60s for slow API responses during long phases)
+            timeout = aiohttp.ClientTimeout(total=60)
             async with session.post(self.webhook_url, json=embed, timeout=timeout) as response:
                 if response.status == 429:
                     # Rate limited by Discord - implement retry limit
@@ -372,11 +396,10 @@ class DiscordNotifier:
             else:
                 source_value = url
             
-            # Truncate very long URLs but keep them functional
-            display_source = source_value if len(source_value) <= 100 else source_value[:97] + "..."
+            # Show full URL without truncation (Discord handles long URLs well)
             fields.append({
                 'name': 'Source',
-                'value': display_source,
+                'value': source_value,
                 'inline': False
             })
         
