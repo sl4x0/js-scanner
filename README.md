@@ -15,6 +15,8 @@ High-performance JavaScript security scanner for bug bounty hunting with batch p
 - 🎯 **Config Change Detection** - Warns when resuming scans with modified configs
 - 📝 **Structured Logging** - Optional context-aware logging with extra fields
 - 💬 **Better Error Messages** - Specific Discord webhook errors (404/400/429) with solutions
+- ⚡ **--no-extraction Flag** - Skip data extraction phase (PHASE 4) while keeping secret scanning
+- 🔧 **--no-beautify Fix** - Fixed flag to properly skip beautification (PHASE 5)
 
 ### Previous Versions
 
@@ -131,8 +133,11 @@ python -m jsscanner -t myproject -i targets.txt
 # Force rescan
 python -m jsscanner -t myproject -u https://example.com --force
 
-# Skip beautify (faster)
+# Skip beautification (faster)
 python -m jsscanner -t myproject -u https://example.com --no-beautify
+
+# Skip extraction (fastest - secrets only)
+python -m jsscanner -t myproject -u https://example.com --no-extraction
 
 # Source maps
 python -m jsscanner -t myproject -u https://example.com --source-maps
@@ -223,6 +228,9 @@ python -m jsscanner -t target --subjs -u https://example.com --source-maps
 # Fast scan (SubJS only, no beautify)
 python -m jsscanner -t target --subjs-only --no-beautify -u https://example.com
 
+# Fastest scan (secrets only, no extraction/beautification)
+python -m jsscanner -t target --subjs-only --no-extraction --no-beautify -u https://example.com
+
 # Deep scan (browser crawling + source maps)
 python -m jsscanner -t target -u https://example.com --source-maps
 
@@ -232,19 +240,20 @@ python -m jsscanner -t bulk-scan -i domains.txt --subjs --no-beautify
 
 ### Flags
 
-| Flag            | Description                             |
-| --------------- | --------------------------------------- |
-| `-t, --target`  | Target name (creates results/[target]/) |
-| `-u, --url`     | Single URL to scan                      |
-| `-i, --input`   | File with URLs (one per line)           |
-| `--subjs`       | Use SubJS for discovery + live scan     |
-| `--subjs-only`  | Use ONLY SubJS (skip browser)           |
-| `--source-maps` | Attempt to recover source maps          |
-| `--resume`      | Resume from last checkpoint (v3.1)      |
-| `--no-beautify` | Skip beautification (faster)            |
-| `--force`       | Force rescan (ignore cache)             |
-| `--no-live`     | Skip live browser scanning              |
-| `-v, --verbose` | Verbose output                          |
+| Flag              | Description                             |
+| ----------------- | --------------------------------------- |
+| `-t, --target`    | Target name (creates results/[target]/) |
+| `-u, --url`       | Single URL to scan                      |
+| `-i, --input`     | File with URLs (one per line)           |
+| `--subjs`         | Use SubJS for discovery + live scan     |
+| `--subjs-only`    | Use ONLY SubJS (skip browser)           |
+| `--source-maps`   | Attempt to recover source maps          |
+| `--resume`        | Resume from last checkpoint (v3.1)      |
+| `--no-extraction` | Skip extraction phase (secrets only)    |
+| `--no-beautify`   | Skip beautification phase               |
+| `--force`         | Force rescan (ignore cache)             |
+| `--no-live`       | Skip live browser scanning              |
+| `-v, --verbose`   | Verbose output                          |
 
 # Testing & Validation
 

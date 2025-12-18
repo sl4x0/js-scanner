@@ -441,20 +441,26 @@ class ScanEngine:
                 await self._save_current_progress()
                 return
             
-            self.logger.info(f"\n{'='*60}")
-            self.logger.info("✨ PHASE 5: BEAUTIFYING FILES")
-            self.logger.info(f"{'='*60}")
-            
-            await self._unminify_all_files(downloaded_files)
-            
-            # Save checkpoint after Phase 5
-            if checkpoint_enabled:
-                self.state.save_checkpoint('PHASE_5_COMPLETE', {
-                    'beautification': {
-                        'completed': True,
-                        'beautified_files': len(downloaded_files)
-                    }
-                })
+            # Skip if --no-beautify flag is set
+            if not self.config.get('skip_beautification', False):
+                self.logger.info(f"\n{'='*60}")
+                self.logger.info("✨ PHASE 5: BEAUTIFYING FILES")
+                self.logger.info(f"{'='*60}")
+                
+                await self._unminify_all_files(downloaded_files)
+                
+                # Save checkpoint after Phase 5
+                if checkpoint_enabled:
+                    self.state.save_checkpoint('PHASE_5_COMPLETE', {
+                        'beautification': {
+                            'completed': True,
+                            'beautified_files': len(downloaded_files)
+                        }
+                    })
+            else:
+                self.logger.info(f"\n{'='*60}")
+                self.logger.info("⏭️  PHASE 5: SKIPPED (--no-beautify enabled)")
+                self.logger.info(f"{'='*60}")
             
             # ============================================================
             # PHASE 6: CLEANUP
