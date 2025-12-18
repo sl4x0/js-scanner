@@ -213,11 +213,11 @@ class ScanEngine:
                 import threading
                 cleanup_thread = threading.Thread(target=self._emergency_shutdown, daemon=True)
                 cleanup_thread.start()
-                cleanup_thread.join(timeout=10)  # 10-second timeout for cleanup
+                cleanup_thread.join(timeout=5)  # 5-second timeout for cleanup
                 
                 # Force exit if cleanup takes too long
                 if cleanup_thread.is_alive():
-                    self.logger.error("⏱️  Cleanup timeout exceeded - forcing exit")
+                    self.logger.error("⏱️  Cleanup timeout - forcing exit")
                     import os
                     os._exit(1)
                 else:
@@ -1621,7 +1621,42 @@ class ScanEngine:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(self._save_current_progress())
+            
+            # Force cleanup browser if it exists
+            if hasattr(self, 'fetcher') and self.fetcher:
+                try:
+                    loop.run_until_complete(self.fetcher.cleanup())
+                except Exception as e:
+                    self.logger.debug(f"Browser cleanup error: {e}")
+            
+            # Cancel all pending tasks
+            try:
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            except Exception as e:
+                self.logger.debug(f"Task cleanup error: {e}")
+            
             loop.close()
+            
+            # Force kill any remaining playwright processes
+            try:
+                import subprocess
+                import sys
+                if sys.platform == 'win32':
+                    subprocess.run(['taskkill', '/F', '/IM', 'chromium.exe'], 
+                                   stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                    subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'], 
+                                   stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                else:
+                    subprocess.run(['pkill', '-9', 'chromium'], 
+                                   stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                    subprocess.run(['pkill', '-9', 'chrome'], 
+                                   stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            except Exception:
+                pass  # Ignore errors - best effort cleanup
+                
         except Exception as e:
             self.logger.error(f"Emergency shutdown failed: {e}")
     
