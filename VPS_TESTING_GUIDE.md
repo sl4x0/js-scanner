@@ -73,30 +73,30 @@ nano config.yaml
 
 ```yaml
 # Recommended VPS settings
-threads: 30  # Lower than local machine (VPS usually has less resources)
-timeout: 60  # Higher timeout for slower networks
+threads: 30 # Lower than local machine (VPS usually has less resources)
+timeout: 60 # Higher timeout for slower networks
 
 # Discord webhook for notifications
 discord_webhook: "https://discord.com/api/webhooks/YOUR_WEBHOOK_HERE"
-discord_status_enabled: true  # Get notifications on scan progress
+discord_status_enabled: true # Get notifications on scan progress
 
 # Playwright settings for VPS
 playwright:
-  headless: true  # MUST be true on VPS (no display)
-  max_concurrent: 3  # Keep low to avoid memory issues
+  headless: true # MUST be true on VPS (no display)
+  max_concurrent: 3 # Keep low to avoid memory issues
   page_timeout: 30000
-  restart_after: 50  # Restart browser every 50 pages
+  restart_after: 50 # Restart browser every 50 pages
 
 # Batch processing (important for VPS)
 batch_processing:
   enabled: true
-  batch_size: 100  # Process 100 URLs at a time
-  cleanup_minified: true  # Save disk space
+  batch_size: 100 # Process 100 URLs at a time
+  cleanup_minified: true # Save disk space
 
 # Checkpoint system (critical for VPS)
 checkpoint:
   enabled: true
-  interval: 300  # Save checkpoint every 5 minutes
+  interval: 300 # Save checkpoint every 5 minutes
 ```
 
 ## 🧪 Testing New Features (v3.2)
@@ -118,6 +118,7 @@ python -m jsscanner -t test --config test_invalid.yaml -u https://example.com/ap
 ```
 
 **Expected Output:**
+
 ```
 ======================================================================
 ❌ CONFIGURATION VALIDATION FAILED
@@ -154,6 +155,7 @@ python -m jsscanner -t progress-test -i test_targets.txt --no-beautify
 ```
 
 **Expected Output:**
+
 ```
 📊 Download Files: [████████████████████░░░░░░░░░░] 20/25 (80.0%), ETA: 5s (4.2 items/s) - 18 saved
 ```
@@ -177,6 +179,7 @@ python -m jsscanner -t cleanup-test -u https://example.com --subjs
 ```
 
 **Expected Output:**
+
 ```
 ⚠️  Shutdown requested (Ctrl+C). Saving data and exiting...
 Browser manager closed successfully
@@ -200,6 +203,7 @@ python -m jsscanner -t config-test -i test_targets.txt --resume
 ```
 
 **Expected Output:**
+
 ```
 ⚠️  WARNING: Configuration has changed since last scan!
    Resuming with modified config may produce inconsistent results.
@@ -224,6 +228,7 @@ python -m jsscanner -t large-scan -i domains.txt --subjs -v 2>&1 | grep "queue"
 ```
 
 **Expected in Logs (if queue fills):**
+
 ```
 Discord queue full (1000), dropped 101 messages
 ```
@@ -238,6 +243,7 @@ python -m jsscanner -t rate-test -i large_targets.txt -v 2>&1 | grep "429\|rate 
 ```
 
 **Expected Output (if rate limited):**
+
 ```
 Discord rate limited (429), retry after 2.5s (attempt 1/3)
 ```
@@ -439,7 +445,7 @@ playwright:
   max_concurrent: 5
 batch_processing:
   batch_size: 200
-  cleanup_minified: false  # Keep files for analysis
+  cleanup_minified: false # Keep files for analysis
 ```
 
 ## 📦 Backup Results
@@ -502,6 +508,7 @@ If you encounter issues:
 You're now ready to run JS Scanner on your VPS with all v3.2 improvements!
 
 **Next Steps:**
+
 - Run a test scan
 - Monitor resource usage
 - Set up automated scans with cron

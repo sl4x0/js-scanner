@@ -62,6 +62,7 @@ Remove-Item -Recurse -Force results\progress-test
 ```
 
 **Expected:** See progress bars like:
+
 ```
 📊 Download Files: [████████████░░░░░░] 12/20 (60%), ETA: 8s (2.5 items/s) - 10 saved
 ```
@@ -80,6 +81,7 @@ python -m jsscanner -t cleanup-test -u https://example.com --subjs
 ```
 
 **Expected:** Clean shutdown with:
+
 ```
 ⚠️  Shutdown requested (Ctrl+C). Saving data and exiting...
 Browser manager closed successfully
@@ -88,6 +90,7 @@ Playwright stopped successfully
 ```
 
 **Clean up:**
+
 ```powershell
 Remove-Item -Recurse -Force results\cleanup-test
 ```
@@ -140,11 +143,13 @@ python -c "from jsscanner.modules.ast_analyzer import ASTAnalyzer; import loggin
 ```
 
 **Expected:** If tree-sitter not working, see friendly message:
+
 ```
 ℹ️  Using regex-based parsing (this is normal and works well)
 ```
 
 Not the old alarming:
+
 ```
 ⚠️ AST parsing disabled - falling back to regex (lower accuracy)
 ```
@@ -159,6 +164,7 @@ Not the old alarming:
 - **Rate Limit Recovery:** Auto-retries with backoff on 429 errors (max 3 attempts)
 
 **To test manually, you'd need:**
+
 - A valid Discord webhook in config.yaml
 - A scan that finds many secrets (triggers queue)
 - High notification volume (triggers rate limits)
@@ -177,12 +183,14 @@ python -m jsscanner -t test-v32 -u https://example.com --subjs-only --no-beautif
 ```
 
 **Watch for:**
+
 - ✅ Config validation passes
 - 📊 Progress bars with ETA
-- ℹ️  Friendly messages (not alarming warnings)
+- ℹ️ Friendly messages (not alarming warnings)
 - Clean completion or Ctrl+C handling
 
 **Clean up:**
+
 ```powershell
 Remove-Item -Recurse -Force results\test-v32
 ```
@@ -205,21 +213,25 @@ After testing, verify:
 ## 🐛 If Tests Fail
 
 ### Import errors
+
 ```powershell
 pip install -r requirements.txt
 ```
 
 ### Playwright browser fails
+
 ```powershell
 playwright install chromium
 ```
 
 ### Permission errors
+
 ```powershell
 # Run PowerShell as Administrator
 ```
 
 ### Encoding issues
+
 ```powershell
 # Already fixed in v3.2 logger.py
 # If still seeing issues, check Python version (need 3.9+)
@@ -230,6 +242,7 @@ playwright install chromium
 ## ✨ Summary
 
 **All v3.2 Features Tested:**
+
 1. ✅ Config Validation - catches errors early
 2. ✅ Progress Tracking - shows ETA and speed
 3. ✅ Browser Cleanup - no orphaned processes

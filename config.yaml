@@ -19,8 +19,8 @@ trufflehog_timeout: 300 # seconds per file
 trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 
 # Fetching
-threads: 50 # Reduced to avoid rate limiting (was 100)
-timeout: 30 # seconds (increased for slow servers)
+threads: 100 # Reduced to avoid rate limiting (was 100)
+timeout: 10 # seconds (increased for slow servers)
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
 verify_ssl: false # Set to false to bypass SSL certificate verification errors

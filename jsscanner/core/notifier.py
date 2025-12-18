@@ -157,12 +157,19 @@ class DiscordNotifier:
             secret_url = source_metadata.get('url', '')
             line_num = source_metadata.get('line', '')
             
-            # Create compact value with URL
+            # Create compact value with full URL and line number
             value_parts = [f"{status_icon} {detector_name}"]
-            if line_num:
-                value_parts.append(f"Line {line_num}")
-            if secret_url and len(secret_url) <= 60:
-                value_parts.append(secret_url)
+            if secret_url:
+                # Show full JS file URL with line number
+                if line_num:
+                    full_source = f"{secret_url}:{line_num}"
+                else:
+                    full_source = secret_url
+                # Truncate if too long for readability
+                if len(full_source) <= 80:
+                    value_parts.append(full_source)
+                else:
+                    value_parts.append(full_source[:77] + "...")
             
             fields.append({
                 'name': f'#{i}',
@@ -356,23 +363,21 @@ class DiscordNotifier:
         # Build compact fields
         fields = []
         
-        # Source: Just the URL (clean and clickable)
-        if url:
-            # Truncate very long URLs but keep them functional
-            display_url = url if len(url) <= 100 else url[:97] + "..."
-            fields.append({
-                'name': '🔗 Source',
-                'value': display_url,
-                'inline': False
-            })
-        
-        # Line number (if available)
+        # Source: Full JS file URL with line number (clean and clickable)
         line_num = source_metadata.get('line', 0)
-        if line_num:
+        if url:
+            # Create URL with line number appended
+            if line_num:
+                source_value = f"{url}:{line_num}"
+            else:
+                source_value = url
+            
+            # Truncate very long URLs but keep them functional
+            display_source = source_value if len(source_value) <= 100 else source_value[:97] + "..."
             fields.append({
-                'name': 'Line',
-                'value': f"`{line_num}`",
-                'inline': True
+                'name': 'Source',
+                'value': display_source,
+                'inline': False
             })
         
         # Verification status
@@ -384,9 +389,9 @@ class DiscordNotifier:
             'inline': True
         })
         
-        # Create title with secret type and domain
+        # Create title with secret type only (domain shown in Source field)
         title_icon = "🔴" if verified else "🟠"
-        title = f"{title_icon} {detector_name} • {domain}"
+        title = f"{title_icon} {detector_name} Secret"
         # Discord title limit is 256 chars
         if len(title) > 256:
             title = title[:253] + "..."
