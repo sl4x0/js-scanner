@@ -832,13 +832,12 @@ class ScanEngine:
                     with open(file_path, 'w', encoding='utf-8') as f:
                         f.write(content)
                     
-                    # Save manifest
-                    self._save_file_manifest(url, file_hash, readable_name)
-                    
-                    self.stats['total_files'] += 1
-                    
-                    # Update progress
+                    # Update progress AND Save manifest (THREAD-SAFE)
                     async with lock:
+                        # Move this INSIDE the lock to prevent crashes
+                        self._save_file_manifest(url, file_hash, readable_name)
+                        
+                        self.stats['total_files'] += 1
                         completed += 1
                         success_count = len(downloaded_files) + 1  # +1 for current
                         
@@ -863,9 +862,10 @@ class ScanEngine:
                     }
                 
                 except Exception as e:
-                    # Only log specific error types, not every download failure
-                    if 'timeout' in str(e).lower() or 'connection' in str(e).lower():
-                        self.logger.debug(f"Network error for {url}: {str(e)}")
+                    # Log ALL errors so we know why downloads fail
+                    self.logger.error(f"❌ CRITICAL DOWNLOAD ERROR for {url[:100]}: {type(e).__name__} - {e}")
+                    import traceback
+                    self.logger.debug(f"Stack trace: {traceback.format_exc()}")
                     return None
         
         # Check shutdown before downloading
@@ -1348,7 +1348,11 @@ class ScanEngine:
         return target
     
     def _is_target_domain(self, url: str) -> bool:
-        """Check if URL belongs to allowed domains from input file"""
+        """Check if URL belongs to allowed domains from input file
+        
+        Only checks domain.tld - ignores paths, query params, ports, and scheme.
+        Respects ALL domains provided in the -i input file.
+        """
         from urllib.parse import urlparse
         
         try:
@@ -1357,22 +1361,23 @@ class ScanEngine:
             
             domain = urlparse(url).netloc.lower()
             
-            # Remove www but keep port
-            clean_domain = domain.replace('www.', '')
+            # Remove port to get clean domain
+            domain_no_port = domain.split(':')[0]
             
-            # Check if domain (with or without port) is in allowed list
+            # Remove www. prefix for comparison
+            domain_clean = domain_no_port.replace('www.', '')
+            
+            # Check against all allowed domains
             for allowed in self.allowed_domains:
-                # Exact match (with port)
-                if clean_domain == allowed:
-                    return True
-                # Match without port
-                domain_no_port = clean_domain.split(':')[0] if ':' in clean_domain else clean_domain
-                allowed_no_port = allowed.split(':')[0] if ':' in allowed else allowed
-                if domain_no_port == allowed_no_port or domain_no_port.endswith('.' + allowed_no_port):
+                allowed_clean = allowed.replace('www.', '')
+                
+                # Exact match or subdomain match
+                if domain_clean == allowed_clean or domain_clean.endswith('.' + allowed_clean):
                     return True
             
             return False
-        except:
+        except Exception as e:
+            self.logger.debug(f"Domain check error for {url[:80]}: {e}")
             return False
     
     @staticmethod

@@ -6,7 +6,7 @@ discord_status_enabled: false # Only send secret alerts, no start/complete notif
 # Notification Batching Strategy
 notification_batching:
   strategy: "verified_immediate" # verified_immediate = send verified instantly, batch unverified at phase end
-  batch_size: 10 # Max secrets to show per batch message (Discord has 25 field limit)
+  batch_size: 5 # Max secrets to show per batch message (Discord has 25 field limit)
   group_by_domain: true # Group secrets by domain in batch messages
   min_delay: 1 # Minimum delay between messages (seconds) to avoid rate limits
 
@@ -19,7 +19,7 @@ trufflehog_timeout: 300 # seconds per file
 trufflehog_max_concurrent: 5 # Issue #2: Limit concurrent TruffleHog processes
 
 # Fetching
-threads: 100 # Reduced to avoid rate limiting (was 100)
+threads: 100 # Reduced to avoid rate limiting
 timeout: 10 # seconds (increased for slow servers)
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
@@ -27,7 +27,7 @@ verify_ssl: false # Set to false to bypass SSL certificate verification errors
 
 # Issue #8: Configurable timeouts
 timeouts:
-  http_request: 20 # for asyncio HTTP requests (seconds) - reduced from 60s to speed up scans
+  http_request: 10 # for asyncio HTTP requests (seconds) - reduced from 60s to speed up scans
   playwright_page: 30000 # ms - reduced from 60000ms to avoid long hangs
   trufflehog: 300 # seconds per file
 

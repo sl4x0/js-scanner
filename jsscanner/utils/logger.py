@@ -83,7 +83,8 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
             backupCount=5,
             encoding='utf-8'
         )
-        file_handler.setLevel(logging.DEBUG)
+        # Only log WARNING and above to file (exclude INFO to reduce file size)
+        file_handler.setLevel(logging.WARNING)
         file_formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
