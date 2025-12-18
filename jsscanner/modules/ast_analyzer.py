@@ -222,8 +222,8 @@ class ASTAnalyzer:
     def _parse_content(self, content: str):
         """Synchronous tree-sitter parsing (CPU-bound)"""
         # Prevent memory issues with very large files
-        if len(content) > 5 * 1024 * 1024:  # 5MB
-            self.logger.warning(f"Skipping AST parsing for file >5MB (too large)")
+        if len(content) > 15 * 1024 * 1024:  # 15MB
+            self.logger.warning(f"Skipping AST parsing for file >15MB (too large)")
             raise ValueError("File too large for AST parsing")
         
         # Skip empty or nearly empty files

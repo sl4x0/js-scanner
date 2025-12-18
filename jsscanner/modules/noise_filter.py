@@ -163,6 +163,12 @@ class NoiseFilter:
                 ('angular.module', 'Angular'),
                 ('/*! Bootstrap v', 'Bootstrap'),
                 ('Shopify.theme', 'Shopify theme'),
+                ('sentry.io', 'Sentry SDK'),
+                ('google-analytics', 'Google Analytics'),
+                ('fontawesome', 'FontAwesome'),
+                ('moment.js', 'MomentJS'),
+                ('chart.js', 'ChartJS'),
+                ('gsap', 'GSAP Animation'),
             ]
             
             for signature, lib_name in vendor_signatures:

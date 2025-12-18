@@ -136,6 +136,9 @@ class ScanEngine:
             # Initialize modules
             await self._initialize_modules()
             
+            # Check dependencies
+            await self._check_dependencies()
+            
             # ============================================================
             # PHASE 1: DISCOVERY & URL COLLECTION (CONCURRENT)
             # ============================================================
@@ -402,6 +405,24 @@ class ScanEngine:
             # Cleanup
             await self._cleanup()
             await self.notifier.stop()
+    
+    async def _check_dependencies(self):
+        """Verify all required external dependencies are available before starting scan."""
+        import shutil
+        
+        required_tools = ['trufflehog', 'subjs', 'webcrack']
+        missing = []
+        
+        for tool in required_tools:
+            if not shutil.which(tool):
+                missing.append(tool)
+        
+        if missing:
+            self.logger.error(f"❌ Missing required dependencies: {', '.join(missing)}")
+            self.logger.error("Please install missing tools before running the scanner.")
+            raise RuntimeError(f"Missing dependencies: {', '.join(missing)}")
+        
+        self.logger.info("✅ All dependencies verified")
     
     async def _initialize_modules(self):
         """Initializes all scanning modules"""

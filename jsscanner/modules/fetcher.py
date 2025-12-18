@@ -198,69 +198,100 @@ class Fetcher:
     async def _smart_interactions(self, page) -> None:
         """Trigger lazy loaders through smart interactions"""
         try:
+            # Check if page is closed before starting
+            if page.is_closed():
+                self.logger.debug("⚠️  Page already closed, skipping interactions")
+                return
+
             # 1. Progressive scroll
             self.logger.debug("🖱️  Progressive scrolling to trigger lazy content...")
-            await page.evaluate("""
-                async () => {
-                    const distance = 100;
-                    const delay = 100;
-                    const maxScroll = document.body.scrollHeight;
+            try:
+                await page.evaluate("""
+                    async () => {
+                        const distance = 100;
+                        const delay = 100;
+                        const maxScroll = document.body.scrollHeight;
 
-                    for (let i = 0; i < maxScroll; i += distance) {
-                        window.scrollTo(0, i);
-                        await new Promise(resolve => setTimeout(resolve, delay));
+                        for (let i = 0; i < maxScroll; i += distance) {
+                            window.scrollTo(0, i);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                        window.scrollTo(0, 0); // Back to top
                     }
-                    window.scrollTo(0, 0); // Back to top
-                }
-            """)
+                """)
+            except Exception as e:
+                # Gracefully handle page closure during scroll
+                if any(msg in str(e) for msg in ["Target closed", "browser has been closed", "Page.evaluate"]):
+                    self.logger.debug("⚠️  Page closed during scroll interaction, continuing...")
+                    return
+                raise
 
             # 2. Hover on interactive elements
             self.logger.debug("🖱️  Hovering on interactive elements...")
-            await page.evaluate("""
-                () => {
-                    const selectors = [
-                        '[data-tooltip]',
-                        '[data-popover]',
-                        '[aria-haspopup]',
-                        '.dropdown-toggle',
-                        '[role=\"button\"]',
-                        '[data-toggle]',
-                        '.has-dropdown'
-                    ];
+            try:
+                await page.evaluate("""
+                    () => {
+                        const selectors = [
+                            '[data-tooltip]',
+                            '[data-popover]',
+                            '[aria-haspopup]',
+                            '.dropdown-toggle',
+                            '[role=\"button\"]',
+                            '[data-toggle]',
+                            '.has-dropdown'
+                        ];
 
-                    selectors.forEach(selector => {
-                        try {
-                            document.querySelectorAll(selector).forEach(el => {
-                                el.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true}));
-                                el.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
-                            });
-                        } catch(e) {
-                            // Ignore errors
-                        }
-                    });
-                }
-            """)
+                        selectors.forEach(selector => {
+                            try {
+                                document.querySelectorAll(selector).forEach(el => {
+                                    el.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true}));
+                                    el.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+                                });
+                            } catch(e) {
+                                // Ignore errors
+                            }
+                        });
+                    }
+                """)
+            except Exception as e:
+                # Gracefully handle page closure during hover
+                if any(msg in str(e) for msg in ["Target closed", "browser has been closed", "Page.evaluate"]):
+                    self.logger.debug("⚠️  Page closed during hover interaction, continuing...")
+                    return
+                raise
 
             # 3. Trigger tab switches
             self.logger.debug("🖱️  Activating tabs...")
-            await page.evaluate("""
-                () => {
-                    document.querySelectorAll('[role=\"tab\"]').forEach((tab, i) => {
-                        try {
-                            setTimeout(() => {
-                                tab.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-                            }, i * 100);
-                        } catch(e) {
-                            // Ignore errors
-                        }
-                    });
-                }
-            """)
+            try:
+                await page.evaluate("""
+                    () => {
+                        document.querySelectorAll('[role=\"tab\"]').forEach((tab, i) => {
+                            try {
+                                setTimeout(() => {
+                                    tab.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                                }, i * 100);
+                            } catch(e) {
+                                // Ignore errors
+                            }
+                        });
+                    }
+                """)
+            except Exception as e:
+                # Gracefully handle page closure during tab activation
+                if any(msg in str(e) for msg in ["Target closed", "browser has been closed", "Page.evaluate"]):
+                    self.logger.debug("⚠️  Page closed during tab activation, continuing...")
+                    return
+                raise
 
             await asyncio.sleep(3)
 
         except Exception as e:
-            self.logger.warning(f"⚠️  Interaction triggers failed: {e}")
+            # Gracefully handle page closure errors instead of treating as failures
+            error_msg = str(e)
+            if any(msg in error_msg for msg in ["Target closed", "context has been closed", "Execution context was destroyed", "browser has been closed", "Page.evaluate"]):
+                self.logger.debug(f"Interaction stopped (page closed): {error_msg}")
+            else:
+                self.logger.warning(f"⚠️  Interaction triggers failed: {e}")
     
     async def cleanup(self) -> None:
         """Cleanup Playwright resources"""
@@ -404,29 +435,51 @@ class Fetcher:
             self.logger.info(f"🖱️  Triggering interactions for lazy-loaded content...")
             await self._smart_interactions(page)
 
-            scripts = await page.query_selector_all('script[src]')
-            for script in scripts:
-                src = await script.get_attribute('src')
-                if src:
-                    absolute_url = urljoin(target, src)
-                    if '.js' in absolute_url.lower():
-                        js_urls.add(absolute_url)
-                        self.logger.debug(f"Found JS (DOM): {absolute_url}")
+            # Add timeout protection for DOM operations to prevent infinite hangs
+            try:
+                scripts = await asyncio.wait_for(
+                    page.query_selector_all('script[src]'),
+                    timeout=10
+                )
+                for script in scripts:
+                    src = await asyncio.wait_for(script.get_attribute('src'), timeout=5)
+                    if src:
+                        absolute_url = urljoin(target, src)
+                        if '.js' in absolute_url.lower():
+                            js_urls.add(absolute_url)
+                            self.logger.debug(f"Found JS (DOM): {absolute_url}")
+            except asyncio.TimeoutError:
+                self.logger.warning(f"⚠️  Timeout querying script[src] tags, continuing with discovered files")
+            except Exception as e:
+                self.logger.debug(f"Error querying script tags: {e}")
 
-            # FIX: Stricter regex for inline scripts
-            inline_scripts = await page.query_selector_all('script:not([src])')
-            for script in inline_scripts:
-                try:
-                    content = await script.inner_text()
-                    import re
-                    # FIX: Enforce valid URL characters for JS files
-                    urls_in_script = re.findall(r'["\']([a-zA-Z0-9_\-:/]+\.js(?:[\?#][^"\']*)?)["\']', content)
-                    
-                    for url in urls_in_script:
-                        absolute_url = urljoin(target, url)
-                        js_urls.add(absolute_url)
-                except:
-                    pass
+            # FIX: Stricter regex for inline scripts with timeout protection
+            try:
+                inline_scripts = await asyncio.wait_for(
+                    page.query_selector_all('script:not([src])'),
+                    timeout=10
+                )
+                for script in inline_scripts:
+                    try:
+                        content = await asyncio.wait_for(script.inner_text(), timeout=5)
+                        
+                        # SAFETY FIX: Skip if content is too massive (e.g. data blobs)
+                        if len(content) > 100000:  # 100KB limit for inline scripts
+                            continue
+                        
+                        import re
+                        # FIX: Enforce valid URL characters for JS files (added . to character class)
+                        urls_in_script = re.findall(r'["\']([a-zA-Z0-9_\-:/.]+\.js(?:[\?#][^"\']*)?)["\']', content)
+                        
+                        for url in urls_in_script:
+                            absolute_url = urljoin(target, url)
+                            js_urls.add(absolute_url)
+                    except:
+                        pass
+            except asyncio.TimeoutError:
+                self.logger.warning(f"⚠️  Timeout querying inline script tags, continuing with discovered files")
+            except Exception as e:
+                self.logger.debug(f"Error querying inline scripts: {e}")
 
         except asyncio.TimeoutError:
             self.logger.warning(f"[TIMEOUT] Live scan timed out after {self.page_timeout/1000}s for {target}")

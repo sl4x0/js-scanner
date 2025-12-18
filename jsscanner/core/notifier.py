@@ -50,11 +50,13 @@ class DiscordNotifier:
         """
         self.running = False
         
-        # Wait for queue to drain (max 60 seconds)
+        # Wait for queue to drain with dynamic timeout (2 seconds per message + 60 second buffer)
         if drain_queue and self.queue:
             if self.logger:
                 self.logger.info(f"📤 Sending {len(self.queue)} queued Discord messages...")
-            deadline = time.time() + 60
+            # Dynamic timeout: 2 seconds per message + 60 second buffer
+            timeout_duration = (len(self.queue) * 2) + 60
+            deadline = time.time() + timeout_duration
             
             while self.queue and time.time() < deadline:
                 await asyncio.sleep(0.5)
