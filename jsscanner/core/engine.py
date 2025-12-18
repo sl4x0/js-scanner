@@ -392,9 +392,6 @@ class ScanEngine:
             trufflehog_output = Path(self.paths['base']) / 'trufflehog_full.json'
             self.secret_scanner.export_results(str(trufflehog_output))
             
-            # Flush pending unverified notifications at phase end
-            await self.secret_scanner.flush_pending_notifications()
-            
             # Save checkpoint after Phase 3
             if checkpoint_enabled:
                 self.state.save_checkpoint('PHASE_3_COMPLETE', {
@@ -1380,6 +1377,8 @@ class ScanEngine:
                 if domain_clean == allowed_clean or domain_clean.endswith('.' + allowed_clean):
                     return True
             
+            # Debug: log rejected URLs to help diagnose scope issues
+            self.logger.debug(f"❌ OUT OF SCOPE: {url[:100]} | Domain: {domain_clean} | Allowed: {list(self.allowed_domains)[:5]}")
             return False
         except Exception as e:
             self.logger.debug(f"Domain check error for {url[:80]}: {e}")
