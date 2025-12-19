@@ -29,7 +29,6 @@ if AUTHORIZED_USER_ID == 0:
 
 # Setup Bot
 intents = discord.Intents.default()
-intents.message_content = True
 client = commands.Bot(command_prefix="!", intents=intents)
 
 

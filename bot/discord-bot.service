@@ -5,9 +5,9 @@ After=network.target
 [Service]
 Type=simple
 User=sl4x0
-WorkingDirectory=/home/sl4x0/js-scanner
+WorkingDirectory=/home/sl4x0/js-scanner/bot
 Environment="PATH=/home/sl4x0/.local/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/usr/bin/python3 /home/sl4x0/js-scanner/discord_bot.py
+ExecStart=/usr/bin/python3 /home/sl4x0/js-scanner/bot/discord_bot.py
 
 # Restart policy
 Restart=always
