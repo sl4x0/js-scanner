@@ -70,24 +70,36 @@ async def scan(interaction: discord.Interaction, full_command: str):
         )
         return
     
-    # 3. Escape single quotes to prevent shell injection
-    safe_command = full_command.replace("'", "'\\''")
-    
-    # 4. Construct the screen command
-    # -dmS: Create detached screen with name
-    # bash -c: Execute command in bash
-    # cd: Change to scanner directory
-    # exec bash: Keep screen alive after command completes
-    screen_cmd = (
-        f"screen -dmS {SCREEN_SESSION_NAME} bash -c '"
-        f"cd {WORK_DIR} && "
-        f"{safe_command}; "
-        f"echo \"[Scan Complete - $(date)]\"; "
-        f"exec bash'"
+    # 3. Check if screen session exists
+    check_screen = await asyncio.create_subprocess_shell(
+        f"screen -list | grep -q {SCREEN_SESSION_NAME}",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
     )
+    await check_screen.communicate()
+    screen_exists = (check_screen.returncode == 0)
     
-    # 5. Execute the command
+    # 4. Execute command in screen
     try:
+        if screen_exists:
+            # Send command to existing screen session
+            # -X stuff: Send keystrokes to screen session
+            screen_cmd = (
+                f"screen -S {SCREEN_SESSION_NAME} -X stuff "
+                f"'cd {WORK_DIR} && {full_command}\\n'"
+            )
+        else:
+            # Create new detached screen session
+            safe_command = full_command.replace("'", "'\\''")
+            screen_cmd = (
+                f"screen -dmS {SCREEN_SESSION_NAME} bash -c '"
+                f"cd {WORK_DIR} && "
+                f"{safe_command}; "
+                f"echo \"[Scan Complete - $(date)]\"; "
+                f"exec bash'"
+            )
+        
+        # 5. Execute the command
         process = await asyncio.create_subprocess_shell(
             screen_cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -96,9 +108,10 @@ async def scan(interaction: discord.Interaction, full_command: str):
         stdout, stderr = await process.communicate()
         
         # 6. Send confirmation embed
+        status = "reused existing" if screen_exists else "created new"
         embed = discord.Embed(
             title="🚀 Scan Launched",
-            description=f"Command executed in screen session `{SCREEN_SESSION_NAME}`",
+            description=f"Command executed in screen session `{SCREEN_SESSION_NAME}` ({status})",
             color=discord.Color.green()
         )
         embed.add_field(
