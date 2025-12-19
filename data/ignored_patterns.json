@@ -98,10 +98,21 @@
     "*-legacy*.js",
     "*/vendor-*.js",
     "*/vendors-*.js",
+    "*/vendors~*.js",
     "*/runtime-*.js",
     "*/runtime~*.js",
     "*/manifest.*.js",
-    "*/webpack-runtime*.js"
+    "*/webpack-runtime*.js",
+    "*/chunk-vendors*.js",
+    "*/_next/static/chunks/webpack-*.js",
+    "*/_next/static/chunks/framework-*.js",
+    "*/_next/static/chunks/main-*.js",
+    "*/_next/static/chunks/polyfills-*.js",
+    "*/core-js*.min.js",
+    "*/regenerator-runtime*.js",
+    "*/modernizr*.min.js",
+    "*/webfontloader*.js",
+    "*/fontfaceobserver*.js"
   ],
   "known_library_hashes": {
     "jquery-3.7.1.min.js": "a09e13ee94d51c524b7e2a728c7d4039",

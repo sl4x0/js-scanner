@@ -66,6 +66,7 @@ class ScanEngine:
         
         # Statistics
         self.start_time = None
+        self._last_progress_update = 0
         self.stats = {
             'total_files': 0,
             'total_secrets': 0,
@@ -80,6 +81,14 @@ class ScanEngine:
                 'http_error': 0,
                 'duplicates': 0,
                 'invalid_url': 0
+            },
+            'network_errors': {
+                'dns_errors': 0,
+                'connection_refused': 0,
+                'ssl_errors': 0,
+                'timeouts': 0,
+                'rate_limits': 0,
+                'http_errors': 0
             }
         }
     
@@ -478,6 +487,20 @@ class ScanEngine:
                 await self._cleanup_minified_files()
             
             # ============================================================
+            # PHASE 6.5: MINIMAL STORAGE CLEANUP (DISABLED FOR BUG BOUNTY)
+            # ============================================================
+            # NOTE: Cleanup disabled to preserve all JS files for manual analysis
+            # if self.config.get('minimal_storage', False):
+            #     self.logger.info(f"\n{'='*60}")
+            #     self.logger.info("🗑️  MINIMAL STORAGE CLEANUP")
+            #     self.logger.info(f"{'='*60}")
+            #     
+            #     # Call the cleanup method to remove files without secrets
+            #     cleaned_count = await self._cleanup_files_without_secrets()
+            #     self.logger.info(f"✅ Cleaned up {cleaned_count} uninteresting files")
+            #     self.logger.info("")
+            
+            # ============================================================
             # FINAL STATISTICS
             # ============================================================
             duration = time.time() - self.start_time
@@ -687,8 +710,69 @@ class ScanEngine:
         from ..modules.subjs_fetcher import SubJSFetcher
         subjs_fetcher = SubJSFetcher(self.config, self.logger)
         
-        # Configure concurrency level
-        max_concurrent_domains = self.config.get('max_concurrent_domains', 10)
+        # OPTIMIZATION: Batch SubJS processing for subjs-only mode (massive speedup)
+        if subjs_only and SubJSFetcher.is_installed():
+            self.logger.info("🚀 SubJS-only mode: Using batch processing for maximum speed")
+            
+            # Write inputs to temp file for batch processing
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+                for item in inputs:
+                    # Only add domains, not full JS URLs
+                    if not self._is_valid_js_url(item):
+                        f.write(item + '\n')
+                temp_file = f.name
+            
+            try:
+                # Get scope domains for filtering
+                scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
+                
+                # Single batch SubJS call instead of thousands of subprocesses
+                batch_urls = await asyncio.to_thread(subjs_fetcher.fetch_from_file, temp_file, scope_domains)
+                
+                # Add any direct JS URLs from input
+                for item in inputs:
+                    if self._is_valid_js_url(item):
+                        batch_urls.append(item)
+                
+                # Deduplicate and return
+                all_urls = self._deduplicate_urls(batch_urls)
+                
+                self.logger.info(f"{'='*60}")
+                self.logger.info(f"📊 Batch SubJS found {len(all_urls)} unique JS files")
+                self.logger.info(f"{'='*60}\n")
+                
+                # Store in metadata
+                self.state.update_metadata({
+                    'source_urls': all_urls[:100]
+                })
+                
+                return all_urls
+                
+            finally:
+                # Cleanup temp file
+                import os
+                try:
+                    os.unlink(temp_file)
+                except:
+                    pass
+        
+        # Configure concurrency level with smart defaults based on scan mode
+        skip_live = self.config.get('skip_live', False)
+        
+        # Dynamic concurrency: Higher for SubJS-only (CPU-bound), lower for live scans (RAM-bound)
+        if 'max_concurrent_domains' in self.config:
+            # User explicitly set concurrency - respect it
+            max_concurrent_domains = self.config['max_concurrent_domains']
+        elif subjs_only or skip_live:
+            # SubJS-only mode: can handle more concurrent domains (lightweight)
+            max_concurrent_domains = 50
+            self.logger.info("🚀 SubJS-only mode detected - using high concurrency (50 domains)")
+        else:
+            # Live browser scan: keep concurrency conservative (RAM-intensive)
+            max_concurrent_domains = 10
+            self.logger.info("🌐 Live scan mode - using moderate concurrency (10 domains)")
+        
         semaphore = asyncio.Semaphore(max_concurrent_domains)
         
         # Log concurrency settings to clarify expected timeout behavior
@@ -715,6 +799,12 @@ class ScanEngine:
                         return [item]
                     
                     # CASE B: It's a Domain/Page URL (needs JS extraction)
+                    # Fast DNS pre-validation to skip dead domains
+                    is_valid, reason = await self.fetcher.validate_domain(item)
+                    if not is_valid:
+                        self.logger.warning(f"[{index+1}/{len(inputs)}] ⏭️  Skipping {item}: {reason}")
+                        return []
+                    
                     self.logger.info(f"[{index+1}/{len(inputs)}] 📍 Processing: {item}")
                     
                     # Determine which discovery methods to use
@@ -1003,6 +1093,14 @@ class ScanEngine:
                 try:
                     content = file_info['content']
                     url = file_info['url']
+                    
+                    # OPTIMIZATION: Skip vendor libraries by hash before expensive AST analysis
+                    should_skip, reason = self.fetcher.noise_filter.should_skip_content(content, url)
+                    if should_skip:
+                        self.logger.debug(f"⏭️  Skipping AST analysis for vendor lib: {url} ({reason})")
+                        async with progress_lock:
+                            processed_count += 1
+                        return
                     
                     # Run AST analysis on MINIFIED content (faster!)
                     await self.ast_analyzer.analyze(content, url)
@@ -1626,6 +1724,76 @@ class ScanEngine:
         
         return domains if domains else None
     
+    async def _cleanup_files_without_secrets(self) -> int:
+        """
+        Minimal storage mode: Delete files that have no secrets or findings
+        
+        Returns:
+            Count of files deleted
+        """
+        deleted_count = 0
+        
+        try:
+            # Get all secret source filenames from scanner
+            files_with_secrets = set()
+            if hasattr(self.secret_scanner, 'all_secrets'):
+                for secret in self.secret_scanner.all_secrets:
+                    filename = secret.get('filename')
+                    if filename:
+                        files_with_secrets.add(filename)
+            
+            # Get all endpoint/interesting finding filenames from AST analyzer
+            files_with_findings = set()
+            if hasattr(self.ast_analyzer, 'extracts'):
+                for source_url, extracts_list in self.ast_analyzer.extracts.items():
+                    if extracts_list:  # Has findings
+                        # Extract filename from URL or manifest
+                        manifest_file = Path(self.paths['base']) / 'file_manifest.json'
+                        if manifest_file.exists():
+                            import json
+                            with open(manifest_file, 'r') as f:
+                                manifest = json.load(f)
+                                for filename, entry in manifest.items():
+                                    if entry.get('url') == source_url:
+                                        files_with_findings.add(filename)
+                                        break
+            
+            # Combine files to keep
+            files_to_keep = files_with_secrets | files_with_findings
+            
+            # Scan both minified and unminified directories
+            for dir_path in [self.paths['files_minified'], self.paths['files_unminified']]:
+                dir_path = Path(dir_path)
+                if not dir_path.exists():
+                    continue
+                
+                for file_path in dir_path.glob('*.js'):
+                    filename = file_path.name
+                    
+                    # Skip vendor libraries (already filtered by hash)
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    
+                    should_skip, reason = self.fetcher.noise_filter.should_skip_content(content, str(file_path))
+                    if should_skip:
+                        # Delete vendor library
+                        file_path.unlink()
+                        deleted_count += 1
+                        self.logger.debug(f"🗑️  Deleted vendor lib: {filename} ({reason})")
+                        continue
+                    
+                    # Delete if no secrets or findings
+                    if filename not in files_to_keep:
+                        file_path.unlink()
+                        deleted_count += 1
+                        self.logger.debug(f"🗑️  Deleted file with no findings: {filename}")
+            
+            return deleted_count
+            
+        except Exception as e:
+            self.logger.warning(f"Error during cleanup: {e}")
+            return deleted_count
+    
     async def _save_current_progress(self):
         """
         Save current scan progress and data before shutdown
@@ -1656,21 +1824,74 @@ class ScanEngine:
             # Update metadata with shutdown info
             try:
                 duration = time.time() - self.start_time
-                self.state.update_metadata({
+                
+                # Include error stats in metadata
+                metadata_update = {
                     'scan_duration': duration,
                     'end_time': datetime.utcnow().isoformat() + 'Z',
                     'shutdown_type': 'interrupted',
                     'total_files': self.stats.get('total_files', 0),
                     'total_secrets': self.stats.get('total_secrets', 0)
-                })
+                }
+                
+                if self.fetcher and hasattr(self.fetcher, 'error_stats'):
+                    metadata_update['network_errors'] = self.fetcher.error_stats
+                
+                self.state.update_metadata(metadata_update)
                 self.logger.info(f"  ✓ Updated metadata (duration: {duration:.1f}s)")
             except Exception as e:
                 self.logger.error(f"  ✗ Failed to update metadata: {e}")
+            
+            # Display error summary
+            self._display_error_summary()
             
             self.logger.info("💾 Progress saved successfully")
             
         except Exception as e:
             self.logger.error(f"Failed to save progress: {e}")
+    
+    def _display_error_summary(self):
+        """Display categorized error summary at scan completion"""
+        if not self.fetcher:
+            return
+            
+        error_stats = self.fetcher.error_stats
+        total_errors = sum(error_stats.values())
+        
+        if total_errors == 0:
+            return
+        
+        self.logger.info(f"\n{'='*60}")
+        self.logger.info("⚠️  ERROR SUMMARY")
+        self.logger.info(f"{'='*60}")
+        self.logger.info(f"Total Network Errors: {total_errors}")
+        self.logger.info("")
+        
+        if error_stats['dns_errors'] > 0:
+            self.logger.info(f"  🔴 DNS Resolution Failed: {error_stats['dns_errors']}")
+            self.logger.info("     → Dead domains or invalid DNS records")
+        
+        if error_stats['connection_refused'] > 0:
+            self.logger.info(f"  🔴 Connection Refused: {error_stats['connection_refused']}")
+            self.logger.info("     → Servers not accepting connections")
+        
+        if error_stats['ssl_errors'] > 0:
+            self.logger.info(f"  🔴 SSL/Certificate Errors: {error_stats['ssl_errors']}")
+            self.logger.info("     → Invalid or self-signed certificates")
+        
+        if error_stats['timeouts'] > 0:
+            self.logger.info(f"  ⏱️  Timeouts: {error_stats['timeouts']}")
+            self.logger.info("     → Slow servers or rate limiting")
+        
+        if error_stats['rate_limits'] > 0:
+            self.logger.info(f"  🚦 Rate Limited: {error_stats['rate_limits']}")
+            self.logger.info("     → HTTP 429/503 responses")
+        
+        if error_stats['http_errors'] > 0:
+            self.logger.info(f"  ❌ HTTP Errors: {error_stats['http_errors']}")
+            self.logger.info("     → 4xx/5xx status codes")
+        
+        self.logger.info(f"{'='*60}\n")
     
     def _emergency_shutdown(self):
         """

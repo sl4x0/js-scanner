@@ -5,8 +5,10 @@ Handles fetching JavaScript files from live sites using Playwright
 import asyncio
 import aiohttp
 import time
+import socket
+import random
 from playwright.async_api import async_playwright, Browser, BrowserContext
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 import re
 from .noise_filter import NoiseFilter
@@ -129,6 +131,16 @@ class Fetcher:
         self.verbose = config.get('verbose', False)
         self._browser_lock = asyncio.Lock()  # Prevent concurrent cleanup
 
+        # Error tracking for summary
+        self.error_stats = {
+            'dns_errors': 0,
+            'connection_refused': 0,
+            'ssl_errors': 0,
+            'timeouts': 0,
+            'rate_limits': 0,
+            'http_errors': 0
+        }
+
         # Initialize noise filter
         self.noise_filter = NoiseFilter(logger=logger)
 
@@ -137,6 +149,24 @@ class Fetcher:
         self.restart_after = config.get('playwright', {}).get('restart_after', 100)
         self.page_timeout = config.get('playwright', {}).get('page_timeout', 30000)
         self.headless = config.get('playwright', {}).get('headless', True)
+        
+        # User-Agent rotation (randomize to avoid WAF fingerprinting)
+        self.user_agents = config.get('user_agents', [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+            'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0'
+        ])
+    
+    def _get_random_user_agent(self) -> str:
+        """Get a random user agent to avoid WAF fingerprinting"""
+        return random.choice(self.user_agents)
     
     def _is_in_scope(self, url: str, target: str) -> bool:
         """Check if URL is in scope (same root domain as target)"""
@@ -179,6 +209,44 @@ class Fetcher:
 
         except Exception:
             return False
+    
+    async def validate_domain(self, target: str) -> Tuple[bool, str]:
+        """Fast DNS validation to filter dead domains before scanning
+        
+        Args:
+            target: Domain or URL to validate
+            
+        Returns:
+            Tuple of (is_valid, reason)
+        """
+        try:
+            # Extract domain from URL
+            if target.startswith('http'):
+                parsed = urlparse(target)
+                domain = parsed.netloc
+            else:
+                domain = target.split('/')[0]
+            
+            # Remove port if present
+            if ':' in domain:
+                domain = domain.split(':')[0]
+            
+            # Quick DNS lookup (non-blocking)
+            loop = asyncio.get_event_loop()
+            await asyncio.wait_for(
+                loop.run_in_executor(None, socket.gethostbyname, domain),
+                timeout=2.0
+            )
+            return True, "valid"
+            
+        except socket.gaierror:
+            self.error_stats['dns_errors'] += 1
+            return False, "DNS resolution failed"
+        except asyncio.TimeoutError:
+            self.error_stats['timeouts'] += 1
+            return False, "DNS timeout"
+        except Exception as e:
+            return False, f"Validation error: {str(e)}"
     
     async def initialize(self) -> None:
         """Initialize Playwright browser only if needed"""
@@ -285,7 +353,16 @@ class Fetcher:
                     return
                 raise
 
-            await asyncio.sleep(3)
+            # Wait for network idle after interactions (configurable)
+            interaction_delay = self.config.get('interaction_delay', 0.5)
+            if interaction_delay > 0:
+                self.logger.debug(f"⏱️  Waiting {interaction_delay}s for network idle...")
+                try:
+                    await page.wait_for_load_state('networkidle', timeout=int(interaction_delay * 1000))
+                    self.logger.debug("✓ Network idle detected")
+                except Exception:
+                    # Timeout is OK - network might not go idle, but we gave it a chance
+                    await asyncio.sleep(interaction_delay)
 
         except Exception as e:
             # Gracefully handle page closure errors instead of treating as failures
@@ -313,9 +390,11 @@ class Fetcher:
                     self.logger.warning(f"Playwright cleanup error: {e}")
     
     async def fetch_live(self, target: str) -> List[str]:
-        """Fetch JavaScript URLs from live site using Playwright"""
-        max_retries = 3
+        """Fetch JavaScript URLs from live site using Playwright with smart retries"""
+        max_retries = 4  # Increased for timeout scenarios
         retry_delay = 2
+        is_dns_error = False
+        is_connection_error = False
 
         for attempt in range(max_retries):
             try:
@@ -328,34 +407,63 @@ class Fetcher:
 
             except Exception as e:
                 error_msg = str(e)
-                is_retryable = any(x in error_msg for x in [
+                
+                # Categorize error type for smart retry
+                is_timeout = "Timeout" in error_msg or "timeout" in error_msg.lower()
+                is_dns_error = "net::ERR_NAME_NOT_RESOLVED" in error_msg
+                is_connection_error = "net::ERR_CONNECTION_REFUSED" in error_msg
+                is_ssl_error = "net::ERR_CERT" in error_msg or "SSL" in error_msg
+                is_browser_crash = any(x in error_msg for x in [
                     "Target closed", "Protocol error", "browser has been closed",
                     "context has been closed", "page has been closed"
                 ])
 
-                if is_retryable and attempt < max_retries - 1:
-                    self.logger.warning(f"⚠️  Browser crashed (attempt {attempt + 1}/{max_retries}): {error_msg[:100]}")
-                    self.logger.info(f"🔄 Restarting browser and retrying...")
-                    try:
-                        if self.browser_manager and self.browser_manager.browser:
-                            await self.browser_manager.browser.close()
-                            self.browser_manager.browser = None
-                    except:
-                        pass
+                # Track errors
+                if is_dns_error:
+                    self.error_stats['dns_errors'] += 1
+                elif is_connection_error:
+                    self.error_stats['connection_refused'] += 1
+                elif is_ssl_error:
+                    self.error_stats['ssl_errors'] += 1
+                elif is_timeout:
+                    self.error_stats['timeouts'] += 1
+
+                # Smart retry logic: DNS errors get 1 retry, timeouts get full retries
+                should_retry = False
+                if is_browser_crash and attempt < max_retries - 1:
+                    should_retry = True
+                elif is_timeout and attempt < max_retries - 1:
+                    should_retry = True  # Retry timeouts multiple times
+                elif (is_dns_error or is_connection_error or is_ssl_error) and attempt == 0:
+                    should_retry = True  # Only 1 retry for permanent errors
+
+                if should_retry:
+                    if is_browser_crash:
+                        self.logger.warning(f"⚠️  Browser crashed (attempt {attempt + 1}/{max_retries}): {error_msg[:100]}")
+                        self.logger.info(f"🔄 Restarting browser and retrying...")
+                        try:
+                            if self.browser_manager and self.browser_manager.browser:
+                                await self.browser_manager.browser.close()
+                                self.browser_manager.browser = None
+                        except:
+                            pass
                     continue
                 else:
+                    # Final failure - log categorized error
                     if "Download is starting" in error_msg or "download" in error_msg.lower():
                         self.logger.info(f"⚠️  URL triggers a download (not a page): {target}")
                         if target.endswith('.js') or target.endswith('.mjs') or '.js?' in target:
                             return [target]
-                    elif "net::ERR_NAME_NOT_RESOLVED" in error_msg:
+                    elif is_dns_error:
                         self.logger.warning(f"[DNS ERROR] Could not resolve domain: {target}")
-                    elif "net::ERR_CONNECTION_REFUSED" in error_msg:
+                    elif is_connection_error:
                         self.logger.warning(f"[CONNECTION REFUSED] Server rejected connection: {target}")
-                    elif "net::ERR_CERT" in error_msg or "SSL" in error_msg:
+                    elif is_ssl_error:
                         self.logger.warning(f"[SSL ERROR] Certificate validation failed: {target}")
                     elif "net::ERR_ABORTED" in error_msg:
                         self.logger.info(f"⚠️  Navigation aborted (redirect or client-side routing): {target}")
+                    elif is_timeout:
+                        self.logger.warning(f"[TIMEOUT] Page load timeout for {target}")
                     else:
                         self.logger.warning(f"[ERROR] Live scan failed for {target}: {error_msg[:150]}")
 
@@ -381,7 +489,7 @@ class Fetcher:
 
             context = await self.browser_manager.browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                user_agent=self._get_random_user_agent(),  # Rotate user agents
                 ignore_https_errors=True,
                 java_script_enabled=True,
                 bypass_csp=True
@@ -440,8 +548,6 @@ class Fetcher:
                     return []
                 else:
                     raise
-
-            await asyncio.sleep(3)
 
             self.logger.info(f"🖱️  Triggering interactions for lazy-loaded content...")
             await self._smart_interactions(page)
@@ -593,16 +699,22 @@ class Fetcher:
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
         
+        # Rotate User-Agent for stealth
+        headers = {
+            'User-Agent': self._get_random_user_agent()
+        }
+        
         # Use ssl_context for both connector and session.get
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(connector=connector) as session:
             # Use configured timeout instead of hardcoded value
             timeout_value = self.config.get('timeouts', {}).get('http_request', 60)
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_value), ssl=ssl_context) as response:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_value), ssl=ssl_context, headers=headers) as response:
                 # No retries - fail immediately on rate limiting (return None, not exception)
                 if response.status in [429, 503]:
                     self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")
                     self.last_failure_reason = 'rate_limit'
+                    self.error_stats['rate_limits'] += 1
                     return None
 
                 if response.status == 200:
@@ -662,6 +774,7 @@ class Fetcher:
                     else:
                         self.logger.debug(f"HTTP {response.status}: {url}")
                     self.last_failure_reason = 'http_error'
+                    self.error_stats['http_errors'] += 1
                     return None
     
     async def fetch_with_playwright(self, url: str) -> Optional[str]:

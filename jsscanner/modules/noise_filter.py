@@ -28,6 +28,7 @@ class NoiseFilter:
             'filtered_cdn': 0,
             'filtered_pattern': 0,
             'filtered_hash': 0,
+            'filtered_vendor': 0,
             'total_checked': 0
         }
     
@@ -151,29 +152,46 @@ class NoiseFilter:
                 return True, "Vendor (large minified file)"
             
             # Check for common vendor signatures in first 1000 chars
-            header = content[:1000]
+            header = content[:1000].lower()
             vendor_signatures = [
                 ('!function(e,t){"object"==typeof exports', 'UMD pattern'),
-                ('/*! jQuery v', 'jQuery'),
-                ('/*! Lazy Load', 'Lazy Load'),
-                ('* Swiper ', 'Swiper'),
+                ('/*! jquery v', 'jQuery'),
+                ('/*! lazy load', 'Lazy Load'),
+                ('* swiper ', 'Swiper'),
                 ('define.amd', 'AMD module'),
-                ('React.createElement', 'React'),
-                ('Vue.component', 'Vue'),
+                ('react.createelement', 'React'),
+                ('vue.component', 'Vue'),
                 ('angular.module', 'Angular'),
-                ('/*! Bootstrap v', 'Bootstrap'),
-                ('Shopify.theme', 'Shopify theme'),
+                ('/*! bootstrap v', 'Bootstrap'),
+                ('shopify.theme', 'Shopify theme'),
                 ('sentry.io', 'Sentry SDK'),
                 ('google-analytics', 'Google Analytics'),
                 ('fontawesome', 'FontAwesome'),
                 ('moment.js', 'MomentJS'),
                 ('chart.js', 'ChartJS'),
                 ('gsap', 'GSAP Animation'),
+                ('webpackchunk', 'Webpack chunk'),
+                ('__webpack_require__', 'Webpack runtime'),
+                ('/*! modernizr', 'Modernizr'),
+                ('/*! for license', 'Vendor library'),
+                ('lodash.com', 'Lodash'),
+                ('underscore.js', 'Underscore'),
+                ('axios', 'Axios HTTP'),
+                ('polyfill', 'Polyfill'),
+                ('core-js', 'Core-JS polyfill'),
+                ('regenerator-runtime', 'Babel runtime'),
+                ('/*!\n * @license', 'Licensed vendor'),
             ]
             
             for signature, lib_name in vendor_signatures:
                 if signature in header:
                     return True, f"Vendor ({lib_name})"
+            
+            # Check for webpack/vite chunk patterns in filename-like content
+            if any(pattern in content[:200].lower() for pattern in [
+                'chunk-vendors', 'vendors~', 'runtime~', 'polyfills~'
+            ]):
+                return True, "Vendor (build chunk)"
             
             return False, ""
             
