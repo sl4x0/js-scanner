@@ -292,11 +292,13 @@ MIT — Free for bug bounty and security research
 **Control your VPS scanner remotely from Discord!**
 
 Run scans directly from Discord with slash commands:
+
 ```
 /scan python3 -m jsscanner -t target --subjs-only -u https://example.com
 ```
 
 ✅ **Features:**
+
 - Execute scans remotely via Discord slash commands
 - Runs in screen session on VPS (persistent, detachable)
 - Scanner sends notifications via existing webhook system

@@ -4,9 +4,11 @@
 **Public Key:** `85642a0c69462892a2fcd91fc6097e5ac7fb9dd4de73676384098f144e883eca`
 
 ## 1. Get Bot Token
+
 https://discord.com/developers/applications/1451543287382016121/bot → Reset Token → Copy
 
 ## 2. Get Your User ID
+
 Discord Settings → Advanced → Developer Mode → Right-click name → Copy User ID
 
 ## 3. Install on VPS
@@ -34,6 +36,7 @@ sudo systemctl start discord-bot.service
 ```
 
 ## 4. Invite Bot
+
 https://discord.com/api/oauth2/authorize?client_id=1451543287382016121&permissions=2048&scope=bot%20applications.commands
 
 ## Usage
