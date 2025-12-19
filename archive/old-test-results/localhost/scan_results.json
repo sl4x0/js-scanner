@@ -1,0 +1,33 @@
+{
+  "target": "localhost",
+  "scan_date": "2025-12-18T15:33:24.797024Z",
+  "statistics": {
+    "total_files": 2,
+    "total_secrets": 0,
+    "errors": [],
+    "failures": {
+      "fetch_failed": 0,
+      "empty_content": 0,
+      "html_not_js": 0,
+      "too_short": 0,
+      "too_large": 0,
+      "timeout": 0,
+      "http_error": 0,
+      "duplicates": 0,
+      "invalid_url": 0
+    },
+    "secrets_summary": {
+      "total_domains": 0,
+      "total_secrets": 0,
+      "verified_secrets": 0,
+      "domains": {}
+    },
+    "scan_duration": 5.184154748916626
+  },
+  "files_scanned": [
+    "http://localhost:8000/test_secrets_aws.js",
+    "http://localhost:8000/test_secrets_github.js"
+  ],
+  "secrets_found": 0,
+  "extraction_skipped": true
+}

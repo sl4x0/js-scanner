@@ -1,0 +1,15 @@
+{
+  "total_files": 1,
+  "total_secrets": 0,
+  "scan_duration": 4.169420003890991,
+  "errors": [],
+  "start_time": "2025-12-18T15:40:56.430826Z",
+  "end_time": "2025-12-18T15:41:00.600246Z",
+  "source_urls": [
+    "http://localhost:8000/test_clean_api.js"
+  ],
+  "use_subjs": true,
+  "subjs_only": false,
+  "resumed": false,
+  "last_updated": "2025-12-18T15:41:00.609489Z"
+}

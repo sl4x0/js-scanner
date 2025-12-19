@@ -1,0 +1,11 @@
+{
+  "scanned_hashes": [
+    "d45d21d6177640f772b4b8a1990cce8286f3feddb6b441251a7b02f27b12d4f9"
+  ],
+  "scan_metadata": {
+    "d45d21d6177640f772b4b8a1990cce8286f3feddb6b441251a7b02f27b12d4f9": {
+      "url": "http://localhost:8000/test_secrets_aws.js",
+      "timestamp": "2025-12-18T15:33:53.522427Z"
+    }
+  }
+}
