@@ -34,17 +34,17 @@ client = commands.Bot(command_prefix="!", intents=intents)
 
 @client.event
 async def on_ready():
-    print(f'✅ Bot logged in as {client.user} (ID: {client.user.id})')
-    print(f'📂 Working directory: {WORK_DIR}')
-    print(f'👤 Authorized user ID: {AUTHORIZED_USER_ID}')
-    print(f'🖥️  Screen session name: {SCREEN_SESSION_NAME}')
+    print(f'✅ Bot logged in as {client.user} (ID: {client.user.id})', flush=True)
+    print(f'📂 Working directory: {WORK_DIR}', flush=True)
+    print(f'👤 Authorized user ID: {AUTHORIZED_USER_ID}', flush=True)
+    print(f'🖥️  Screen session name: {SCREEN_SESSION_NAME}', flush=True)
     
     try:
         synced = await client.tree.sync()
-        print(f"✅ Synced {len(synced)} slash command(s)")
-        print(f"🎯 Commands: {', '.join([cmd.name for cmd in synced])}")
+        print(f"✅ Synced {len(synced)} slash command(s)", flush=True)
+        print(f"🎯 Commands: {', '.join([cmd.name for cmd in synced])}", flush=True)
     except Exception as e:
-        print(f"❌ Failed to sync commands: {e}")
+        print(f"❌ Failed to sync commands: {e}", flush=True)
 
 
 @client.tree.command(name="scan", description="Execute a JS-Scanner command in the 'discord' screen session")
