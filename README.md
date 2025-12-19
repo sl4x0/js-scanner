@@ -287,7 +287,28 @@ MIT — Free for bug bounty and security research
 
 ---
 
-## 🤝 Contributing
+## � Discord Bot Integration
+
+**Control your VPS scanner remotely from Discord!**
+
+Run scans directly from Discord with slash commands:
+```
+/scan python3 -m jsscanner -t target --subjs-only -u https://example.com
+```
+
+✅ **Features:**
+- Execute scans remotely via Discord slash commands
+- Runs in screen session on VPS (persistent, detachable)
+- Scanner sends notifications via existing webhook system
+- Check scan status with `/screen-status`
+- List active sessions with `/screen-list`
+
+📖 **Setup Guide:** See [DISCORD_BOT_SETUP.md](DISCORD_BOT_SETUP.md) for full installation instructions  
+⚡ **Quick Reference:** See [DISCORD_BOT_QUICKREF.md](DISCORD_BOT_QUICKREF.md) for command examples
+
+---
+
+## �🤝 Contributing
 
 Found a bug? Have an idea? Open an issue or PR!
 

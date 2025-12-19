@@ -1,0 +1,22 @@
+[Unit]
+Description=JS-Scanner Discord Bot
+After=network.target
+
+[Service]
+Type=simple
+User=sl4x0
+WorkingDirectory=/home/sl4x0/js-scanner
+Environment="PATH=/home/sl4x0/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 /home/sl4x0/js-scanner/discord_bot.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jsscanner-bot
+
+[Install]
+WantedBy=multi-user.target
