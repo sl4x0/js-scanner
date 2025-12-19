@@ -235,7 +235,7 @@ class Fetcher:
             loop = asyncio.get_event_loop()
             await asyncio.wait_for(
                 loop.run_in_executor(None, socket.gethostbyname, domain),
-                timeout=2.0
+                timeout=1.0
             )
             return True, "valid"
             
@@ -709,7 +709,8 @@ class Fetcher:
         async with aiohttp.ClientSession(connector=connector) as session:
             # Use configured timeout instead of hardcoded value
             timeout_value = self.config.get('timeouts', {}).get('http_request', 60)
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_value), ssl=ssl_context, headers=headers) as response:
+            # Disable redirects for speed - treat redirects as failures
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_value), ssl=ssl_context, headers=headers, allow_redirects=False) as response:
                 # No retries - fail immediately on rate limiting (return None, not exception)
                 if response.status in [429, 503]:
                     self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")

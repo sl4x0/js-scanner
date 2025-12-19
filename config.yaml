@@ -45,8 +45,8 @@ user_agents:
 
 # Issue #8: Configurable timeouts
 timeouts:
-  http_request: 10 # for asyncio HTTP requests (seconds) - reduced from 60s to speed up scans
-  playwright_page: 30000 # ms - reduced from 60000ms to avoid long hangs
+  http_request: 5 # for asyncio HTTP requests (seconds) - aggressive timeout for speed
+  playwright_page: 15000 # ms - fast timeout to skip slow/blocked sites quickly
   trufflehog: 300 # seconds per file
 
 # Playwright
@@ -54,7 +54,7 @@ playwright:
   headless: true # Run browser in headless mode
   max_concurrent: 4 # Max concurrent browser instances - reduced from 10 to keep event loop responsive
   restart_after: 100 # Restart browser after N pages
-  page_timeout: 30000 # ms - reduced from 60000ms to avoid long hangs on slow/blocked sites
+  page_timeout: 15000 # ms - fast timeout to skip slow/blocked sites quickly
 
 # SubJS Configuration
 subjs:
@@ -95,7 +95,7 @@ batch_processing:
 
 # Retry Configuration (NEW)
 retry:
-  http_requests: 2 # Max retry attempts for HTTP operations
+  http_requests: 1 # Max retry attempts for HTTP operations - no retries for speed
   subprocess_calls: 2 # Max retry attempts for subprocess operations
   backoff_base: 1.0 # Base delay in seconds for exponential backoff (1s -> 2s -> 4s)
   backoff_multiplier: 2.0 # Multiplier for exponential backoff
