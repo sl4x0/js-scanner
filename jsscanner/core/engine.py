@@ -227,11 +227,11 @@ class ScanEngine:
                 import threading
                 cleanup_thread = threading.Thread(target=self._emergency_shutdown, daemon=True)
                 cleanup_thread.start()
-                cleanup_thread.join(timeout=5)  # 5-second timeout for cleanup
+                cleanup_thread.join(timeout=30)  # 30-second timeout for VPS (was 5s)
                 
                 # Force exit if cleanup takes too long
                 if cleanup_thread.is_alive():
-                    self.logger.error("⏱️  Cleanup timeout - forcing exit")
+                    self.logger.error("⏱️  Cleanup timeout (30s) - forcing exit")
                     import os
                     os._exit(1)
                 else:
@@ -1904,10 +1904,18 @@ class ScanEngine:
             asyncio.set_event_loop(loop)
             loop.run_until_complete(self._save_current_progress())
             
+            # Stop Discord notifier
+            if hasattr(self, 'notifier') and self.notifier:
+                try:
+                    loop.run_until_complete(self.notifier.stop(drain_queue=False))
+                except Exception as e:
+                    self.logger.debug(f"Notifier cleanup error: {e}")
+            
             # Force cleanup browser if it exists
             if hasattr(self, 'fetcher') and self.fetcher:
                 try:
                     loop.run_until_complete(self.fetcher.cleanup())
+                    self.logger.info("Browser cleanup completed")
                 except Exception as e:
                     self.logger.debug(f"Browser cleanup error: {e}")
             
@@ -1922,20 +1930,33 @@ class ScanEngine:
             
             loop.close()
             
-            # Force kill any remaining playwright processes
+            # Force kill any remaining playwright processes (with verification)
             try:
                 import subprocess
                 import sys
+                import time
+                
                 if sys.platform == 'win32':
                     subprocess.run(['taskkill', '/F', '/IM', 'chromium.exe'], 
                                    stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                     subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'], 
                                    stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                    time.sleep(0.5)  # Give Windows time to kill processes
                 else:
                     subprocess.run(['pkill', '-9', 'chromium'], 
                                    stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                     subprocess.run(['pkill', '-9', 'chrome'], 
                                    stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                    time.sleep(0.3)  # Give Linux time to kill processes
+                
+                # Verify cleanup
+                if sys.platform != 'win32':
+                    result = subprocess.run(['pgrep', '-f', 'chromium|chrome'], 
+                                          capture_output=True, text=True)
+                    if result.stdout.strip():
+                        self.logger.warning("⚠️  Some browser processes may still be running")
+                    else:
+                        self.logger.debug("✓ All browser processes terminated")
             except Exception:
                 pass  # Ignore errors - best effort cleanup
                 

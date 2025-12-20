@@ -155,12 +155,16 @@ def retry_sync(
     backoff_multiplier: float = 2.0,
     jitter: bool = True,
     retry_on: Optional[Tuple[Type[Exception], ...]] = None,
-    operation_name: Optional[str] = None
+    operation_name: Optional[str] = None,
+    shutdown_callback: Optional[Callable[[], bool]] = None
 ):
     """
     Decorator for synchronous functions to add retry logic with exponential backoff.
     
     Similar to retry_async but for non-async functions.
+    
+    Args:
+        shutdown_callback: Optional callable that returns True if shutdown is requested
     """
     def decorator(func: Callable):
         @wraps(func)
@@ -183,6 +187,11 @@ def retry_sync(
             last_exception = None
             
             for attempt in range(max_attempts):
+                # Check for shutdown before each attempt
+                if shutdown_callback and shutdown_callback():
+                    logger.debug(f"⚠️ {op_name} aborted - shutdown requested")
+                    return None  # Return None instead of retrying
+                
                 try:
                     # Try to execute the function
                     result = func(*args, **kwargs)
@@ -198,6 +207,11 @@ def retry_sync(
                     
                     # Check if we have more attempts left
                     if attempt < max_attempts - 1:
+                        # Check shutdown before sleeping
+                        if shutdown_callback and shutdown_callback():
+                            logger.debug(f"⚠️ {op_name} aborted - shutdown requested")
+                            return None
+                        
                         delay = config.calculate_delay(attempt)
                         logger.warning(
                             f"⚠ {op_name} failed (attempt {attempt + 1}/{max_attempts}): {str(e)[:100]} "

@@ -55,17 +55,17 @@ timeouts:
   playwright_page: 15000 # ms - fast timeout to skip slow/blocked sites quickly
   trufflehog: 300 # seconds per file
 
-# Playwright
+# Playwright (VPS-optimized)
 playwright:
   headless: true # Run browser in headless mode
-  max_concurrent: 4 # Max concurrent browser instances - reduced from 10 to keep event loop responsive
+  max_concurrent: 6 # Max concurrent browser instances (increased for VPS resources)
   restart_after: 100 # Restart browser after N pages
-  page_timeout: 15000 # ms - fast timeout to skip slow/blocked sites quickly
+  page_timeout: 12000 # ms - aggressive timeout to skip slow/blocked sites quickly (reduced from 15s)
 
-# SubJS Configuration
+# SubJS Configuration (VPS-optimized)
 subjs:
   enabled: true # Enable SubJS by default
-  timeout: 30 # Timeout per domain (seconds) - increased to capture slow-loading sites
+  timeout: 45 # Timeout per domain (seconds) - increased for thorough discovery on VPS
 
 # AST Analysis
 ast:
@@ -92,11 +92,11 @@ beautification:
   timeout_large: 900 # Timeout for files 5-10MB (seconds)
   timeout_xlarge: 1800 # Timeout for files > 10MB (seconds)
 
-# Batch Processing Configuration
+# Batch Processing Configuration (VPS-optimized)
 batch_processing:
   enabled: true # Enable new batch workflow
-  download_threads: 100 # Max concurrent downloads in Phase 2 - fetching
-  process_threads: 100 # Max concurrent processing in Phase 4 - beautification & analysis
+  download_threads: 150 # Max concurrent downloads in Phase 2 - fetching (increased for VPS bandwidth)
+  process_threads: 120 # Max concurrent processing in Phase 4 - beautification & analysis (increased for VPS CPU)
   cleanup_minified: false # Keep both minified and unminified files after processing (DISABLED for bug bounty manual review)
 
 # Retry Configuration (NEW)

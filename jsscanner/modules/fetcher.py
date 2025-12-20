@@ -428,7 +428,7 @@ class Fetcher:
                 except Exception as e:
                     self.logger.debug(f"Connector cleanup error: {e}")
             
-            # Then close Playwright
+            # Then close Playwright with proper waiting
             if self.browser_manager:
                 try:
                     await self.browser_manager.close()
@@ -439,6 +439,8 @@ class Fetcher:
             if self.playwright:
                 try:
                     await self.playwright.stop()
+                    # Give playwright time to terminate processes
+                    await asyncio.sleep(0.5)
                     self.logger.info("Playwright stopped successfully")
                 except Exception as e:
                     self.logger.warning(f"Playwright cleanup error: {e}")
