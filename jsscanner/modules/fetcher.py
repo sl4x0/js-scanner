@@ -163,6 +163,18 @@ class Fetcher:
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
             'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0'
         ])
+        
+        # Session and connector will be initialized in initialize() method
+        self.session = None
+        self.connector = None
+        self.ssl_context = None
+        
+        # Enforce minimum retry count (minimum 3 retries for reliability)
+        if 'retry' not in self.config:
+            self.config['retry'] = {}
+        if self.config['retry'].get('http_requests', 0) < 3:
+            self.logger.warning("⚠️  Enforcing minimum retry count: http_requests = 3")
+            self.config['retry']['http_requests'] = 3
     
     def _get_random_user_agent(self) -> str:
         """Get a random user agent to avoid WAF fingerprinting"""
@@ -249,9 +261,35 @@ class Fetcher:
             return False, f"Validation error: {str(e)}"
     
     async def initialize(self) -> None:
-        """Initialize Playwright browser only if needed"""
+        """Initialize HTTP session and Playwright browser"""
+        # 1. Initialize shared HTTP session (CRITICAL for connection pooling)
+        timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
+        timeout = aiohttp.ClientTimeout(total=timeout_val, connect=5.0)
+        
+        import ssl
+        verify_ssl = self.config.get('verify_ssl', False)
+        self.ssl_context = ssl.create_default_context()
+        if not verify_ssl:
+            self.ssl_context.check_hostname = False
+            self.ssl_context.verify_mode = ssl.CERT_NONE
+        
+        # Connection pool settings
+        pool_settings = self.config.get('connection_pool', {})
+        self.connector = aiohttp.TCPConnector(
+            ssl=self.ssl_context,
+            limit=pool_settings.get('max_connections', 100),
+            limit_per_host=pool_settings.get('max_per_host', 10),
+            ttl_dns_cache=pool_settings.get('ttl_dns_cache', 300)
+        )
+        
+        self.session = aiohttp.ClientSession(
+            connector=self.connector,
+            timeout=timeout
+        )
+        self.logger.info("✅ HTTP Session initialized with Connection Pooling (prevents connection exhaustion)")
+        
+        # 2. Initialize Playwright browser only if needed
         skip_live = self.config.get('skip_live', False)
-
         if not skip_live:
             self.playwright = await async_playwright().start()
             self.browser_manager = BrowserManager(
@@ -373,8 +411,24 @@ class Fetcher:
                 self.logger.warning(f"⚠️  Interaction triggers failed: {e}")
     
     async def cleanup(self) -> None:
-        """Cleanup Playwright resources - thread-safe with lock"""
+        """Cleanup HTTP session and Playwright resources - thread-safe with lock"""
         async with self._browser_lock:
+            # Close HTTP session first
+            if self.session:
+                try:
+                    await self.session.close()
+                    self.logger.info("HTTP Session closed successfully")
+                except Exception as e:
+                    self.logger.warning(f"HTTP session cleanup error: {e}")
+            
+            if self.connector:
+                try:
+                    await self.connector.close()
+                    self.logger.debug("TCP Connector closed successfully")
+                except Exception as e:
+                    self.logger.debug(f"Connector cleanup error: {e}")
+            
+            # Then close Playwright
             if self.browser_manager:
                 try:
                     await self.browser_manager.close()
@@ -688,35 +742,26 @@ class Fetcher:
         """
         Internal implementation of fetch_content (separated for retry logic).
         This method may raise exceptions that trigger retries.
+        Uses the SHARED session to prevent connection exhaustion.
         """
-        max_size = self.config.get('max_file_size', 10485760)
-        verify_ssl = self.config.get('verify_ssl', True)
-
-        # Create SSL context based on config
-        import ssl
-        ssl_context = ssl.create_default_context()
-        if not verify_ssl:
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
+        if not self.session:
+            raise RuntimeError("Fetcher not initialized! Call initialize() first.")
         
+        max_size = self.config.get('max_file_size', 10485760)
         # Rotate User-Agent for stealth
         headers = {
             'User-Agent': self._get_random_user_agent()
         }
         
-        # Use ssl_context for both connector and session.get
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        async with aiohttp.ClientSession(connector=connector) as session:
-            # Use configured timeout instead of hardcoded value
-            timeout_value = self.config.get('timeouts', {}).get('http_request', 60)
-            # Disable redirects for speed - treat redirects as failures
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_value), ssl=ssl_context, headers=headers, allow_redirects=False) as response:
+        # Use the shared session - this is the key fix for connection pooling
+        async with self.session.get(url, ssl=self.ssl_context, headers=headers, allow_redirects=False) as response:
                 # No retries - fail immediately on rate limiting (return None, not exception)
                 if response.status in [429, 503]:
                     self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")
                     self.last_failure_reason = 'rate_limit'
                     self.error_stats['rate_limits'] += 1
                     return None
+
 
                 if response.status == 200:
                     content_length = response.headers.get('Content-Length')

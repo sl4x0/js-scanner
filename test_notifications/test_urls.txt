@@ -1,4 +1,0 @@
-http://localhost:8888/test_secrets_aws.js
-http://localhost:8888/test_secrets_github.js
-http://localhost:8888/test_secrets_multiple.js
-http://localhost:8888/test_clean_api.js

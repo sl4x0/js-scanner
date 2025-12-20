@@ -1,3 +1,0 @@
-example.com
-google.com
-nonexistent-domain-12345.test

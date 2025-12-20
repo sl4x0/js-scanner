@@ -78,6 +78,20 @@ batch_processing:
   process_threads: 50  # Max concurrent processing in Phase 4
   cleanup_minified: true  # Delete minified files after processing to save disk space
 
+# Retry Configuration (recommended for large URL lists)
+retry:
+  http_requests: 5  # Max retry attempts for HTTP operations (1 initial + 4 retries)
+  subprocess_calls: 2  # Max retry attempts for subprocess operations
+  backoff_base: 1.0  # Base delay in seconds for exponential backoff
+  backoff_multiplier: 2.0  # Multiplier for exponential backoff
+  jitter: true  # Add random jitter to prevent thundering herd
+
+# Connection Pool Settings (for large URL lists)
+connection_pool:
+  max_connections: 100  # Maximum total connections
+  max_per_host: 10  # Maximum connections per host
+  ttl_dns_cache: 300  # DNS cache TTL in seconds
+
 # Domain-Specific Organization (NEW)
 # Results are automatically organized by domain:
 #   extracts/<domain>/endpoints.json - Domain-specific endpoints

@@ -19,12 +19,18 @@ trufflehog_timeout: 300 # seconds per file
 trufflehog_max_concurrent: 5 # Limit concurrent TruffleHog processes (CPU intensive - keep low: 5-10 for VPS)
 
 # Fetching
-threads: 100 # Reduced to avoid rate limiting
-timeout: 10 # seconds (increased for slow servers)
+threads: 50 # Balanced for large URL lists without overwhelming connections
+timeout: 15 # seconds (increased for slow servers and large batches)
 user_agent: "Mozilla/5.0 (BugBounty/Research)"
 max_file_size: 209715200 # 200 MB perfile size limit
 verify_ssl: false # Set to false to bypass SSL certificate verification errors
 max_concurrent_domains: 10 # Auto-tuned: 50 for --subjs-only, 10 for live scans (override to force specific value)
+
+# Connection Pool Settings (for large URL lists)
+connection_pool:
+  max_connections: 100 # Maximum total connections
+  max_per_host: 10 # Maximum connections per host (prevents overwhelming single domain)
+  ttl_dns_cache: 300 # DNS cache TTL in seconds
 
 # Performance Optimizations
 interaction_delay: 0.5 # Seconds to wait for network idle after page interactions (0.5 = fast, 3 = thorough)
@@ -45,7 +51,7 @@ user_agents:
 
 # Issue #8: Configurable timeouts
 timeouts:
-  http_request: 5 # for asyncio HTTP requests (seconds) - aggressive timeout for speed
+  http_request: 15 # for asyncio HTTP requests (seconds) - balanced for reliability with large batches
   playwright_page: 15000 # ms - fast timeout to skip slow/blocked sites quickly
   trufflehog: 300 # seconds per file
 
@@ -95,7 +101,7 @@ batch_processing:
 
 # Retry Configuration (NEW)
 retry:
-  http_requests: 1 # Max retry attempts for HTTP operations - no retries for speed
+  http_requests: 5 # Max retry attempts for HTTP operations (1 initial + 4 retries) - increased for reliability
   subprocess_calls: 2 # Max retry attempts for subprocess operations
   backoff_base: 1.0 # Base delay in seconds for exponential backoff (1s -> 2s -> 4s)
   backoff_multiplier: 2.0 # Multiplier for exponential backoff
