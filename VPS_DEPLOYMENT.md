@@ -1,4 +1,12 @@
-# 🚀 VPS Deployment Guide - JS-Scanner Elite Edition
+# 🚀 VPS Deployment Guide - JS-Scanner Elite Edition v3.1
+
+## 🎯 Latest Updates (December 2025)
+
+**Elite Notification Framework v3.1:**
+- ✅ Domain context in all Discord notifications
+- ✅ Fixed "0 secrets found" bug (now shows verified + unverified counts)
+- ✅ Complete Discord queue processing (100% message delivery)
+- ✅ Domain-organized batching for efficient manual triaging
 
 ## 📋 Quick Start (Existing Installation)
 
@@ -8,8 +16,9 @@ If you already have js-scanner on your VPS, update to the latest version:
 cd ~/js-scanner  # or wherever your installation is
 git pull origin main
 source venv/bin/activate  # or 'venv\Scripts\activate' on Windows
-pip install -r requirements.txt --upgrade
-pip install tree-sitter==0.21.3 tree-sitter-javascript==0.21.4
+
+# No new dependencies for v3.1 - just code fixes
+python -m jsscanner --version  # Verify update
 ```
 
 ---
@@ -19,12 +28,14 @@ pip install tree-sitter==0.21.3 tree-sitter-javascript==0.21.4
 ### Step 1: System Requirements
 
 **Minimum Specs:**
+
 - OS: Ubuntu 20.04+ / Debian 11+ / RHEL 8+
 - RAM: 2GB minimum, 4GB recommended
 - CPU: 2 cores minimum
 - Disk: 10GB free space
 
 **Required Software:**
+
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
@@ -93,17 +104,17 @@ nano config.yaml
 discord_webhook: "https://discord.com/api/webhooks/YOUR_WEBHOOK_HERE"
 
 # Concurrency (Adjust based on VPS specs)
-threads: 50  # 2GB RAM: 20, 4GB RAM: 50, 8GB+ RAM: 100
+threads: 50 # 2GB RAM: 20, 4GB RAM: 50, 8GB+ RAM: 100
 
 # Recursion Settings
 recursion:
   enabled: true
-  max_depth: 2  # Increase to 3 for deeper scans (more time)
+  max_depth: 2 # Increase to 3 for deeper scans (more time)
   validate_with_head: true
 
 # Resource Limits (Prevent OOM on small VPS)
-max_file_size_mb: 10  # Skip files larger than 10MB
-semaphore_limit: 50   # Max concurrent operations
+max_file_size_mb: 10 # Skip files larger than 10MB
+semaphore_limit: 50 # Max concurrent operations
 ```
 
 ---
@@ -111,6 +122,7 @@ semaphore_limit: 50   # Max concurrent operations
 ### Step 5: Install External Tools (Optional but Recommended)
 
 #### TruffleHog (Secret Scanning)
+
 ```bash
 # Download TruffleHog
 wget https://github.com/trufflesecurity/trufflehog/releases/download/v3.63.2/trufflehog_3.63.2_linux_amd64.tar.gz
@@ -123,6 +135,7 @@ trufflehog --version
 ```
 
 #### SubJS (Passive Discovery - Go Required)
+
 ```bash
 # Install Go (if not installed)
 sudo apt install -y golang-go
@@ -139,6 +152,7 @@ subjs -h
 ```
 
 #### webcrack (Bundle Unpacking - Node.js Required)
+
 ```bash
 # Install Node.js
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
@@ -168,6 +182,7 @@ cat results/install_test/file_manifest.json
 ```
 
 **Expected Output:**
+
 - ✅ 4+ JS files downloaded to `unique_js/`
 - ✅ File manifest with hash→URL mappings
 - ✅ Tree-sitter initialized (v0.21.3)
@@ -202,6 +217,7 @@ WantedBy=multi-user.target
 ```
 
 **Enable and start service:**
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable js-scanner
@@ -298,6 +314,7 @@ Create `/etc/logrotate.d/js-scanner`:
 ### Issue: Tree-sitter initialization failed
 
 **Solution:**
+
 ```bash
 pip uninstall tree-sitter tree-sitter-javascript -y
 pip install tree-sitter==0.21.3 tree-sitter-javascript==0.21.4
@@ -306,6 +323,7 @@ pip install tree-sitter==0.21.3 tree-sitter-javascript==0.21.4
 ### Issue: Playwright browser not found
 
 **Solution:**
+
 ```bash
 source venv/bin/activate
 playwright install chromium
@@ -315,6 +333,7 @@ playwright install-deps
 ### Issue: Permission denied on results folder
 
 **Solution:**
+
 ```bash
 chmod -R 755 ~/js-scanner/results
 chown -R $(whoami):$(whoami) ~/js-scanner/results
@@ -323,6 +342,7 @@ chown -R $(whoami):$(whoami) ~/js-scanner/results
 ### Issue: Out of Memory (OOM)
 
 **Solution:**
+
 ```bash
 # Edit config.yaml
 threads: 10           # Reduce from 50
@@ -341,11 +361,13 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ## 🎯 VPS Provider Recommendations
 
 ### Budget-Friendly (Bug Bounty):
+
 - **DigitalOcean Droplet:** $12/month (2GB RAM, 2 vCPUs, 50GB SSD)
 - **Linode Nanode:** $12/month (2GB RAM, 1 vCPU, 50GB SSD)
 - **Hetzner Cloud CX21:** €5.83/month (4GB RAM, 2 vCPUs, 40GB SSD)
 
 ### High-Performance (Pro Tier):
+
 - **DigitalOcean Droplet:** $24/month (4GB RAM, 2 vCPUs, 80GB SSD)
 - **AWS EC2 t3.medium:** ~$30/month (4GB RAM, 2 vCPUs, 50GB EBS)
 - **Vultr High Frequency:** $24/month (4GB RAM, 2 vCPUs, 128GB SSD)
@@ -354,11 +376,11 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ## 📈 Performance Benchmarks
 
-| VPS Specs | Threads | Domains/Hour | Files/Hour |
-|-----------|---------|--------------|------------|
-| 2GB / 2 CPU | 20 | ~50 | ~500 |
-| 4GB / 2 CPU | 50 | ~150 | ~1500 |
-| 8GB / 4 CPU | 100 | ~300 | ~3000+ |
+| VPS Specs   | Threads | Domains/Hour | Files/Hour |
+| ----------- | ------- | ------------ | ---------- |
+| 2GB / 2 CPU | 20      | ~50          | ~500       |
+| 4GB / 2 CPU | 50      | ~150         | ~1500      |
+| 8GB / 4 CPU | 100     | ~300         | ~3000+     |
 
 ---
 
@@ -410,6 +432,34 @@ git pull origin main && pip install -r requirements.txt --upgrade
 4. **Scope Control:** Use `--no-scope-filter` to include CDN URLs (noisy but comprehensive)
 5. **Speed vs Accuracy:** Lower `threads` for accuracy, higher for speed
 6. **Discord Alerts:** Test webhook with `curl -X POST <webhook_url> -d '{"content":"Test"}'`
+7. **Notification Control:** 
+   - Use `--no-discord` for quiet mode (results saved locally only)
+   - Use `--discord-verified-only` to reduce noise (only send verified secrets)
+   - Adjust `--discord-batch-size` (1-25) to control message grouping
+8. **Manual Triaging:** Secrets now include domain context in title for quick filtering
+
+---
+
+## 🔔 Discord Notification Features (v3.1)
+
+**Enhanced Context for Manual Triaging:**
+- Domain/host visible in notification title: `🔴 AWS Secret • account.vkplay.ru`
+- Dedicated 🎯 Domain field for quick target identification
+- Full source file URLs with line numbers for easy debugging
+- Organized batching by domain (related secrets grouped together)
+- All findings sent to Discord (verified + unverified)
+
+**Notification Control Flags:**
+```bash
+# Disable Discord notifications (save locally only)
+python -m jsscanner -t example.com --subjs --no-discord
+
+# Send only verified secrets to Discord (reduce noise)
+python -m jsscanner -t example.com --subjs --discord-verified-only
+
+# Adjust batch size (1-25 secrets per message)
+python -m jsscanner -t example.com --subjs --discord-batch-size 10
+```
 
 ---
 

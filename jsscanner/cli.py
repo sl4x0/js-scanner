@@ -122,6 +122,25 @@ Performance Tips:
     )
     
     parser.add_argument(
+        '--no-discord',
+        action='store_true',
+        help='Disable Discord notifications (quiet mode, results saved locally only)'
+    )
+    
+    parser.add_argument(
+        '--discord-verified-only',
+        action='store_true',
+        help='Send only verified secrets to Discord (reduce noise, unverified saved locally)'
+    )
+    
+    parser.add_argument(
+        '--discord-batch-size',
+        type=int,
+        default=15,
+        help='Maximum secrets per batched Discord message (1-25, default: 15)'
+    )
+    
+    parser.add_argument(
         '--force',
         action='store_true',
         help='Force rescan all files (ignore incremental scan state/cache)'
@@ -194,6 +213,14 @@ Performance Tips:
     
     if not Path(args.config).exists():
         parser.error(f"Config file not found: {args.config}")
+    
+    # Discord batch size validation
+    if hasattr(args, 'discord_batch_size') and args.discord_batch_size:
+        if args.discord_batch_size < 1 or args.discord_batch_size > 25:
+            parser.error(
+                f"Error: --discord-batch-size must be between 1 and 25.\n"
+                f"Discord embed field limit is 25. You provided: {args.discord_batch_size}"
+            )
     
     return args
 

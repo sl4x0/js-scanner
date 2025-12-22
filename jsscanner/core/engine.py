@@ -264,9 +264,9 @@ class ScanEngine:
             # ============================================================
             # PHASE 1: DISCOVERY & URL COLLECTION (CONCURRENT)
             # ============================================================
-            self.logger.info(f"\n{'='*60}")
+            self.logger.info(f"\n{'═'*70}")
             self.logger.info("📡 PHASE 1: DISCOVERY & URL COLLECTION (CONCURRENT)")
-            self.logger.info(f"{'='*60}")
+            self.logger.info(f"{'═'*70}")
             
             # Extract domains for scope filtering
             from urllib.parse import urlparse
@@ -306,9 +306,9 @@ class ScanEngine:
             # ============================================================
             # PHASE 2: DOWNLOADING ALL FILES (Parallel)
             # ============================================================
-            self.logger.info(f"\n{'='*60}")
+            self.logger.info(f"\n{'═'*70}")
             self.logger.info("⬇️  PHASE 2: DOWNLOADING ALL FILES")
-            self.logger.info(f"{'='*60}")
+            self.logger.info(f"{'═'*70}")
             
             # Resume logic: Skip download if already completed
             if resume_state and resume_state.get('download', {}).get('completed'):
@@ -338,9 +338,9 @@ class ScanEngine:
             # ============================================================
             recursion_config = self.config.get('recursion', {})
             if recursion_config.get('enabled', True) and recursion_config.get('max_depth', 2) > 0:
-                self.logger.info(f"\n{'='*60}")
+                self.logger.info(f"\n{'═'*70}")
                 self.logger.info("🔍 PHASE 2.1: RECURSIVE JS DISCOVERY")
-                self.logger.info(f"{'='*60}")
+                self.logger.info(f"{'═'*70}")
                 
                 additional_urls = await self._discover_js_recursively(
                     downloaded_files, 
@@ -369,9 +369,9 @@ class ScanEngine:
                 return
             
             if self.config.get('recover_source_maps', False):
-                self.logger.info(f"\n{'='*60}")
+                self.logger.info(f"\n{'═'*70}")
                 self.logger.info("🗺️  PHASE 2.5: RECOVERING SOURCE MAPS")
-                self.logger.info(f"{'='*60}")
+                self.logger.info(f"{'═'*70}")
                 
                 await self._recover_source_maps(downloaded_files)
                 
@@ -433,9 +433,22 @@ class ScanEngine:
                 })
             
             if total_findings > 0:
-                self.logger.info(f"✅ Found {total_findings} total findings ({len(verified_secrets)} verified, {total_findings - len(verified_secrets)} unverified)\n")
+                self.logger.info(f"\n🎯 Secret Findings Summary:")
+                self.logger.info(f"  ├─ Total Findings: {total_findings}")
+                self.logger.info(f"  ├─ Verified: {len(verified_secrets)}")
+                self.logger.info(f"  └─ Unverified: {total_findings - len(verified_secrets)}")
+                
+                # Show domain breakdown if available
+                if secrets_summary:
+                    self.logger.info(f"\n📊 Findings by Domain:")
+                    sorted_domains = sorted(secrets_summary.items(), key=lambda x: x[1], reverse=True)
+                    for i, (domain, count) in enumerate(sorted_domains[:10], 1):  # Top 10
+                        self.logger.info(f"  {i:2d}. {domain}: {count} secrets")
+                    if len(secrets_summary) > 10:
+                        self.logger.info(f"  ... and {len(secrets_summary) - 10} more domains")
+                self.logger.info("")
             else:
-                self.logger.info(f"✅ No secrets found\n")
+                self.logger.info(f"\n✅ No secrets found\n")
             
             # Flush Discord notifications immediately (verified + unverified findings)
             await self.notifier.flush_queue(timeout=90)
@@ -445,9 +458,9 @@ class ScanEngine:
             # ============================================================
             # Skip if --no-extraction flag is set
             if not self.config.get('skip_extraction', False):
-                self.logger.info(f"\n{'='*60}")
+                self.logger.info(f"\n{'═'*70}")
                 self.logger.info("⚙️  PHASE 4: EXTRACTING DATA (Parallel)")
-                self.logger.info(f"{'='*60}")
+                self.logger.info(f"{'═'*70}")
                 
                 await self._process_all_files_parallel(downloaded_files)
                 
@@ -460,9 +473,9 @@ class ScanEngine:
                         }
                     })
             else:
-                self.logger.info(f"\n{'='*60}")
+                self.logger.info(f"\n{'═'*70}")
                 self.logger.info("⏭️  PHASE 4: SKIPPED (--no-extraction enabled)")
-                self.logger.info(f"{'='*60}")
+                self.logger.info(f"{'═'*70}")
             
             # ============================================================
             # PHASE 5: BEAUTIFYING FILES
@@ -474,9 +487,9 @@ class ScanEngine:
             
             # Skip if --no-beautify flag is set
             if not self.config.get('skip_beautification', False):
-                self.logger.info(f"\n{'='*60}")
+                self.logger.info(f"\n{'═'*70}")
                 self.logger.info("✨ PHASE 5: BEAUTIFYING FILES")
-                self.logger.info(f"{'='*60}")
+                self.logger.info(f"{'═'*70}")
                 
                 await self._unminify_all_files(downloaded_files)
                 
@@ -568,8 +581,7 @@ class ScanEngine:
                     self.logger.info(f"  • Total filtered: {noise_stats['total_filtered']}")
                     self.logger.info(f"  • Filter rate: {noise_stats['filter_rate']}")
                     self.logger.info(f"  • Passed through: {noise_stats['passed']}")
-                    self.logger.info(f"{'='*80}\n")
-            
+            self.logger.info(f"{'═'*80}\n")
             # Log detailed failure breakdown (exclude duplicates)
             actual_failures = {k: v for k, v in self.stats['failures'].items() if k != 'duplicates'}
             total_actual_failures = sum(actual_failures.values())
