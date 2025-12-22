@@ -26,12 +26,14 @@ class FileOps:
         """
         target_path = Path(base_path) / target_name
         
-        # Define structure
+        # Define structure (MD5-based pipeline, no redundant minified/unminified folders)
         structure = {
             'base': target_path,
-            'files_minified': target_path / 'files' / 'minified',
-            'files_unminified': target_path / 'files' / 'unminified',
+            'unique_js': target_path / 'unique_js',
+            'final_source_code': target_path / 'final_source_code',
             'extracts': target_path / 'extracts',
+            'secrets': target_path / 'secrets',
+            'source_code': target_path / 'source_code',
             'logs': target_path / 'logs',
             'cache': target_path / 'cache',
             'temp': target_path / 'temp'

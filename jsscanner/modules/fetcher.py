@@ -825,6 +825,31 @@ class Fetcher:
                     self.error_stats['http_errors'] += 1
                     return None
     
+    async def validate_url_exists(self, url: str) -> Tuple[bool, int]:
+        """
+        Validate if URL exists using HEAD request (fast existence check for 2nd/3rd level JS)
+        
+        Args:
+            url: URL to validate
+            
+        Returns:
+            Tuple of (exists: bool, status_code: int)
+        """
+        if not self.session:
+            raise RuntimeError("Fetcher not initialized! Call initialize() first.")
+        
+        headers = {
+            'User-Agent': self._get_random_user_agent()
+        }
+        
+        try:
+            async with self.session.head(url, ssl=self.ssl_context, headers=headers, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                exists = response.status == 200
+                return (exists, response.status)
+        except Exception as e:
+            self.logger.debug(f"HEAD request failed for {url}: {e}")
+            return (False, 0)
+    
     async def fetch_with_playwright(self, url: str) -> Optional[str]:
         """Fetches content using Playwright"""
         context = None

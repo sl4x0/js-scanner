@@ -43,10 +43,12 @@ subjs:
   enabled: true  # Enable SubJS for URL discovery
   timeout: 60  # Timeout per domain (seconds)
   
-# Recursive Crawling
+# Recursive JS Discovery (NEW - Phase 1 Enhancement)
+# Finds .js URLs inside other .js files for 2nd/3rd level discovery
 recursion:
   enabled: true
-  max_depth: 3  # Maximum crawl depth
+  max_depth: 2  # Maximum recursion depth (1=direct, 2=2nd level, 3=3rd level)
+  validate_with_head: true  # Use HEAD requests to validate URL existence before downloading
 
 # AST Analysis (v3.0)
 ast:

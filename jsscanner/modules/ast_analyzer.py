@@ -109,7 +109,7 @@ class ASTAnalyzer:
     
     async def analyze(self, content: str, source_url: str):
         """
-        Analyzes JavaScript content using AST
+        Analyzes JavaScript content using AST (tree-sitter required)
         
         Args:
             content: JavaScript content
@@ -117,9 +117,9 @@ class ASTAnalyzer:
         """
         if not self.parser:
             if not self._tree_sitter_warning_logged:
-                self.logger.warning("Tree-sitter not available, using regex fallback for all files")
+                self.logger.error("Tree-sitter not available! AST analysis cannot proceed.")
+                self.logger.error("Please install tree-sitter and tree-sitter-javascript.")
                 self._tree_sitter_warning_logged = True
-            await self._analyze_with_regex(content, source_url)
             return
         
         try:
@@ -132,6 +132,9 @@ class ASTAnalyzer:
             endpoints = await loop.run_in_executor(None, self._extract_endpoints_sync, root_node, content)
             links = await self._extract_links(content)
             domains = await self._extract_domains(content)
+            
+            # NEW: Extract cloud assets (S3, Azure, GCS, Firebase) in same pass
+            cloud_assets = await self._extract_cloud_assets(content)
             
             # NEW: Extract dynamic imports if enabled
             code_splitting_config = self.config.get('code_splitting', {})
@@ -192,6 +195,24 @@ class ASTAnalyzer:
                 self.extracts_db['links'][link]['total_count'] += 1
                 self.extracts_db['links'][link]['domains'].add(source_domain)
             
+            # NEW: Track cloud assets
+            for asset in cloud_assets:
+                if asset not in self.extracts_db.get('cloud_assets', {}):
+                    if 'cloud_assets' not in self.extracts_db:
+                        self.extracts_db['cloud_assets'] = {}
+                    self.extracts_db['cloud_assets'][asset] = {
+                        'sources': [],
+                        'total_count': 0,
+                        'domains': set()
+                    }
+                self.extracts_db['cloud_assets'][asset]['sources'].append({
+                    'file': source_url,
+                    'domain': source_domain,
+                    'occurrences': 1
+                })
+                self.extracts_db['cloud_assets'][asset]['total_count'] += 1
+                self.extracts_db['cloud_assets'][asset]['domains'].add(source_domain)
+            
             # Save extracts to files (for backwards compatibility)
             extracts_path = Path(self.paths['extracts'])
             
@@ -213,13 +234,20 @@ class ASTAnalyzer:
                     domains
                 )
             
+            # NEW: Save cloud assets
+            if cloud_assets:
+                await FileOps.append_unique_lines(
+                    str(extracts_path / 'cloud_assets.txt'),
+                    cloud_assets
+                )
+            
             self.logger.debug(
-                f"Extracted: {len(endpoints)} endpoints, {len(domains)} domains, {len(links)} links"
+                f"Extracted: {len(endpoints)} endpoints, {len(domains)} domains, {len(links)} links, {len(cloud_assets)} cloud assets"
             )
             
         except Exception as e:
             self.logger.error(f"AST analysis failed: {e}")
-            await self._analyze_with_regex(content, source_url)
+            # No fallback - tree-sitter is required
         finally:
             # Issue #6: Explicit cleanup to prevent memory leaks
             if 'tree' in locals():
@@ -386,6 +414,83 @@ class ASTAnalyzer:
         
         return list(links)
     
+    async def _extract_cloud_assets(self, content: str) -> List[str]:
+        """
+        Extracts cloud storage URLs (S3, Azure, GCS, Firebase) for asset intelligence
+        
+        Cloud providers detected:
+        - AWS S3: s3.amazonaws.com, s3-*.amazonaws.com, *.s3.amazonaws.com, *.s3.*.amazonaws.com
+        - Azure Storage: *.blob.core.windows.net, *.file.core.windows.net, *.queue.core.windows.net
+        - Google Cloud Storage: storage.googleapis.com, *.storage.googleapis.com, storage.cloud.google.com
+        - Firebase: *.firebaseio.com, *.firebasestorage.app, *.cloudfunctions.net (firebase-related)
+        
+        Args:
+            content: JavaScript content
+            
+        Returns:
+            List of unique cloud storage URLs
+        """
+        cloud_assets = set()
+        
+        # AWS S3 patterns
+        s3_patterns = [
+            # Standard S3 URLs
+            r'https?://([a-z0-9\-]+\.)?s3[.-]([a-z0-9\-]+\.)?amazonaws\.com/[^\s"\'>]+',
+            # S3 bucket subdomains
+            r'https?://[a-z0-9\-]+\.s3\.amazonaws\.com[^\s"\'>]*',
+            r'https?://s3-[a-z0-9\-]+\.amazonaws\.com/[^\s"\'>]+',
+            # S3 virtual-hosted style
+            r'https?://[a-z0-9\-]+\.s3-[a-z0-9\-]+\.amazonaws\.com[^\s"\'>]*'
+        ]
+        
+        # Azure Storage patterns
+        azure_patterns = [
+            r'https?://[a-z0-9\-]+\.blob\.core\.windows\.net[^\s"\'>]*',
+            r'https?://[a-z0-9\-]+\.file\.core\.windows\.net[^\s"\'>]*',
+            r'https?://[a-z0-9\-]+\.queue\.core\.windows\.net[^\s"\'>]*',
+            r'https?://[a-z0-9\-]+\.table\.core\.windows\.net[^\s"\'>]*'
+        ]
+        
+        # Google Cloud Storage patterns
+        gcs_patterns = [
+            r'https?://storage\.googleapis\.com/[^\s"\'>]+',
+            r'https?://[a-z0-9\-]+\.storage\.googleapis\.com[^\s"\'>]*',
+            r'https?://storage\.cloud\.google\.com/[^\s"\'>]+'
+        ]
+        
+        # Firebase patterns
+        firebase_patterns = [
+            r'https?://[a-z0-9\-]+\.firebaseio\.com[^\s"\'>]*',
+            r'https?://[a-z0-9\-]+\.firebasestorage\.app[^\s"\'>]*',
+            r'https?://[a-z0-9\-]+\.cloudfunctions\.net[^\s"\'>]*'
+        ]
+        
+        # Combine all patterns
+        all_patterns = s3_patterns + azure_patterns + gcs_patterns + firebase_patterns
+        
+        for pattern in all_patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            for match in matches:
+                # Clean up the URL (remove trailing quotes, brackets, etc.)
+                if isinstance(match, tuple):
+                    # Extract full match from tuple
+                    continue
+                url = match.strip().rstrip('",\'>;)')
+                
+                # Validate it's a complete URL
+                if url.startswith('http') and len(url) > 20 and len(url) < 500:
+                    cloud_assets.add(url)
+        
+        # Also search for full matches (non-capturing)
+        for pattern in all_patterns:
+            matches = re.finditer(pattern, content, re.IGNORECASE)
+            for match in matches:
+                url = match.group(0).strip().rstrip('",\'>;)')
+                if url.startswith('http') and len(url) > 20 and len(url) < 500:
+                    cloud_assets.add(url)
+        
+        return list(cloud_assets)
+    
     def _is_valid_domain(self, domain: str) -> bool:
         """Validate domain to filter out JavaScript namespaces and invalid entries"""
         # Must have at least one dot
@@ -439,6 +544,93 @@ class ASTAnalyzer:
                 domains.add(match)
         
         return list(domains)
+    
+    async def extract_js_urls(self, content: str, base_url: str) -> List[str]:
+        """
+        Extract .js URLs from JavaScript content for recursive discovery
+        
+        This enables finding 2nd/3rd level JS files referenced within other JS files.
+        Extracts:
+        - Direct .js file references in strings
+        - Dynamic imports: import('./module.js')
+        - require() calls: require('./file.js')
+        - Script tag src attributes
+        - Webpack/Vite chunk references
+        
+        Args:
+            content: JavaScript content to analyze
+            base_url: Base URL for resolving relative paths
+            
+        Returns:
+            List of absolute .js URLs found in the content
+        """
+        from urllib.parse import urljoin, urlparse
+        js_urls = set()
+        
+        # Pattern 1: String literals ending in .js or .mjs
+        # Matches: "path/to/file.js", './module.js', '../utils.js'
+        string_patterns = [
+            r'["\']([^"\']+\.(?:js|mjs))(?:["\']|\?)',  # .js or .mjs with optional query
+            r'["\']([^"\']+\.js)["\']',  # Simple .js references
+        ]
+        
+        for pattern in string_patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            for match in matches:
+                # Skip data URIs, blob URLs, and obviously invalid paths
+                if match.startswith(('data:', 'blob:', 'javascript:')):
+                    continue
+                
+                # Convert to absolute URL
+                try:
+                    absolute_url = urljoin(base_url, match)
+                    # Validate it's a proper HTTP URL
+                    parsed = urlparse(absolute_url)
+                    if parsed.scheme in ('http', 'https') and parsed.path.endswith(('.js', '.mjs')):
+                        js_urls.add(absolute_url)
+                except Exception:
+                    continue
+        
+        # Pattern 2: import() dynamic imports
+        # Matches: import('./file.js'), import("module.js")
+        import_pattern = r'import\s*\(\s*["\']([^"\']+\.(?:js|mjs))["\']'
+        matches = re.findall(import_pattern, content, re.IGNORECASE)
+        for match in matches:
+            try:
+                absolute_url = urljoin(base_url, match)
+                if urlparse(absolute_url).scheme in ('http', 'https'):
+                    js_urls.add(absolute_url)
+            except Exception:
+                continue
+        
+        # Pattern 3: require() calls
+        # Matches: require('./file.js'), require("module.js")
+        require_pattern = r'require\s*\(\s*["\']([^"\']+\.(?:js|mjs))["\']'
+        matches = re.findall(require_pattern, content, re.IGNORECASE)
+        for match in matches:
+            try:
+                absolute_url = urljoin(base_url, match)
+                if urlparse(absolute_url).scheme in ('http', 'https'):
+                    js_urls.add(absolute_url)
+            except Exception:
+                continue
+        
+        # Pattern 4: Webpack/Vite chunk files
+        # Matches: "assets/chunk-abc123.js", "dist/vendor.js"
+        chunk_pattern = r'["\']([a-zA-Z0-9/_\-\.]+/[a-zA-Z0-9\-_]+\.js)["\']'
+        matches = re.findall(chunk_pattern, content)
+        for match in matches:
+            # Only include if it looks like a real path (has directory separator)
+            if '/' in match and not match.startswith(('http://', 'https://')):
+                try:
+                    absolute_url = urljoin(base_url, match)
+                    if urlparse(absolute_url).scheme in ('http', 'https'):
+                        js_urls.add(absolute_url)
+                except Exception:
+                    continue
+        
+        self.logger.debug(f"Extracted {len(js_urls)} JS URLs from {base_url}")
+        return list(js_urls)
     
     def _is_valid_endpoint(self, endpoint: str) -> bool:
         """Validate endpoint before adding to results"""
@@ -510,123 +702,6 @@ class ASTAnalyzer:
             return False
         
         return True
-    
-    def _extract_with_regex(self, code: str, source_url: str, source_domain: str) -> Dict[str, Any]:
-        """Extract data using improved regex patterns with source tracking"""
-        
-        # ENDPOINTS - Expanded patterns for better detection
-        endpoint_patterns = [
-            # Specific API paths (high confidence)
-            r'["\']/(api|graphql|v\d+|rest|endpoint|ajax|auth|user|admin|cart|checkout|account|payment|order|product|search)/[a-zA-Z0-9/_\-\.]*["\']',
-            # fetch() and axios calls
-            r'(?:fetch|axios\.[a-z]+|\.get|\.post|\.put|\.delete|\.patch)\s*\(\s*["\']([/][a-zA-Z0-9/_\-\.]+)["\']',
-            # Full URLs with API indicators
-            r'["\']https?://[a-zA-Z0-9\.\-]+/(api|v\d+|graphql|rest)/[a-zA-Z0-9/_\-\.]*["\']',
-            # Any path starting with / (relative paths)
-            r'["\']/([\w\-/]+\.(?:js|json|xml|html|php|asp))["\']',
-            # href properties and assignments
-            r'href\s*:\s*["\']([^"\']+)["\']',
-            r'href\s*=\s*["\']([^"\']+)["\']',
-            # URL assignments and window.location
-            r'(?:url|path|endpoint)\s*:\s*["\']([/][^"\']+)["\']',
-            r'window\.location(?:\.href)?\s*=\s*["\']([/][^"\']+)["\']',
-        ]
-        
-        endpoints = []
-        for pattern in endpoint_patterns:
-            matches = re.findall(pattern, code, re.IGNORECASE)
-            for match in matches:
-                if isinstance(match, tuple):
-                    endpoint = match[-1] if match[-1] else (match[0] if len(match) > 0 else '')
-                else:
-                    endpoint = match
-                
-                endpoint = endpoint.strip('"\'')
-                
-                if (endpoint.startswith(('/')) or endpoint.startswith('http')) and \
-                   len(endpoint) > 4 and len(endpoint) < 150 and \
-                   not any(x in endpoint.lower() for x in ['retry-after', 'content-type', 'x-request', 'cf-ray']) and \
-                   not any(x in endpoint.lower() for x in ['swiper-', 'gravity-', '.css', '.scss', '-button']) and \
-                   '/' in endpoint[1:] and \
-                   self._is_valid_endpoint(endpoint):
-                    endpoints.append(endpoint)
-        
-        # DOMAINS
-        domain_patterns = [
-            r'https?://([a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+)',
-            r'["\']//([a-zA-Z0-9][-a-zA-Z0-9]{0,62}(?:\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+)',
-        ]
-        
-        domains = []
-        for pattern in domain_patterns:
-            matches = re.findall(pattern, code)
-            for match in matches:
-                domain = match.strip().split('/')[0].split(':')[0]
-                
-                if ('.' in domain and len(domain) > 4 and len(domain) < 100 and
-                    not domain.endswith(('.js', '.css', '.svg', '.png', '.jpg')) and
-                    domain not in ['localhost', 'example.com', 'test.com'] and
-                    len(domain.split('.')[-1]) >= 2):
-                    domains.append(domain)
-        
-        # Track sources (count occurrences per file)
-        from collections import Counter
-        
-        result = {
-            'endpoints': Counter(endpoints),
-            'domains': Counter(domains),
-            'links': Counter([]),
-            'source_url': source_url,
-            'source_domain': source_domain
-        }
-        
-        return result
-    
-    async def _analyze_with_regex(self, content: str, source_url: str):
-        """Fallback analysis using regex when Tree-sitter is unavailable"""
-        
-        # Extract domain from source URL
-        from urllib.parse import urlparse
-        try:
-            source_domain = urlparse(source_url).netloc.replace('www.', '')
-        except:
-            source_domain = 'unknown'
-        
-        # Extract with source tracking
-        extracted = self._extract_with_regex(content, source_url, source_domain)
-        
-        # Update global database with source tracking
-        for extract_type in ['endpoints', 'domains', 'links']:
-            for value, count in extracted[extract_type].items():
-                if value not in self.extracts_db[extract_type]:
-                    self.extracts_db[extract_type][value] = {
-                        'sources': [],
-                        'total_count': 0,
-                        'domains': set()
-                    }
-                
-                self.extracts_db[extract_type][value]['sources'].append({
-                    'file': source_url,
-                    'domain': source_domain,
-                    'occurrences': count
-                })
-                self.extracts_db[extract_type][value]['total_count'] += count
-                self.extracts_db[extract_type][value]['domains'].add(source_domain)
-        
-        # Still save to individual files for backwards compatibility
-        extracts_path = Path(self.paths['extracts'])
-        
-        if extracted['endpoints']:
-            await FileOps.append_unique_lines(
-                str(extracts_path / 'endpoints.txt'),
-                list(extracted['endpoints'].keys())
-            )
-        
-        if extracted['domains']:
-            await FileOps.append_unique_lines(
-                str(extracts_path / 'domains.txt'),
-                list(extracted['domains'].keys())
-            )
     
     @staticmethod
     def _is_endpoint(text: str) -> bool:

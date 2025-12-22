@@ -334,6 +334,33 @@ class ScanEngine:
                 return
             
             # ============================================================
+            # PHASE 2.1: RECURSIVE JS DISCOVERY (Optional, NEW)
+            # ============================================================
+            recursion_config = self.config.get('recursion', {})
+            if recursion_config.get('enabled', True) and recursion_config.get('max_depth', 2) > 0:
+                self.logger.info(f"\n{'='*60}")
+                self.logger.info("🔍 PHASE 2.1: RECURSIVE JS DISCOVERY")
+                self.logger.info(f"{'='*60}")
+                
+                additional_urls = await self._discover_js_recursively(
+                    downloaded_files, 
+                    recursion_config.get('max_depth', 2),
+                    recursion_config.get('validate_with_head', True)
+                )
+                
+                if additional_urls:
+                    self.logger.info(f"✅ Found {len(additional_urls)} additional JS files via recursive discovery")
+                    self.logger.info("⬇️  Downloading newly discovered files...")
+                    
+                    # Download additional files
+                    additional_downloaded = await self._download_all_files(additional_urls)
+                    downloaded_files.extend(additional_downloaded)
+                    
+                    self.logger.info(f"✅ Total files after recursive discovery: {len(downloaded_files)}\n")
+                else:
+                    self.logger.info("ℹ️  No additional JS files found via recursive discovery\n")
+            
+            # ============================================================
             # PHASE 2.5: SOURCE MAP RECOVERY (Optional)
             # ============================================================
             if self.shutdown_requested:
@@ -375,19 +402,11 @@ class ScanEngine:
             # Reset all_secrets before scanning (in case of multiple scan_directory calls)
             self.secret_scanner.all_secrets = []
             
-            # Scan BOTH minified AND unminified directories
-            # (files are saved to different directories based on minification detection)
-            minified_dir = str(Path(self.paths['files_minified']))
-            unminified_dir = str(Path(self.paths['files_unminified']))
+            # NEW: Scan unique_js directory (MD5-based content deduplication)
+            unique_js_dir = str(Path(self.paths['unique_js']))
             
-            # Scan minified files
-            secrets_minified = await self.secret_scanner.scan_directory(minified_dir)
-            
-            # Scan unminified files
-            secrets_unminified = await self.secret_scanner.scan_directory(unminified_dir)
-            
-            # Combine results (secret_scanner tracks all in self.all_secrets)
-            secrets = secrets_minified + secrets_unminified
+            # Scan unique JS files
+            secrets = await self.secret_scanner.scan_directory(unique_js_dir)
             self.stats['total_secrets'] = len(secrets)
             
             # Save organized secrets (domain-specific + full results)
@@ -942,25 +961,20 @@ class ScanEngine:
                         # Force mode: still mark as scanned but don't skip
                         self.state.mark_as_scanned_if_new(file_hash, url)
                     
-                    # Generate filename
-                    readable_name = self._get_readable_filename(url, file_hash)
-                    
-                    # Detect if file is minified
-                    is_minified = self._is_minified(content)
-                    
-                    # Save to appropriate directory based on minification
-                    if is_minified:
-                        file_path = Path(self.paths['files_minified']) / readable_name
-                    else:
-                        file_path = Path(self.paths['files_unminified']) / readable_name
+                    # NEW: Save to unique_js/{md5}.js for content-based deduplication
+                    hash_filename = f"{file_hash}.js"
+                    file_path = Path(self.paths['unique_js']) / hash_filename
                     
                     with open(file_path, 'w', encoding='utf-8') as f:
                         f.write(content)
                     
+                    # Detect if file is minified (for metadata only)
+                    is_minified = self._is_minified(content)
+                    
                     # Update progress AND Save manifest (THREAD-SAFE)
                     async with lock:
-                        # Move this INSIDE the lock to prevent crashes
-                        self._save_file_manifest(url, file_hash, readable_name)
+                        # Save hash -> URL mapping for notifications
+                        self._save_file_manifest(url, file_hash, hash_filename, is_minified)
                         
                         self.stats['total_files'] += 1
                         completed += 1
@@ -979,9 +993,8 @@ class ScanEngine:
                     return {
                         'url': url,
                         'hash': file_hash,
-                        'filename': readable_name,
-                        'minified_path': str(file_path) if is_minified else None,
-                        'unminified_path': str(file_path) if not is_minified else None,
+                        'filename': hash_filename,
+                        'file_path': str(file_path),
                         'is_minified': is_minified,
                         'content': content
                     }
@@ -1674,14 +1687,15 @@ class ScanEngine:
             # Fallback to just hash
             return f"{file_hash}.js"
     
-    def _save_file_manifest(self, url: str, file_hash: str, filename: str):
+    def _save_file_manifest(self, url: str, file_hash: str, filename: str, is_minified: bool = False):
         """
-        Saves file manifest mapping for easy reference
+        Saves file manifest mapping for easy reference and Discord notifications
         
         Args:
             url: Source URL
-            file_hash: SHA256 hash
-            filename: Readable filename
+            file_hash: MD5 hash (32 characters)
+            filename: Hash-based filename ({md5}.js)
+            is_minified: Whether file is minified
         """
         import json
         
@@ -1694,10 +1708,11 @@ class ScanEngine:
         else:
             manifest = {}
         
-        # Add entry
-        manifest[filename] = {
+        # Add entry: hash -> {url, filename, timestamp, minified}
+        manifest[file_hash] = {
             'url': url,
-            'hash': file_hash,
+            'filename': filename,
+            'is_minified': is_minified,
             'timestamp': datetime.utcnow().isoformat() + 'Z'
         }
         
@@ -1982,3 +1997,132 @@ class ScanEngine:
                 entry = manifest.get(filename, {})
                 return entry.get('url')
         return None
+    
+    async def _discover_js_recursively(self, downloaded_files: List[dict], max_depth: int, validate_with_head: bool) -> List[str]:
+        """
+        Recursively discover JS files referenced within other JS files
+        
+        Implements depth-limited recursive discovery to find 2nd/3rd level JS files.
+        Prevents infinite loops via seen_urls tracking and enforces in-scope validation.
+        
+        Args:
+            downloaded_files: List of initially downloaded file dictionaries
+            max_depth: Maximum recursion depth (1=direct references only, 2=2nd level, etc.)
+            validate_with_head: If True, use HEAD requests to validate URLs before downloading
+            
+        Returns:
+            List of newly discovered JS URLs (deduplicated and in-scope only)
+        """
+        seen_urls = set()  # Track all URLs we've seen to prevent duplicates
+        all_discovered_urls = set()  # All URLs found in any depth
+        
+        # Initialize seen_urls with all initially downloaded URLs
+        for file_info in downloaded_files:
+            seen_urls.add(file_info['url'])
+        
+        current_depth = 0
+        current_files = downloaded_files
+        
+        self.logger.info(f"Starting recursive discovery (max_depth={max_depth})")
+        
+        while current_depth < max_depth:
+            current_depth += 1
+            self.logger.info(f"  🔍 Depth {current_depth}/{max_depth}: Analyzing {len(current_files)} files...")
+            
+            discovered_at_depth = set()
+            
+            # Extract JS URLs from all files at current depth
+            for file_info in current_files:
+                try:
+                    content = file_info.get('content', '')
+                    if not content:
+                        # Read from disk if content not in memory
+                        file_path = file_info.get('file_path')
+                        if file_path and Path(file_path).exists():
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                    
+                    if content:
+                        # Extract JS URLs using AST analyzer
+                        js_urls = await self.ast_analyzer.extract_js_urls(content, file_info['url'])
+                        
+                        for url in js_urls:
+                            # Skip if already seen
+                            if url in seen_urls:
+                                continue
+                            
+                            # In-scope validation
+                            if not self._is_target_domain(url):
+                                self.logger.debug(f"Skipping out-of-scope URL: {url}")
+                                continue
+                            
+                            # Mark as seen
+                            seen_urls.add(url)
+                            discovered_at_depth.add(url)
+                            all_discovered_urls.add(url)
+                
+                except Exception as e:
+                    self.logger.debug(f"Error extracting JS URLs from {file_info.get('url', 'unknown')}: {e}")
+            
+            self.logger.info(f"  ✓ Depth {current_depth}: Found {len(discovered_at_depth)} new URLs")
+            
+            # If no new URLs found, stop early
+            if not discovered_at_depth:
+                self.logger.info(f"  ℹ️  No more JS files found at depth {current_depth}, stopping recursion")
+                break
+            
+            # Validate URLs with HEAD requests if enabled
+            if validate_with_head and discovered_at_depth:
+                self.logger.info(f"  🔎 Validating {len(discovered_at_depth)} URLs with HEAD requests...")
+                validated_urls = await self._validate_urls_with_head(list(discovered_at_depth))
+                self.logger.info(f"  ✓ {len(validated_urls)} URLs validated (200 OK)")
+                discovered_at_depth = set(validated_urls)
+            
+            # If we've reached max depth, don't prepare for next iteration
+            if current_depth >= max_depth:
+                break
+            
+            # Download files for next depth iteration (but don't add to final results yet)
+            if discovered_at_depth:
+                self.logger.info(f"  ⬇️  Downloading {len(discovered_at_depth)} files for depth {current_depth + 1} analysis...")
+                current_files = await self._download_all_files(list(discovered_at_depth))
+            else:
+                break
+        
+        self.logger.info(f"✅ Recursive discovery complete: {len(all_discovered_urls)} total new URLs")
+        return list(all_discovered_urls)
+    
+    async def _validate_urls_with_head(self, urls: List[str]) -> List[str]:
+        """
+        Validate URLs using HEAD requests to check existence before downloading
+        
+        Args:
+            urls: List of URLs to validate
+            
+        Returns:
+            List of URLs that returned 200 OK
+        """
+        validated_urls = []
+        semaphore = asyncio.Semaphore(20)  # Limit concurrent HEAD requests
+        
+        async def validate_one(url: str) -> Optional[str]:
+            async with semaphore:
+                try:
+                    exists, status_code = await self.fetcher.validate_url_exists(url)
+                    if exists:
+                        return url
+                    else:
+                        self.logger.debug(f"HEAD validation failed: {url} (status {status_code})")
+                        return None
+                except Exception as e:
+                    self.logger.debug(f"HEAD request error for {url}: {e}")
+                    return None
+        
+        tasks = [validate_one(url) for url in urls]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in results:
+            if isinstance(result, str):
+                validated_urls.append(result)
+        
+        return validated_urls

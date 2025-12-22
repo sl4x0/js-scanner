@@ -1,6 +1,6 @@
 """
 Hashing Utility
-SHA256 calculation for file deduplication
+MD5 calculation for file deduplication (faster than SHA256)
 """
 import hashlib
 import aiofiles
@@ -8,35 +8,35 @@ import aiofiles
 
 async def calculate_hash(content: str) -> str:
     """
-    Calculates SHA256 hash of content
+    Calculates MD5 hash of content
     
     Args:
         content: String content to hash
         
     Returns:
-        SHA256 hex digest
+        MD5 hex digest (32 characters)
     """
-    return hashlib.sha256(content.encode('utf-8')).hexdigest()
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
 
 
 async def calculate_file_hash(filepath: str) -> str:
     """
-    Calculates SHA256 hash of a file
+    Calculates MD5 hash of a file
     
     Args:
         filepath: Path to the file
         
     Returns:
-        SHA256 hex digest
+        MD5 hex digest (32 characters)
     """
-    sha256_hash = hashlib.sha256()
+    md5_hash = hashlib.md5()
     
     async with aiofiles.open(filepath, 'rb') as f:
         # Read in chunks to handle large files
         while chunk := await f.read(8192):
-            sha256_hash.update(chunk)
+            md5_hash.update(chunk)
     
-    return sha256_hash.hexdigest()
+    return md5_hash.hexdigest()
 
 
 def calculate_hash_sync(content: str) -> str:
@@ -47,6 +47,6 @@ def calculate_hash_sync(content: str) -> str:
         content: String content to hash
         
     Returns:
-        SHA256 hex digest
+        MD5 hex digest (32 characters)
     """
-    return hashlib.sha256(content.encode('utf-8')).hexdigest()
+    return hashlib.md5(content.encode('utf-8')).hexdigest()
