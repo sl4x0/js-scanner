@@ -121,7 +121,17 @@ def log_stats(logger: logging.Logger, stats: dict):
     logger.info(f"{Fore.YELLOW}{'='*60}{Style.RESET_ALL}")
     logger.info(f"{Fore.CYAN}Scan Statistics:{Style.RESET_ALL}")
     logger.info(f"  Files Scanned: {stats.get('total_files', 0)}")
-    logger.info(f"  Secrets Found: {Fore.RED}{stats.get('total_secrets', 0)}{Style.RESET_ALL}")
+    
+    # Show total findings + verified breakdown (critical for bug bounty triaging)
+    total_secrets = stats.get('total_secrets', 0)
+    verified_secrets = stats.get('verified_secrets', 0)
+    unverified_secrets = total_secrets - verified_secrets
+    
+    if total_secrets > 0:
+        logger.info(f"  Total Findings: {Fore.RED}{total_secrets}{Style.RESET_ALL} ({verified_secrets} verified, {unverified_secrets} unverified)")
+    else:
+        logger.info(f"  Secrets Found: {Fore.GREEN}0{Style.RESET_ALL}")
+    
     logger.info(f"  Duration: {stats.get('scan_duration', 0):.2f}s")
     if stats.get('errors'):
         logger.info(f"  Errors: {len(stats['errors'])}")

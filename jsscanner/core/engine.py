@@ -406,8 +406,10 @@ class ScanEngine:
             unique_js_dir = str(Path(self.paths['unique_js']))
             
             # Scan unique JS files
-            secrets = await self.secret_scanner.scan_directory(unique_js_dir)
-            self.stats['total_secrets'] = len(secrets)
+            verified_secrets = await self.secret_scanner.scan_directory(unique_js_dir)
+            total_findings = len(self.secret_scanner.all_secrets)  # All findings (verified + unverified)
+            self.stats['total_secrets'] = total_findings
+            self.stats['verified_secrets'] = len(verified_secrets)
             
             # Save organized secrets (domain-specific + full results)
             await self.secret_scanner.save_organized_secrets()
@@ -425,12 +427,13 @@ class ScanEngine:
                 self.state.save_checkpoint('PHASE_3_COMPLETE', {
                     'scanning': {
                         'completed': True,
-                        'secrets_found': len(secrets)
+                        'total_findings': total_findings,
+                        'verified_secrets': len(verified_secrets)
                     }
                 })
             
-            if secrets:
-                self.logger.info(f"✅ Found {len(secrets)} secrets\n")
+            if total_findings > 0:
+                self.logger.info(f"✅ Found {total_findings} total findings ({len(verified_secrets)} verified, {total_findings - len(verified_secrets)} unverified)\n")
             else:
                 self.logger.info(f"✅ No secrets found\n")
             

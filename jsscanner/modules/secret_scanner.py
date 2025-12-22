@@ -416,13 +416,6 @@ class SecretScanner:
                         # Track ALL findings for export (verified + unverified)
                         self.all_secrets.append(finding)
                         
-                        # Send ALL secrets to Discord (verified and unverified)
-                        if self.notifier:
-                            # Extract file info for Discord notification
-                            source_metadata = finding.get('SourceMetadata', {})
-                            file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', 'unknown')
-                            await self.notifier.queue_batch_alert([finding], file_path)
-                        
                         # Track verified secrets for state
                         if self._is_verified(finding):
                             verified_findings.append(finding)
@@ -433,10 +426,64 @@ class SecretScanner:
             
             self.logger.info(f"TruffleHog scan complete: {len(verified_findings)} verified secrets, {len(self.all_secrets)} total findings")
             
+            # Queue ALL findings to Discord (organized by domain for efficient triaging)
+            if self.notifier and self.all_secrets:
+                self.logger.info(f"📤 Queueing {len(self.all_secrets)} findings to Discord...")
+                await self._queue_findings_by_domain(self.all_secrets)
+            
         except Exception as e:
             self.logger.error(f"Directory scan failed: {e}")
         
         return verified_findings
+    
+    async def _queue_findings_by_domain(self, findings: list):
+        """
+        Queue findings to Discord, organized by domain for efficient triaging
+        Verified secrets sent first, then unverified in batches
+        
+        Args:
+            findings: List of all findings (verified + unverified)
+        """
+        from urllib.parse import urlparse
+        from collections import defaultdict
+        
+        # Separate verified from unverified
+        verified = [f for f in findings if self._is_verified(f)]
+        unverified = [f for f in findings if not self._is_verified(f)]
+        
+        # Send verified secrets immediately (critical priority)
+        if verified:
+            self.logger.info(f"📤 Sending {len(verified)} verified secrets immediately")
+            for secret in verified:
+                await self.notifier.queue_alert(secret)
+        
+        # Batch unverified secrets by domain (reduces Discord spam)
+        if unverified:
+            self.logger.info(f"📤 Batching {len(unverified)} unverified findings by domain")
+            
+            # Group by domain
+            domain_groups = defaultdict(list)
+            for finding in unverified:
+                source_metadata = finding.get('SourceMetadata', {})
+                url = source_metadata.get('url', '')
+                
+                domain = 'Unknown'
+                if url:
+                    try:
+                        parsed = urlparse(url)
+                        domain = parsed.netloc or 'Unknown'
+                    except:
+                        pass
+                
+                domain_groups[domain].append(finding)
+            
+            # Send batched notifications per domain (max 15 per batch for readability)
+            for domain, secrets in domain_groups.items():
+                # Split large batches into chunks of 15
+                batch_size = 15
+                for i in range(0, len(secrets), batch_size):
+                    batch = secrets[i:i + batch_size]
+                    await self.notifier.queue_batch_alert(batch, domain=domain)
     
     async def scan_content(self, content: str, source_url: str) -> int:
         """

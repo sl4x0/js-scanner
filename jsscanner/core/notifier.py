@@ -361,6 +361,7 @@ class DiscordNotifier:
         # Get source metadata
         source_metadata = secret_data.get('SourceMetadata', {})
         url = source_metadata.get('url', '')
+        file_path = source_metadata.get('file', '')
         
         # Extract domain from URL
         domain = 'Unknown'
@@ -370,6 +371,11 @@ class DiscordNotifier:
                 domain = parsed.netloc or 'Unknown'
             except:
                 pass
+        
+        # If no URL but we have a file path, extract filename for context
+        file_context = ''
+        if file_path:
+            file_context = Path(file_path).name
         
         # Get the actual secret
         raw_secret = secret_data.get('Raw', secret_data.get('RawV2', secret_data.get('secret', '')))
@@ -387,6 +393,14 @@ class DiscordNotifier:
         # Build compact fields
         fields = []
         
+        # Domain/Host field for easy triaging (CRITICAL FOR BUG BOUNTY)
+        if domain != 'Unknown':
+            fields.append({
+                'name': '🎯 Domain',
+                'value': f'`{domain}`',
+                'inline': False
+            })
+        
         # Source: Full JS file URL with line number (clean and clickable)
         line_num = source_metadata.get('line', 0)
         if url:
@@ -398,8 +412,15 @@ class DiscordNotifier:
             
             # Show full URL without truncation (Discord handles long URLs well)
             fields.append({
-                'name': 'Source',
+                'name': '📄 Source File',
                 'value': source_value,
+                'inline': False
+            })
+        elif file_context:
+            # Show filename if no URL
+            fields.append({
+                'name': '📄 File',
+                'value': f'`{file_context}`',
                 'inline': False
             })
         
@@ -412,9 +433,14 @@ class DiscordNotifier:
             'inline': True
         })
         
-        # Create title with secret type only (domain shown in Source field)
+        # Create title with domain/host context (CRITICAL FOR MANUAL TRIAGING)
         title_icon = "🔴" if verified else "🟠"
-        title = f"{title_icon} {detector_name} Secret"
+        if domain != 'Unknown':
+            title = f"{title_icon} {detector_name} • {domain}"
+        elif file_context:
+            title = f"{title_icon} {detector_name} • {file_context}"
+        else:
+            title = f"{title_icon} {detector_name} Secret"
         # Discord title limit is 256 chars
         if len(title) > 256:
             title = title[:253] + "..."
