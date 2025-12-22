@@ -342,19 +342,18 @@ class ScanEngine:
                 self.logger.info("🔍 PHASE 2.1: RECURSIVE JS DISCOVERY")
                 self.logger.info(f"{'═'*70}")
                 
-                additional_urls = await self._discover_js_recursively(
+                additional_files = await self._discover_js_recursively(
                     downloaded_files, 
                     recursion_config.get('max_depth', 2),
                     recursion_config.get('validate_with_head', True)
                 )
                 
-                if additional_urls:
-                    self.logger.info(f"✅ Found {len(additional_urls)} additional JS files via recursive discovery")
-                    self.logger.info("⬇️  Downloading newly discovered files...")
+                if additional_files:
+                    self.logger.info(f"✅ Found {len(additional_files)} additional JS files via recursive discovery")
+                    self.logger.info("📦 Adding to processing pipeline (already downloaded)...")
                     
-                    # Download additional files
-                    additional_downloaded = await self._download_all_files(additional_urls)
-                    downloaded_files.extend(additional_downloaded)
+                    # Files are already downloaded - add directly to pipeline
+                    downloaded_files.extend(additional_files)
                     
                     self.logger.info(f"✅ Total files after recursive discovery: {len(downloaded_files)}\n")
                 else:
@@ -2013,7 +2012,7 @@ class ScanEngine:
                 return entry.get('url')
         return None
     
-    async def _discover_js_recursively(self, downloaded_files: List[dict], max_depth: int, validate_with_head: bool) -> List[str]:
+    async def _discover_js_recursively(self, downloaded_files: List[dict], max_depth: int, validate_with_head: bool) -> List[dict]:
         """
         Recursively discover JS files referenced within other JS files
         
@@ -2026,10 +2025,10 @@ class ScanEngine:
             validate_with_head: If True, use HEAD requests to validate URLs before downloading
             
         Returns:
-            List of newly discovered JS URLs (deduplicated and in-scope only)
+            List of newly discovered file objects (already downloaded, ready for pipeline)
         """
         seen_urls = set()  # Track all URLs we've seen to prevent duplicates
-        all_discovered_urls = set()  # All URLs found in any depth
+        all_discovered_files = []  # All file objects downloaded during recursion
         
         # Initialize seen_urls with all initially downloaded URLs
         for file_info in downloaded_files:
@@ -2093,19 +2092,22 @@ class ScanEngine:
                 self.logger.info(f"  ✓ {len(validated_urls)} URLs validated (200 OK)")
                 discovered_at_depth = set(validated_urls)
             
-            # If we've reached max depth, don't prepare for next iteration
-            if current_depth >= max_depth:
-                break
-            
-            # Download files for next depth iteration (but don't add to final results yet)
+            # Download files for next depth iteration AND add to results
             if discovered_at_depth:
                 self.logger.info(f"  ⬇️  Downloading {len(discovered_at_depth)} files for depth {current_depth + 1} analysis...")
                 current_files = await self._download_all_files(list(discovered_at_depth))
+                
+                # Add downloaded files to results (these are ready for pipeline)
+                all_discovered_files.extend(current_files)
+                
+                # If we've reached max depth, stop here (don't analyze deeper)
+                if current_depth >= max_depth:
+                    break
             else:
                 break
         
-        self.logger.info(f"✅ Recursive discovery complete: {len(all_discovered_urls)} total new URLs")
-        return list(all_discovered_urls)
+        self.logger.info(f"✅ Recursive discovery complete: {len(all_discovered_files)} total new files downloaded")
+        return all_discovered_files
     
     async def _validate_urls_with_head(self, urls: List[str]) -> List[str]:
         """
