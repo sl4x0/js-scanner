@@ -122,8 +122,9 @@ class DiscordNotifier:
     
     async def queue_batch_alert(self, secrets: list, file_path: str = None, domain: str = None):
         """
-        Queue multiple secrets as a single batched notification
-        This reduces Discord spam and improves notification efficiency
+        Queue multiple secrets - sends individual detailed notifications for each
+        Previously batched notifications, but now sends one detailed message per secret
+        for better manual review and triage
         
         Args:
             secrets: List of secret data dictionaries
@@ -136,100 +137,10 @@ class DiscordNotifier:
         if not secrets:
             return
         
-        # If only one secret, use regular alert
-        if len(secrets) == 1:
-            await self.queue_alert(secrets[0])
-            return
-        
-        # Count verified vs unverified
-        verified_count = sum(1 for s in secrets if s.get('Verified', s.get('verified', False)))
-        unverified_count = len(secrets) - verified_count
-        
-        # Color: Red if any verified, orange otherwise
-        color = 0xFF0000 if verified_count > 0 else 0xFFA500
-        
-        # Extract domain if not provided
-        if not domain and secrets:
-            source_metadata = secrets[0].get('SourceMetadata', {})
-            url = source_metadata.get('url', '')
-            if url:
-                try:
-                    parsed = urlparse(url)
-                    domain = parsed.netloc or 'Multiple Sources'
-                except:
-                    domain = 'Multiple Sources'
-            else:
-                domain = 'Multiple Sources'
-        
-        # Create summary description
-        summary_parts = []
-        if verified_count > 0:
-            summary_parts.append(f"✅ **{verified_count} Verified**")
-        if unverified_count > 0:
-            summary_parts.append(f"⚠️ **{unverified_count} Unverified**")
-        
-        description = " • ".join(summary_parts)
-        
-        # Build compact fields (max 25 fields, limit to 15 for readability)
-        fields = []
-        display_limit = min(len(secrets), 15)
-        
-        for i, secret in enumerate(secrets[:display_limit], 1):
-            detector_name = secret.get('DetectorName', secret.get('type', 'Unknown'))
-            verified = secret.get('Verified', secret.get('verified', False))
-            status_icon = "✅" if verified else "⚠️"
-            
-            # Get source URL for this secret
-            source_metadata = secret.get('SourceMetadata', {})
-            secret_url = source_metadata.get('url', '')
-            line_num = source_metadata.get('line', '')
-            
-            # Create compact value with full URL and line number
-            value_parts = [f"{status_icon} {detector_name}"]
-            if secret_url:
-                # Show full JS file URL with line number
-                if line_num:
-                    full_source = f"{secret_url}:{line_num}"
-                else:
-                    full_source = secret_url
-                # Show full URL without truncation (important for bug bounty work)
-                value_parts.append(full_source)
-            
-            fields.append({
-                'name': f'#{i}',
-                'value': '\n'.join(value_parts),
-                'inline': True
-            })
-        
-        # Add overflow indicator if more secrets exist
-        if len(secrets) > display_limit:
-            fields.append({
-                'name': '➕ More',
-                'value': f'+ {len(secrets) - display_limit} additional secrets\n(check scan results)',
-                'inline': False
-            })
-        
-        # Create title
-        title_icon = "🔴" if verified_count > 0 else "🟠"
-        title = f"{title_icon} {len(secrets)} Secrets Found • {domain}"
-        if len(title) > 256:
-            title = title[:253] + "..."
-        
-        # Create embed
-        embed = {
-            'embeds': [{
-                'title': title,
-                'description': description,
-                'color': color,
-                'fields': fields,
-                'footer': {
-                    'text': f'JS-Scanner v3.1 • {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}'
-                },
-                'timestamp': datetime.utcnow().isoformat()
-            }]
-        }
-        
-        self.queue.append(embed)
+        # CHANGE: Send individual detailed notifications for each secret
+        # instead of batching them together
+        for secret in secrets:
+            await self.queue_alert(secret)
     
     async def _worker(self):
         """Background worker that sends queued messages"""
@@ -340,7 +251,7 @@ class DiscordNotifier:
     
     def _create_embed(self, secret_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Creates a clean, minimal Discord embed for secret findings
+        Creates a detailed Discord embed for secret findings with all info needed for manual review
         
         Args:
             secret_data: Dictionary containing secret information
@@ -390,7 +301,7 @@ class DiscordNotifier:
         # Build description with secret in code block
         description = f"```\n{display_secret}\n```"
         
-        # Build compact fields
+        # Build detailed fields
         fields = []
         
         # Domain/Host field for easy triaging (CRITICAL FOR BUG BOUNTY)
@@ -428,10 +339,33 @@ class DiscordNotifier:
         status_icon = "✅" if verified else "⚠️"
         status_text = "Verified" if verified else "Unverified"
         fields.append({
-            'name': 'Status',
+            'name': '✓ Status',
             'value': f"{status_icon} {status_text}",
             'inline': True
         })
+        
+        # Get entropy level for context
+        entropy = secret_data.get('Entropy', secret_data.get('entropy', 0))
+        if entropy:
+            entropy_str = f"{entropy:.2f}" if isinstance(entropy, (int, float)) else str(entropy)
+            fields.append({
+                'name': '📊 Entropy',
+                'value': entropy_str,
+                'inline': True
+            })
+        
+        # Get key information (if available)
+        key_data = secret_data.get('Raw', secret_data.get('RawV2', ''))
+        # Look for common API key indicators
+        if key_data and len(key_data) > 10:
+            key_preview = key_data[:30]
+            if len(key_data) > 30:
+                key_preview += "..."
+            fields.append({
+                'name': '🔑 Key Preview',
+                'value': f'`{key_preview}`',
+                'inline': False
+            })
         
         # Create title with domain/host context (CRITICAL FOR MANUAL TRIAGING)
         title_icon = "🔴" if verified else "🟠"
@@ -463,49 +397,20 @@ class DiscordNotifier:
     
     async def flush_batched_secrets(self, unverified_secrets: list, batch_size: int = 10, group_by_domain: bool = True):
         """
-        Flush batched unverified secrets at phase end
-        Groups secrets intelligently and respects Discord limits
+        Flush unverified secrets at phase end - sends individual detailed messages
+        Previously batched messages, now sends each secret with full details for review
         
         Args:
             unverified_secrets: List of unverified secret data dictionaries
-            batch_size: Maximum secrets per message (default: 10)
-            group_by_domain: Whether to group by domain (default: True)
+            batch_size: No longer used (kept for backward compatibility)
+            group_by_domain: No longer used (kept for backward compatibility)
         """
         if not unverified_secrets:
             return
         
-        from urllib.parse import urlparse
-        
-        if group_by_domain:
-            # Group secrets by domain
-            domain_groups = {}
-            for secret in unverified_secrets:
-                source_metadata = secret.get('SourceMetadata', {})
-                url = source_metadata.get('url', '')
-                
-                domain = 'unknown'
-                if url:
-                    try:
-                        parsed = urlparse(url)
-                        domain = parsed.netloc or 'unknown'
-                    except:
-                        pass
-                
-                if domain not in domain_groups:
-                    domain_groups[domain] = []
-                domain_groups[domain].append(secret)
-            
-            # Send batches per domain
-            for domain, secrets in domain_groups.items():
-                # Split into chunks if needed
-                for i in range(0, len(secrets), batch_size):
-                    batch = secrets[i:i + batch_size]
-                    await self.queue_batch_alert(batch, domain=domain)
-        else:
-            # Send in batches without domain grouping
-            for i in range(0, len(unverified_secrets), batch_size):
-                batch = unverified_secrets[i:i + batch_size]
-                await self.queue_batch_alert(batch)
+        # Send each secret individually for maximum detail and manual review capability
+        for secret in unverified_secrets:
+            await self.queue_alert(secret)
     
     async def send_status(self, message: str, status_type: str = 'info'):
         """

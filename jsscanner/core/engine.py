@@ -440,11 +440,20 @@ class ScanEngine:
                 # Show domain breakdown if available
                 if secrets_summary:
                     self.logger.info(f"\n📊 Findings by Domain:")
-                    sorted_domains = sorted(secrets_summary.items(), key=lambda x: x[1], reverse=True)
-                    for i, (domain, count) in enumerate(sorted_domains[:10], 1):  # Top 10
-                        self.logger.info(f"  {i:2d}. {domain}: {count} secrets")
-                    if len(secrets_summary) > 10:
-                        self.logger.info(f"  ... and {len(secrets_summary) - 10} more domains")
+                    # Extract domains dict from summary (structure: {'domains': {'domain': {'total': int, 'verified': int}, ...}, ...})
+                    domains = secrets_summary.get('domains', {})
+                    if domains:
+                        # Sort by total count (descending)
+                        sorted_domains = sorted(domains.items(), key=lambda x: x[1].get('total', 0), reverse=True)
+                        for i, (domain, stats) in enumerate(sorted_domains[:10], 1):  # Top 10
+                            total = stats.get('total', 0)
+                            verified = stats.get('verified', 0)
+                            status = f"✅ {verified}" if verified > 0 else f"⚠️ {total}"
+                            self.logger.info(f"  {i:2d}. {domain}: {total} total ({status})")
+                        if len(domains) > 10:
+                            self.logger.info(f"  ... and {len(domains) - 10} more domains")
+                    else:
+                        self.logger.info(f"  No domain breakdown available")
                 self.logger.info("")
             else:
                 self.logger.info(f"\n✅ No secrets found\n")
