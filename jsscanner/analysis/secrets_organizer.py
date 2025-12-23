@@ -59,7 +59,13 @@ class DomainSecretsOrganizer:
             # Load existing secrets
             if self.streaming_file.exists():
                 with open(self.streaming_file, 'r', encoding='utf-8') as f:
-                    raw_data = json.load(f)
+                    try:
+                        raw_data = json.load(f)
+                    except json.JSONDecodeError:
+                        # Corrupted file - start fresh
+                        self.logger.warning(f"Corrupted secrets file, reinitializing: {self.streaming_file}")
+                        raw_data = {'secrets': [], 'total_count': 0}
+                    
                     # Handle both list (old format) and dict (new format)
                     if isinstance(raw_data, list):
                         data = {'secrets': raw_data, 'total_count': len(raw_data)}
