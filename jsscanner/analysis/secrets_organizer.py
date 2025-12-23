@@ -30,19 +30,8 @@ class DomainSecretsOrganizer:
         self._streaming_secrets = []
     
     def __del__(self):
-        """Ensure buffer is flushed on cleanup"""
-        if hasattr(self, '_streaming_secrets') and self._streaming_secrets:
-            try:
-                import asyncio
-                # Try to flush remaining secrets
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(self._flush_secrets())
-                else:
-                    loop.run_until_complete(self._flush_secrets())
-            except Exception as e:
-                if hasattr(self, 'logger') and self.logger:
-                    self.logger.warning(f"Failed to flush secrets buffer on cleanup: {e}")
+        """No-op: Rely on explicit flush in engine to avoid event loop issues"""
+        pass
     
     async def save_single_secret(self, secret: dict):
         """

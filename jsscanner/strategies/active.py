@@ -188,8 +188,6 @@ class ActiveFetcher:
     
     def _is_in_scope(self, url: str, target: str) -> bool:
         """Check if URL is in scope (same root domain as target)"""
-        from urllib.parse import urlparse
-
         try:
             # Reject blob, data, javascript URLs
             if url.startswith(('blob:', 'data:', 'javascript:')):
@@ -534,8 +532,6 @@ class ActiveFetcher:
     
     async def _fetch_live_attempt(self, target: str) -> List[str]:
         """Single attempt to fetch JavaScript URLs from live site"""
-        from urllib.parse import urlparse  # Import at function start for nested function access
-        
         self.logger.info(f"🌐 Launching browser to scan live site: {target}")
 
         if not target.startswith('http'):
@@ -825,7 +821,6 @@ class ActiveFetcher:
         max_size = self.config.get('max_file_size', 10485760)
         
         # 🛡️ SESSION INHERITANCE: Build headers with Referer to bypass hotlink protection
-        from urllib.parse import urlparse
         parsed_url = urlparse(url)
         origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
         
