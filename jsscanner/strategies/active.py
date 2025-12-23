@@ -717,10 +717,18 @@ class ActiveFetcher:
         - Rate limiting (429, 503) - to avoid API bans
         - Client errors (4xx) - won't be fixed by retry
         """
+        # 🔍 DIAGNOSTIC: Log every fetch attempt in verbose mode
+        verbose_mode = self.config.get('verbose', False)
+        if verbose_mode:
+            self.logger.debug(f"📥 Attempting fetch: {url[:80]}")
+        
         # Pre-flight noise filter check (no network call)
         should_skip, reason = self.noise_filter.should_skip_url(url)
         if should_skip:
-            self.logger.debug(f"⏭️  Filtered (noise): {url} - {reason}")
+            if verbose_mode:
+                self.logger.info(f"⏭️  Filtered (noise): {url[:80]} - {reason}")
+            else:
+                self.logger.debug(f"⏭️  Filtered (noise): {url} - {reason}")
             self.last_failure_reason = 'filtered_noise'
             return None
 
@@ -753,13 +761,19 @@ class ActiveFetcher:
             return await _do_fetch()
         except asyncio.TimeoutError:
             # All retries exhausted due to timeout
-            self.logger.debug(f"❌ [TIMEOUT] {url}")
+            if verbose_mode:
+                self.logger.warning(f"❌ [TIMEOUT] {url[:80]}")
+            else:
+                self.logger.debug(f"❌ [TIMEOUT] {url}")
             self.last_failure_reason = 'timeout'
             self.error_stats['timeouts'] += 1
             return None
         except (ConnectionError, OSError) as e:
             # All retries exhausted due to network error
-            self.logger.debug(f"❌ [NETWORK ERROR] {url}: {str(e)}")
+            if verbose_mode:
+                self.logger.warning(f"❌ [NETWORK ERROR] {url[:80]}: {str(e)[:50]}")
+            else:
+                self.logger.debug(f"❌ [NETWORK ERROR] {url}: {str(e)}")
             self.last_failure_reason = 'network_error'
             
             # Classify the specific network error
@@ -774,7 +788,10 @@ class ActiveFetcher:
             return None
         except Exception as e:
             # Traceback Pattern: Clean console + forensic log
-            self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url}: {str(e)}")
+            if verbose_mode:
+                self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url[:80]}: {str(e)[:50]}")
+            else:
+                self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url}: {str(e)}")
             self.logger.debug("Full fetch error traceback:", exc_info=True)
             self.last_failure_reason = 'non_retryable_error'
             self.error_stats['http_errors'] += 1  # Track as generic error
