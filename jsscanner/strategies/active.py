@@ -534,6 +534,8 @@ class ActiveFetcher:
     
     async def _fetch_live_attempt(self, target: str) -> List[str]:
         """Single attempt to fetch JavaScript URLs from live site"""
+        from urllib.parse import urlparse  # Import at function start for nested function access
+        
         self.logger.info(f"🌐 Launching browser to scan live site: {target}")
 
         if not target.startswith('http'):
@@ -621,7 +623,6 @@ class ActiveFetcher:
                     cookies = await context.cookies()
                     self.valid_cookies = {c['name']: c['value'] for c in cookies}
                     # Store target domain for Referer header
-                    from urllib.parse import urlparse
                     parsed = urlparse(target)
                     self.target_domain = f"{parsed.scheme}://{parsed.netloc}"
                     
