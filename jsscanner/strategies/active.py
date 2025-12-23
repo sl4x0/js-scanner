@@ -575,6 +575,22 @@ class ActiveFetcher:
                     self.logger.debug(f"Skipping malformed URL: {url[:100]}")
                     return
 
+                # Strict validation: MUST have .js extension or be resource_type='script' with .js
+                parsed = urlparse(url)
+                path = parsed.path.lower()
+                query = parsed.query.lower()
+                
+                # Valid JS files must have .js somewhere meaningful
+                is_valid_js = (
+                    path.endswith('.js') or 
+                    path.endswith('.mjs') or
+                    '.js?' in url.lower() or
+                    (resource_type == 'script' and ('.js' in path or '.js' in query))
+                )
+                
+                if not is_valid_js:
+                    return
+
                 request_time = time.time() - request_start_time
 
                 if resource_type == 'script':
@@ -585,8 +601,7 @@ class ActiveFetcher:
                     else:
                         self.logger.info(f"✓ Found JS: {url}")
                 elif '.js' in url.lower():
-                    parsed = urlparse(url)
-                    if parsed.path.endswith('.js') or parsed.path.endswith('.mjs') or '.js?' in url.lower():
+                    if path.endswith('.js') or path.endswith('.mjs') or '.js?' in url.lower():
                         js_urls.add(url)
                         if request_time > 2.0:
                             lazy_loaded_urls.add(url)
