@@ -32,9 +32,9 @@ subjs:
 # Deep scan for lazy-loaded code. RAM intensive.
 playwright:
   headless: true
-  max_concurrent: 6 # Keep low (RAM heavy). 6 browsers ≈ 3GB RAM.
+  max_concurrent: 4 # Lower concurrency prevents browser crashes (3-4 is optimal)
   restart_after: 50 # Restart frequently to prevent Chromium memory leaks
-  page_timeout: 15000 # 15s is the sweet spot. 12s misses heavy SPAs.
+  page_timeout: 20000 # 20s timeout is enough for most SPAs
 
 # Performance Optimizations
 interaction_delay: 0.5 # Fast interactions
@@ -62,15 +62,15 @@ code_splitting:
 
 # Threading (Global)
 # With uvloop, you can handle significantly more I/O concurrency.
-threads: 100 # [UPGRADED] Increased from 50. uvloop eats this for breakfast.
+threads: 40 # Balanced for most VPS setups
 
 # Batch Processing (The heavy lifting)
 batch_processing:
   enabled: true
   # Phase 2: Mass Download
-  download_threads: 250 # [UPGRADED] From 150. Maximize bandwidth usage.
+  download_threads: 150 # Balanced for bandwidth
   # Phase 4: CPU Bound Processing
-  process_threads: 60 # [LOWERED] Keep lower than download. AST parsing is CPU heavy, not I/O.
+  process_threads: 40 # Matches threads setting
   cleanup_minified: false
 
 # Connection Pool
@@ -84,12 +84,12 @@ connection_pool:
 trufflehog_path: "" # Auto-detect
 trufflehog_timeout: 300
 # CPU Bottleneck Warning: TruffleHog is heavy.
-trufflehog_max_concurrent: 8 # Balanced for 4-core VPS.
+trufflehog_max_concurrent: 3 # Keep CPU load reasonable (3 is optimal)
 
 # --- ALERTING ---
 
 discord_webhook: "https://discord.com/api/webhooks/1450082381934362726/IAgRuWMbRnzpHaAezmqVPJdg05L3yYe9nG48RCV5Io6ob9ekytIqpCYxQDg6z-ljO7M3"
-discord_rate_limit: 30
+discord_rate_limit: 60 # Don't spam your own webhook (60s between batches)
 discord_status_enabled: false # Silence is golden. Only alerts matter.
 
 notification_batching:
@@ -135,8 +135,8 @@ user_agents:
 
 # --- LEGACY COMPATIBILITY (for code that may reference these) ---
 timeouts:
-  http_request: 20
-  playwright_page: 15000
+  http_request: 10  # Fail fast on slow/dead assets
+  playwright_page: 20000  # Match playwright.page_timeout
   trufflehog: 300
 
 beautification:
@@ -174,8 +174,8 @@ bloom_filter:
 # Noise Filter Thresholds (Configuration-Driven)
 # Adjust these to control vendor library detection sensitivity
 noise_filter:
-  min_file_size_kb: 50  # Files larger than this...
-  max_newlines: 20      # ...with fewer newlines = likely vendor lib
+  min_file_size_kb: 1  # Ignore tiny files (1KB minimum)
+  max_newlines: 10     # Heuristic for minified code (fewer newlines = vendor lib)
 
 # Secrets Streaming (Automatic)
 # Prevents memory exhaustion on large scans

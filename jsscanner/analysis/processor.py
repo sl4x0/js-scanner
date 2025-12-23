@@ -69,8 +69,8 @@ class Processor:
             self.logger.info(f"Extracted source map for {file_path}")
             return source_map_content
         
-        # Otherwise, beautify the minified code
-        return await self._beautify(content)
+        # Use advanced deobfuscation pipeline
+        return await self.deobfuscate(content)
     
     async def deobfuscate(self, content: str) -> str:
         """
