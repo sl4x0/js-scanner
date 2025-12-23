@@ -14,6 +14,7 @@ from ..utils.file_ops import FileOps
 from ..utils.logger import setup_logger, log_stats
 from .state_manager import StateManager
 from .notifier import DiscordNotifier
+from ..utils.reporter import generate_report
 
 
 class ScanEngine:
@@ -574,6 +575,12 @@ class ScanEngine:
             
             # Log and send final stats
             log_stats(self.logger, self.stats)
+            
+            # Generate Hunter's Report (instant triage summary)
+            try:
+                generate_report(self.target_name, str(self.paths['base']), self.stats)
+            except Exception as e:
+                self.logger.warning(f"Report generation failed: {e}")
             
             # NEW: Report noise filtering statistics
             if hasattr(self.fetcher, 'noise_filter'):

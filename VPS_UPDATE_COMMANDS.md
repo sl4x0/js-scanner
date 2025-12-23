@@ -1,10 +1,12 @@
 # 🔧 VPS Update Commands - Fix All Errors
 
 ## Issue Summary
+
 Your VPS logs show errors that have been fixed in the latest commits:
+
 1. ✅ `SubJSFetcher.fetch_batch()` - Added in commit 4e98689
 2. ✅ `all_discovered_urls` undefined - Fixed in commit f10968b
-3. ℹ️  ERROR logs appear in both files by design (scan.log has ALL logs, errors.log has WARNINGS+ only)
+3. ℹ️ ERROR logs appear in both files by design (scan.log has ALL logs, errors.log has WARNINGS+ only)
 
 ## 📥 Pull Latest Fixes
 
@@ -54,14 +56,17 @@ tail -f logs/errors.log
 ## 📊 Expected Log Behavior (This is Normal)
 
 **scan.log** = Complete audit trail (DEBUG + INFO + WARNING + ERROR)
+
 - Shows everything that happens
 - Used for debugging and forensics
 
 **errors.log** = Error-only view (WARNING + ERROR only)
+
 - Shows only problems
 - Quick way to spot issues
 
 **Why errors appear in scan.log:**
+
 - scan.log captures ALL log levels (DEBUG+)
 - errors.log captures only WARNING+
 - This is intentional - scan.log shows full context around errors
@@ -69,6 +74,7 @@ tail -f logs/errors.log
 ## ✅ Verification Checklist
 
 After pulling and testing, verify:
+
 - [ ] `git log` shows commit f10968b
 - [ ] `grep fetch_batch` finds the method in subjs_fetcher.py
 - [ ] `grep all_discovered_urls` finds the initialization in engine.py
@@ -78,6 +84,7 @@ After pulling and testing, verify:
 ## 🚀 Performance Notes
 
 With the latest updates, you now have:
+
 - uvloop for 2-4x I/O speed (Linux only)
 - TaskGroup for better crash handling
 - Optimized config (threads: 100, download_threads: 250)

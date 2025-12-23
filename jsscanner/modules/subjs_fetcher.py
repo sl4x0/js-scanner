@@ -4,6 +4,7 @@ Handles JavaScript URL discovery using SubJS tool
 """
 import subprocess
 import logging
+import asyncio
 from typing import List, Set, Optional
 from urllib.parse import urlparse
 from ..utils.retry import retry_sync, RETRY_CONFIG_SUBPROCESS
@@ -103,6 +104,76 @@ class SubJSFetcher:
         except Exception as e:
             self.logger.error(f"❌ SubJS error for {target}: {str(e)}")
             return []
+    
+    async def fetch_batch(self, domains: List[str], scope_domains: Optional[Set[str]] = None) -> List[str]:
+        """
+        Fetch JS URLs for multiple domains concurrently using SubJS
+        
+        Args:
+            domains: List of domains to fetch JS URLs from
+            scope_domains: Optional set of in-scope domains for filtering
+            
+        Returns:
+            List of all discovered JavaScript URLs from all domains
+        """
+        if not self.enabled:
+            self.logger.debug("SubJS is disabled in configuration")
+            return []
+        
+        if not domains:
+            return []
+        
+        self.logger.info(f"🔍 Starting SubJS batch discovery for {len(domains)} domains")
+        
+        # Store all discovered URLs
+        all_urls = []
+        
+        # Create async wrapper for synchronous fetch_urls
+        async def fetch_domain(domain: str) -> List[str]:
+            """Async wrapper to run fetch_urls in executor"""
+            try:
+                # Run synchronous fetch_urls in thread pool
+                loop = asyncio.get_event_loop()
+                urls = await loop.run_in_executor(
+                    None, 
+                    self.fetch_urls, 
+                    domain, 
+                    scope_domains
+                )
+                
+                if urls:
+                    self.logger.info(f"  ✓ {domain}: Found {len(urls)} JS files")
+                else:
+                    self.logger.debug(f"  - {domain}: No JS files found")
+                    
+                return urls
+                
+            except Exception as e:
+                # Handle errors gracefully - one domain failure shouldn't crash the batch
+                self.logger.warning(f"  ✗ {domain}: Failed - {str(e)}")
+                return []
+        
+        # Use TaskGroup for structured concurrency (Python 3.11+)
+        try:
+            async with asyncio.TaskGroup() as tg:
+                # Create tasks for all domains
+                tasks = [tg.create_task(fetch_domain(domain)) for domain in domains]
+            
+            # Collect results from all tasks
+            for task in tasks:
+                try:
+                    urls = task.result()
+                    all_urls.extend(urls)
+                except Exception as e:
+                    # TaskGroup should handle exceptions, but just in case
+                    self.logger.debug(f"Task result error: {e}")
+                    
+        except* Exception as eg:
+            # Handle ExceptionGroup from TaskGroup
+            self.logger.error(f"Critical error in SubJS batch processing: {eg}")
+        
+        self.logger.info(f"✓ SubJS batch complete: {len(all_urls)} total JS files discovered")
+        return all_urls
     
     def fetch_from_file(self, filepath: str, scope_domains: Optional[Set[str]] = None) -> List[str]:
         """

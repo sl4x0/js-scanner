@@ -15,7 +15,7 @@ class FileOps:
     @staticmethod
     def create_result_structure(target_name: str, base_path: str = "results") -> Dict[str, str]:
         """
-        Creates the complete directory structure for a target
+        Creates organized directory structure: Triage Zone + Machine Zone (raw_data)
         
         Args:
             target_name: Name of the target (e.g., example.com)
@@ -26,17 +26,23 @@ class FileOps:
         """
         target_path = Path(base_path) / target_name
         
-        # Define structure (MD5-based pipeline, no redundant minified/unminified folders)
+        # Define the "Machine Zone" (Visible but grouped)
+        raw_dir = target_path / "raw_data"
+        
+        # Define structure
         structure = {
             'base': target_path,
-            'unique_js': target_path / 'unique_js',
-            'final_source_code': target_path / 'final_source_code',
+            # Triage Zone (Clean)
             'extracts': target_path / 'extracts',
             'secrets': target_path / 'secrets',
             'source_code': target_path / 'source_code',
             'logs': target_path / 'logs',
-            'cache': target_path / 'cache',
-            'temp': target_path / 'temp'
+            
+            # Machine Zone (Grouped in raw_data/)
+            'unique_js': raw_dir / 'unique_js',
+            'final_source_code': raw_dir / 'final_source_code',
+            'cache': raw_dir / 'cache',
+            'temp': raw_dir / 'temp'
         }
         
         # Create all directories
@@ -46,8 +52,8 @@ class FileOps:
         # Initialize JSON files if they don't exist
         json_files = {
             'secrets': target_path / 'secrets.json',
-            'history': target_path / 'history.json',
-            'metadata': target_path / 'metadata.json',
+            'history': raw_dir / 'history.json',
+            'metadata': raw_dir / 'metadata.json',
             'trufflehog': target_path / 'trufflehog.json'
         }
         
