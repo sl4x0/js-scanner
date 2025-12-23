@@ -34,6 +34,10 @@ class ScanDashboard:
         self._console_handler = None
         self._original_level = None
         
+        # Update throttling to prevent flicker
+        self._last_update = 0
+        self._update_interval = 0.25  # Minimum 250ms between updates
+        
         # Progress tracking
         self.progress = Progress(
             TextColumn("[progress.description]{task.description}"),
@@ -79,7 +83,7 @@ class ScanDashboard:
         self.live = Live(
             self._generate_layout(),
             console=self.console,
-            refresh_per_second=4,
+            refresh_per_second=2,  # Reduced from 4 to minimize flicker
             vertical_overflow="visible"
         )
         self.live.start()
@@ -94,13 +98,22 @@ class ScanDashboard:
             self._console_handler.setLevel(self._original_level)
     
     def update_stats(self, **kwargs):
-        """Update statistics"""
+        """Update statistics with throttling to prevent flicker"""
         self.stats.update(kwargs)
-        if self.live:
+        if self.live and self._should_update():
             self.live.update(self._generate_layout())
     
+    def _should_update(self) -> bool:
+        """Check if enough time has passed since last update"""
+        import time
+        now = time.time()
+        if now - self._last_update >= self._update_interval:
+            self._last_update = now
+            return True
+        return False
+    
     def update_progress(self, phase: str, current: int, total: int):
-        """Update progress bars"""
+        """Update progress bars with throttling"""
         if total == 0:
             return
         
@@ -113,7 +126,7 @@ class ScanDashboard:
         elif phase == "analysis":
             self.progress.update(self.analysis_task, completed=percentage)
         
-        if self.live:
+        if self.live and self._should_update():
             self.live.update(self._generate_layout())
     
     def _generate_layout(self) -> Panel:

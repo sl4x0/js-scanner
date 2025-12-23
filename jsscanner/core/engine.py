@@ -277,7 +277,7 @@ class ScanEngine:
                 try:
                     self.dashboard = ScanDashboard(self.target, console=console, logger=self.logger)
                     self.dashboard.start()
-                    self.dashboard.update_stats(phase="Starting scan")
+                    # Don't update immediately - let Live stabilize first
                     self.logger.info("✅ Dashboard initialized successfully")
                 except Exception as e:
                     self.logger.warning(f"Dashboard initialization failed: {e}")
