@@ -1,0 +1,8 @@
+2025-12-23 12:20:43 - test - [31mERROR[0m - ❌ Discord webhook bad request (400)
+   Error: {"webhook_id": ["Value \"test\" is not snowflake."]}
+   The message format may be invalid or too large
+   Discord limits: 2000 chars description, 6000 chars total
+2025-12-23 12:20:43 - test - [31mERROR[0m - ❌ Discord webhook bad request (400)
+   Error: {"webhook_id": ["Value \"test\" is not snowflake."]}
+   The message format may be invalid or too large
+   Discord limits: 2000 chars description, 6000 chars total

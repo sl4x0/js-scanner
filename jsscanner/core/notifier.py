@@ -38,6 +38,7 @@ class DiscordNotifier:
         self._task = None
         self.logger = logger
         self._messages_dropped = 0
+        self._sent_secrets = set()  # Track sent secrets to prevent duplicates
     
     async def start(self):
         """Starts the notification worker"""
@@ -100,11 +101,30 @@ class DiscordNotifier:
     
     async def queue_alert(self, secret_data: Dict[str, Any]):
         """
-        Queues a secret alert for sending
+        Queues a secret alert for sending (with deduplication)
         
         Args:
             secret_data: Dictionary containing secret information
         """
+        # Create unique hash for deduplication (based on raw secret + detector + source)
+        raw_secret = secret_data.get('Raw', secret_data.get('RawV2', ''))
+        detector = secret_data.get('DetectorName', 'Unknown')
+        source_metadata = secret_data.get('SourceMetadata', {})
+        source_file = source_metadata.get('file', '')
+        source_line = source_metadata.get('line', 0)
+        
+        # Create deduplication key
+        dedup_key = f"{detector}:{raw_secret}:{source_file}:{source_line}"
+        
+        # Skip if already sent
+        if dedup_key in self._sent_secrets:
+            if self.logger:
+                self.logger.debug(f"Skipping duplicate secret: {detector} in {source_file}")
+            return
+        
+        # Mark as sent
+        self._sent_secrets.add(dedup_key)
+        
         # Check queue size limit
         if len(self.queue) >= self.max_queue_size:
             self._messages_dropped += 1
@@ -292,14 +312,13 @@ class DiscordNotifier:
         raw_secret = secret_data.get('Raw', secret_data.get('RawV2', secret_data.get('secret', '')))
         redacted = secret_data.get('Redacted', '')
         
-        # Use redacted version if available, otherwise show raw (truncated if needed)
-        display_secret = redacted if redacted else raw_secret
-        # Respect Discord's description limit (4096 chars) - keep it short and readable
-        if len(display_secret) > 200:
-            display_secret = display_secret[:200] + "..."
+        # Use redacted version for preview, otherwise show truncated raw
+        display_preview = redacted if redacted else raw_secret
+        if len(display_preview) > 30:
+            display_preview = display_preview[:30] + "..."
         
-        # Build description with secret in code block
-        description = f"```\n{display_secret}\n```"
+        # Build description with secret preview only (no full secret to avoid duplication)
+        description = f"**Secret Preview:** `{display_preview}`"
         
         # Build detailed fields
         fields = []
@@ -312,19 +331,18 @@ class DiscordNotifier:
                 'inline': False
             })
         
-        # Source: Full JS file URL with line number (clean and clickable)
+        # Source: Full JS file URL with line number (CRITICAL - shows exactly where to look)
         line_num = source_metadata.get('line', 0)
         if url:
-            # Create URL with line number appended
+            # Show full URL as clickable link (Discord auto-linkifies)
             if line_num:
-                source_value = f"{url}:{line_num}"
+                source_display = f"[View Source]({url})\nLine: {line_num}"
             else:
-                source_value = url
+                source_display = f"[View Source]({url})"
             
-            # Show full URL without truncation (Discord handles long URLs well)
             fields.append({
-                'name': '📄 Source File',
-                'value': source_value,
+                'name': '📄 JS File',
+                'value': source_display,
                 'inline': False
             })
         elif file_context:
@@ -352,19 +370,6 @@ class DiscordNotifier:
                 'name': '📊 Entropy',
                 'value': entropy_str,
                 'inline': True
-            })
-        
-        # Get key information (if available)
-        key_data = secret_data.get('Raw', secret_data.get('RawV2', ''))
-        # Look for common API key indicators
-        if key_data and len(key_data) > 10:
-            key_preview = key_data[:30]
-            if len(key_data) > 30:
-                key_preview += "..."
-            fields.append({
-                'name': '🔑 Key Preview',
-                'value': f'`{key_preview}`',
-                'inline': False
             })
         
         # Create title with domain/host context (CRITICAL FOR MANUAL TRIAGING)
