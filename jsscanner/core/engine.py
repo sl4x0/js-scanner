@@ -1905,6 +1905,8 @@ class ScanEngine:
                                 filename = secret.get('filename')
                                 if filename:
                                     files_with_secrets.add(filename)
+                    except Exception as e:
+                        self.logger.error(f"Error reading secrets for cleanup: {e}")
             
             # Get all endpoint/interesting finding filenames from AST analyzer
             files_with_findings = set()
