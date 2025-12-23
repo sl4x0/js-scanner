@@ -342,17 +342,26 @@ class SecretScanner:
         import json
         from pathlib import Path
         
-        # Navigate up from files/unminified to base directory
-        base_dir = Path(directory_path).parent.parent
-        manifest_file = base_dir / 'file_manifest.json'
+        # Navigate up from scan directory to base directory
+        # Handles both: results/target/.warehouse/raw_js and results/target/files/unminified
+        directory_path_obj = Path(directory_path)
         
-        if manifest_file.exists():
-            try:
-                with open(manifest_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except Exception as e:
-                self.logger.debug(f"Failed to load manifest: {e}")
+        # Try to find the base directory (results/target/)
+        # Look for 'file_manifest.json' by going up the directory tree
+        base_dir = directory_path_obj
+        while base_dir.name not in ['results', ''] and base_dir != base_dir.parent:
+            manifest_file = base_dir / 'file_manifest.json'
+            if manifest_file.exists():
+                try:
+                    with open(manifest_file, 'r', encoding='utf-8') as f:
+                        manifest_data = json.load(f)
+                        self.logger.info(f"✅ Loaded file manifest with {len(manifest_data)} entries from {manifest_file}")
+                        return manifest_data
+                except Exception as e:
+                    self.logger.debug(f"Failed to load manifest from {manifest_file}: {e}")
+            base_dir = base_dir.parent
         
+        self.logger.warning(f"⚠️  File manifest not found for {directory_path}. URLs will not be available in notifications.")
         return {}
     
     async def scan_directory(self, directory_path: str) -> List[dict]:
@@ -419,8 +428,13 @@ class SecretScanner:
                         from urllib.parse import urlparse
                         filename = Path(file_path).name
                         
-                        if filename in file_manifest:
-                            manifest_entry = file_manifest[filename]
+                        # Extract hash from filename (remove .js extension)
+                        # Filename format: {hash}.js (e.g., abc123def456.js)
+                        file_hash = filename.replace('.js', '').replace('.min', '')
+                        
+                        # Lookup in manifest by hash (manifest is keyed by hash, not filename)
+                        if file_hash in file_manifest:
+                            manifest_entry = file_manifest[file_hash]
                             url = manifest_entry.get('url', '')
                             
                             # Extract domain from URL
@@ -437,6 +451,28 @@ class SecretScanner:
                                 'file': filename,
                                 'line': source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0),
                                 'domain': domain
+                            }
+                        else:
+                            # Manifest entry not found - use filename as fallback
+                            self.logger.debug(f"No manifest entry for hash: {file_hash} (file: {filename})")
+                            line_num = source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0)
+                            finding['SourceMetadata'] = {
+                                'url': '',
+                                'file': filename,
+                                'line': line_num,
+                                'domain': 'Unknown'
+                            }
+                    else:
+                        # No manifest available - set basic metadata from file path
+                        if file_path:
+                            from pathlib import Path
+                            filename = Path(file_path).name
+                            line_num = source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0)
+                            finding['SourceMetadata'] = {
+                                'url': '',
+                                'file': filename,
+                                'line': line_num,
+                                'domain': 'Unknown'
                             }
                     
                     # STREAM TO DISK IMMEDIATELY (no memory accumulation!)
