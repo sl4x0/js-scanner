@@ -143,6 +143,10 @@ class ActiveFetcher:
 
         # Initialize noise filter
         self.noise_filter = NoiseFilter(logger=logger)
+        
+        # Session Inheritance: Store valid cookies from Playwright for curl_cffi
+        self.valid_cookies = {}  # Will be populated during live browser scan
+        self.target_domain = None  # Track the domain for Referer header
 
         # Playwright settings
         self.max_concurrent = config.get('playwright', {}).get('max_concurrent', 3)
@@ -268,12 +272,13 @@ class ActiveFetcher:
         timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
         
         # curl_cffi impersonates real browsers to bypass WAF/Cloudflare
+        # Using chrome120 for better Cloudflare compatibility (newer = less suspicious)
         self.session = AsyncSession(
-            impersonate="chrome110",  # Mimics Chrome 110 TLS fingerprint
+            impersonate="chrome120",  # Mimics Chrome 120 TLS fingerprint
             timeout=timeout_val,
             verify=self.ssl_verify
         )
-        self.logger.info("✅ Stealth HTTP Session initialized (curl_cffi with Chrome fingerprint)")
+        self.logger.info("✅ Stealth HTTP Session initialized (curl_cffi with Chrome 120 fingerprint)")
         
         # 2. Initialize Playwright browser only if needed
         skip_live = self.config.get('skip_live', False)
@@ -592,6 +597,24 @@ class ActiveFetcher:
             try:
                 await page.goto(target, wait_until='domcontentloaded', timeout=30000)
                 self.logger.info(f"Page loaded, waiting for dynamic content...")
+                
+                # 🍪 SESSION INHERITANCE: Extract cookies after Cloudflare challenge is solved
+                try:
+                    cookies = await context.cookies()
+                    self.valid_cookies = {c['name']: c['value'] for c in cookies}
+                    # Store target domain for Referer header
+                    from urllib.parse import urlparse
+                    parsed = urlparse(target)
+                    self.target_domain = f"{parsed.scheme}://{parsed.netloc}"
+                    
+                    # Log cookie capture (useful for debugging Cloudflare bypass)
+                    cf_cookies = [name for name in self.valid_cookies.keys() if 'cf' in name.lower()]
+                    if cf_cookies:
+                        self.logger.info(f"🍪 Captured {len(self.valid_cookies)} cookies (Cloudflare: {', '.join(cf_cookies)})")
+                    else:
+                        self.logger.debug(f"🍪 Captured {len(self.valid_cookies)} cookies from Playwright session")
+                except Exception as cookie_error:
+                    self.logger.debug(f"Cookie extraction error (non-critical): {cookie_error}")
             except Exception as e:
                 if 'Timeout' in str(e) or 'timeout' in str(e).lower():
                     self.logger.warning(f"⚠️  Navigation timeout, but may have discovered JS files: {len(js_urls)} found")
@@ -747,13 +770,38 @@ class ActiveFetcher:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
         
         max_size = self.config.get('max_file_size', 10485760)
-        # Rotate User-Agent for stealth (curl_cffi handles this via impersonate)
+        
+        # 🛡️ SESSION INHERITANCE: Build headers with Referer to bypass hotlink protection
+        from urllib.parse import urlparse
+        parsed_url = urlparse(url)
+        origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
         headers = {
-            'User-Agent': self._get_random_user_agent()
+            'User-Agent': self._get_random_user_agent(),
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Sec-Fetch-Dest': 'script',
+            'Sec-Fetch-Mode': 'no-cors',
+            'Sec-Fetch-Site': 'same-origin',
         }
         
-        # Use curl_cffi - automatically handles decompression and TLS fingerprinting
-        response = await self.session.get(url, headers=headers, allow_redirects=False)
+        # Add Referer and Origin if we have a target domain (from browser scan)
+        if self.target_domain:
+            headers['Referer'] = self.target_domain
+            headers['Origin'] = self.target_domain
+        else:
+            # Fallback: use the URL's origin as Referer
+            headers['Referer'] = origin
+        
+        # 🍪 Use curl_cffi with inherited cookies from Playwright (Cloudflare bypass)
+        # Pass valid cookies if we have them (from live browser scan)
+        response = await self.session.get(
+            url, 
+            headers=headers, 
+            cookies=self.valid_cookies if self.valid_cookies else None,
+            allow_redirects=False
+        )
         
         try:
                 # ========== PHASE 3: Strategic Error Detection (Vulnerability Hinting) ==========
