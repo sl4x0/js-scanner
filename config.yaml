@@ -108,11 +108,11 @@ logging:
 
 checkpoint:
   enabled: true
-  frequency: 60 # Save less often to reduce disk I/O, rely on memory.
+  frequency: 20 # Save less often to reduce disk I/O, rely on memory.
   auto_cleanup: true
 
 retry:
-  http_requests: 2 # 5 is overkill and slows down scans. 2 is standard.
+  http_requests: 3 # Minimum required by code validation. 3 is balanced.
   backoff_base: 1.5
   jitter: true
 
