@@ -31,9 +31,12 @@ class StateManager:
             target_path: Path to the target's results directory
         """
         self.target_path = Path(target_path)
-        self.history_file = self.target_path / 'history.json'
+        
+        # Updated paths for reorganized structure (raw_data/)
+        raw_data_path = self.target_path / 'raw_data'
+        self.history_file = raw_data_path / 'history.json'
         self.secrets_file = self.target_path / 'secrets.json'
-        self.metadata_file = self.target_path / 'metadata.json'
+        self.metadata_file = raw_data_path / 'metadata.json'
         self.state_file = self.target_path / 'state.json'
         self.checkpoint_file = self.target_path / 'checkpoint.json'  # NEW
         
