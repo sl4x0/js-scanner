@@ -346,31 +346,29 @@ class SecretScanner:
     
     async def scan_directory(self, directory_path: str) -> List[dict]:
         """
-        Scan an entire directory of files with TruffleHog (BATCH MODE)
-        Saves ALL findings (verified and unverified) for manual review
+        Scan an entire directory of files with TruffleHog (STREAMING MODE)
+        Saves ALL findings (verified and unverified) incrementally to prevent memory exhaustion
         
         Args:
             directory_path: Path to directory containing files to scan
-            
+        
         Returns:
-            List of verified secret findings (all findings appended to all_secrets for export)
+            List of verified secret findings (for state tracking only)
         """
-        # Don't reset all_secrets - append to existing findings
-        # (allows scanning multiple directories in one session)
         verified_findings = []
+        total_findings = 0
         
         # Load file manifest to get original URLs
         file_manifest = self._load_file_manifest(directory_path)
         
         try:
             # Run TruffleHog to get ALL findings (verified + unverified)
-            # This ensures we save everything for manual review
             cmd = [
                 self.trufflehog_path,
                 'filesystem',
                 directory_path,
                 '--json',
-                '--no-update'  # Removed --only-verified to get ALL findings
+                '--no-update'
             ]
             
             self.logger.info(f"Running: {' '.join(cmd)}")
@@ -381,123 +379,144 @@ class SecretScanner:
                 stderr=asyncio.subprocess.PIPE
             )
             
-            stdout, stderr = await process.communicate()
+            # Process output line by line (STREAMING - no accumulation)
+            while True:
+                # Check shutdown before processing each line
+                if self.shutdown_callback and self.shutdown_callback():
+                    self.logger.warning("⚠️  Secret scanning interrupted - shutting down")
+                    process.kill()
+                    await process.wait()
+                    return verified_findings
+                
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                
+                line_str = line.decode().strip()
+                if not line_str:
+                    continue
+                
+                try:
+                    finding = json.loads(line_str)
+                    
+                    # Enrich finding with original URL from manifest
+                    source_metadata = finding.get('SourceMetadata', {})
+                    file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', '')
+                    
+                    if file_path and file_manifest:
+                        from pathlib import Path
+                        filename = Path(file_path).name
+                        
+                        if filename in file_manifest:
+                            manifest_entry = file_manifest[filename]
+                            finding['SourceMetadata'] = {
+                                'url': manifest_entry.get('url', ''),
+                                'file': filename,
+                                'line': source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0)
+                            }
+                    
+                    # STREAM TO DISK IMMEDIATELY (no memory accumulation!)
+                    if self.secrets_organizer:
+                        await self.secrets_organizer.save_single_secret(finding)
+                    
+                    total_findings += 1
+                    
+                    # Track verified secrets for state
+                    if self._is_verified(finding):
+                        verified_findings.append(finding)
+                        self.state.add_secret(finding)
+                    
+                except json.JSONDecodeError:
+                    continue
             
-            # Log stderr for debugging (TruffleHog outputs progress to stderr)
-            if stderr:
+            await process.wait()
+            
+            if process.returncode != 0:
+                stderr = await process.stderr.read()
                 stderr_text = stderr.decode().strip()
                 if stderr_text:
                     self.logger.debug(f"TruffleHog stderr: {stderr_text}")
             
-            if process.returncode != 0:
-                self.logger.error(f"TruffleHog failed with exit code {process.returncode}")
-                return findings
+            self.logger.info(
+                f"TruffleHog scan complete: {len(verified_findings)} verified secrets, "
+                f"{total_findings} total findings"
+            )
             
-            # Handle empty results gracefully
-            if not stdout or not stdout.strip():
-                self.logger.info("No secrets found in directory")
-                return verified_findings
-            
-            # Parse JSON output - save ALL findings
-            for line in stdout.decode().splitlines():
-                # Check shutdown before processing each secret
-                if self.shutdown_callback and self.shutdown_callback():
-                    self.logger.warning("⚠️  Secret scanning interrupted - shutting down")
-                    return verified_findings
-                
-                if line.strip():
-                    try:
-                        finding = json.loads(line)
-                        
-                        # Enrich finding with original URL from manifest
-                        source_metadata = finding.get('SourceMetadata', {})
-                        file_path = source_metadata.get('Data', {}).get('Filesystem', {}).get('file', '')
-                        
-                        if file_path and file_manifest:
-                            from pathlib import Path
-                            filename = Path(file_path).name
-                            
-                            # Get original URL from manifest (manifest is dict: filename -> {url, hash, timestamp})
-                            if filename in file_manifest:
-                                manifest_entry = file_manifest[filename]
-                                # Add enriched metadata for Discord notification
-                                finding['SourceMetadata'] = {
-                                    'url': manifest_entry.get('url', ''),
-                                    'file': filename,
-                                    'line': source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0)
-                                }
-                        
-                        # Track ALL findings for export (verified + unverified)
-                        self.all_secrets.append(finding)
-                        
-                        # Track verified secrets for state
-                        if self._is_verified(finding):
-                            verified_findings.append(finding)
-                            self.state.add_secret(finding)
-                        
-                    except json.JSONDecodeError:
-                        continue
-            
-            self.logger.info(f"TruffleHog scan complete: {len(verified_findings)} verified secrets, {len(self.all_secrets)} total findings")
+            # Flush any buffered secrets to disk
+            if self.secrets_organizer:
+                await self.secrets_organizer._flush_secrets()
             
             # Queue ALL findings to Discord (organized by domain for efficient triaging)
-            if self.notifier and self.all_secrets:
-                self.logger.info(f"📤 Queueing {len(self.all_secrets)} findings to Discord...")
-                await self._queue_findings_by_domain(self.all_secrets)
-            
+            if self.notifier and total_findings > 0:
+                self.logger.info(f"📤 Queueing {total_findings} findings to Discord...")
+                await self._queue_findings_from_disk()
+        
         except Exception as e:
             self.logger.error(f"Directory scan failed: {e}")
         
         return verified_findings
     
-    async def _queue_findings_by_domain(self, findings: list):
+    async def _queue_findings_from_disk(self):
         """
-        Queue findings to Discord, organized by domain for efficient triaging
-        Verified secrets sent first, then unverified in batches
-        
-        Args:
-            findings: List of all findings (verified + unverified)
+        Queue findings to Discord by reading from disk (streaming approach)
+        Organized by domain for efficient triaging in Discord
         """
-        from urllib.parse import urlparse
-        from collections import defaultdict
-        
-        # Separate verified from unverified
-        verified = [f for f in findings if self._is_verified(f)]
-        unverified = [f for f in findings if not self._is_verified(f)]
-        
-        # Send verified secrets immediately (critical priority)
-        if verified:
-            self.logger.info(f"📤 Sending {len(verified)} verified secrets immediately")
-            for secret in verified:
-                await self.notifier.queue_alert(secret)
-        
-        # Batch unverified secrets by domain (reduces Discord spam)
-        if unverified:
-            self.logger.info(f"📤 Batching {len(unverified)} unverified findings by domain")
+        try:
+            # Read secrets from disk (already saved via streaming)
+            secrets_file = self.secrets_organizer.streaming_file
             
-            # Group by domain
-            domain_groups = defaultdict(list)
-            for finding in unverified:
-                source_metadata = finding.get('SourceMetadata', {})
-                url = source_metadata.get('url', '')
-                
-                domain = 'Unknown'
-                if url:
-                    try:
-                        parsed = urlparse(url)
-                        domain = parsed.netloc or 'Unknown'
-                    except:
-                        pass
-                
-                domain_groups[domain].append(finding)
+            if not secrets_file.exists():
+                return
             
-            # Send batched notifications per domain (max 15 per batch for readability)
-            for domain, secrets in domain_groups.items():
-                # Split large batches into chunks of 15
-                batch_size = 15
-                for i in range(0, len(secrets), batch_size):
-                    batch = secrets[i:i + batch_size]
-                    await self.notifier.queue_batch_alert(batch, domain=domain)
+            with open(secrets_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                findings = data.get('secrets', [])
+            
+            if not findings:
+                return
+            
+            from urllib.parse import urlparse
+            from collections import defaultdict
+            
+            # Separate verified from unverified
+            verified = [f for f in findings if self._is_verified(f)]
+            unverified = [f for f in findings if not self._is_verified(f)]
+            
+            # Send verified secrets immediately (critical priority)
+            if verified:
+                self.logger.info(f"📤 Sending {len(verified)} verified secrets immediately")
+                for secret in verified:
+                    await self.notifier.queue_alert(secret)
+            
+            # Batch unverified secrets by domain (reduces Discord spam)
+            if unverified:
+                self.logger.info(f"📤 Batching {len(unverified)} unverified findings by domain")
+                
+                # Group by domain
+                domain_groups = defaultdict(list)
+                for finding in unverified:
+                    source_metadata = finding.get('SourceMetadata', {})
+                    url = source_metadata.get('url', '')
+                    
+                    domain = 'Unknown'
+                    if url:
+                        try:
+                            parsed = urlparse(url)
+                            domain = parsed.netloc or 'Unknown'
+                        except:
+                            pass
+                    
+                    domain_groups[domain].append(finding)
+                
+                # Send batched notifications per domain (max 15 per batch for readability)
+                for domain, secrets in domain_groups.items():
+                    batch_size = 15
+                    for i in range(0, len(secrets), batch_size):
+                        batch = secrets[i:i + batch_size]
+                        await self.notifier.queue_batch_alert(batch, domain=domain)
+        
+        except Exception as e:
+            self.logger.error(f"Failed to queue findings from disk: {e}")
     
     async def scan_content(self, content: str, source_url: str) -> int:
         """
@@ -531,35 +550,68 @@ class SecretScanner:
     
     def export_results(self, output_path: str):
         """
-        Export all secrets to a JSON file
+        Export all secrets to a JSON file (LEGACY METHOD - now uses streaming)
+        Secrets are already saved to disk via streaming - this just copies the file
         
         Args:
             output_path: Path to save the JSON file
         """
         from pathlib import Path
+        import shutil
+        
         try:
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(self.all_secrets, f, indent=2, default=str)
-            if self.all_secrets:
-                self.logger.info(f"Exported {len(self.all_secrets)} secrets to {output_path}")
+            # Secrets are already saved via streaming - just copy the file
+            if self.secrets_organizer and self.secrets_organizer.streaming_file.exists():
+                shutil.copy(self.secrets_organizer.streaming_file, output_path)
+                
+                # Load to get count for logging
+                with open(output_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    secret_count = len(data.get('secrets', []))
+                
+                if secret_count > 0:
+                    self.logger.info(f"Exported {secret_count} secrets to {output_path}")
+                else:
+                    self.logger.debug(f"Exported empty secrets list to {output_path}")
             else:
+                # No secrets file - create empty one
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump({'secrets': [], 'total_count': 0}, f, indent=2)
                 self.logger.debug(f"Exported empty secrets list to {output_path}")
         except Exception as e:
             self.logger.error(f"Failed to export secrets: {e}")
     
     async def save_organized_secrets(self):
         """
-        Save secrets organized by domain
+        Save secrets organized by domain (reads from disk)
         """
         if not self.secrets_organizer:
             self.logger.warning("Secrets organizer not initialized, skipping domain organization")
             return
         
+        # Flush any remaining buffered secrets
+        await self.secrets_organizer._flush_secrets()
+        
+        # Read secrets from disk (already saved via streaming)
+        secrets_file = self.secrets_organizer.streaming_file
+        
+        if not secrets_file.exists():
+            self.logger.info("No secrets to organize")
+            return
+        
+        with open(secrets_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            all_secrets = data.get('secrets', [])
+        
+        if not all_secrets:
+            self.logger.info("No secrets to organize")
+            return
+        
         # Save full results
-        await self.secrets_organizer.save_full_results(self.all_secrets)
+        await self.secrets_organizer.save_full_results(all_secrets)
         
         # Organize and save by domain
-        await self.secrets_organizer.organize_secrets(self.all_secrets)
+        await self.secrets_organizer.organize_secrets(all_secrets)
         
         self.logger.info("✅ Saved secrets in both domain-specific and full formats")
     

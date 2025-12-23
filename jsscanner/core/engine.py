@@ -1892,8 +1892,16 @@ class ScanEngine:
         try:
             # Get all secret source filenames from scanner
             files_with_secrets = set()
-            if hasattr(self.secret_scanner, 'all_secrets'):
-                for secret in self.secret_scanner.all_secrets:
+            # Check secrets from disk (streamed mode)
+            secret_count = 0
+            if self.secret_scanner.secrets_organizer:
+                secrets_file = self.secret_scanner.secrets_organizer.streaming_file
+                if secrets_file.exists():
+                    try:
+                        with open(secrets_file, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            secrets = data.get('secrets', [])
+                            for secret in secrets:
                     filename = secret.get('filename')
                     if filename:
                         files_with_secrets.add(filename)
@@ -1961,12 +1969,24 @@ class ScanEngine:
             self.logger.info("💾 Saving current progress...")
             
             # Save secrets if any were found
-            if hasattr(self.secret_scanner, 'all_secrets') and self.secret_scanner.all_secrets:
+            # Save organized secrets (reads from disk)
+            secret_count = 0
+            if self.secret_scanner.secrets_organizer:
+                secrets_file = self.secret_scanner.secrets_organizer.streaming_file
+                if secrets_file.exists():
+                    try:
+                        with open(secrets_file, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            secret_count = len(data.get('secrets', []))
+                    except:
+                        pass
+            
+            if secret_count > 0:
                 try:
                     await self.secret_scanner.save_organized_secrets()
                     trufflehog_output = Path(self.paths['base']) / 'trufflehog_full.json'
                     self.secret_scanner.export_results(str(trufflehog_output))
-                    self.logger.info(f"  ✓ Saved {len(self.secret_scanner.all_secrets)} secrets")
+                    self.logger.info(f"  ✓ Saved {secret_count} secrets")
                 except Exception as e:
                     # Traceback Pattern: Clean console + forensic log
                     self.logger.error(f"  ✗ Failed to save secrets: {str(e)}")
