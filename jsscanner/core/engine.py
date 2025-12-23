@@ -1902,9 +1902,9 @@ class ScanEngine:
                             data = json.load(f)
                             secrets = data.get('secrets', [])
                             for secret in secrets:
-                    filename = secret.get('filename')
-                    if filename:
-                        files_with_secrets.add(filename)
+                                filename = secret.get('filename')
+                                if filename:
+                                    files_with_secrets.add(filename)
             
             # Get all endpoint/interesting finding filenames from AST analyzer
             files_with_findings = set()
