@@ -402,15 +402,24 @@ class Fetcher:
     async def cleanup(self) -> None:
         """Cleanup HTTP session and Playwright resources - thread-safe with lock"""
         async with self._browser_lock:
-            # Close HTTP session first
-            if self.session:
+            # Close HTTP session first (curl_cffi's close is async but may fail during shutdown)
+            if self.session and not getattr(self.session, 'closed', False):
                 try:
-                    await self.session.close()
-                    self.logger.info("HTTP Session closed successfully")
+                    # Check if event loop is still alive before attempting cleanup
+                    loop = asyncio.get_event_loop()
+                    if not loop.is_closed():
+                        await asyncio.wait_for(self.session.close(), timeout=2.0)
+                        self.logger.info("HTTP Session closed successfully")
+                except asyncio.TimeoutError:
+                    # Session close timed out - suppress during shutdown
+                    self.logger.debug("Session close timeout (acceptable during shutdown)")
+                except RuntimeError as e:
+                    # Suppress event loop closed errors during shutdown
+                    if 'Event loop is closed' not in str(e):
+                        self.logger.debug(f"Session cleanup error: {str(e)}")
                 except Exception as e:
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"❌ HTTP session cleanup error: {str(e)}")
-                    self.logger.debug("Full session cleanup traceback:", exc_info=True)
+                    # Suppress cleanup errors during forced exit
+                    self.logger.debug(f"Session cleanup error: {str(e)}")
             
             # Then close Playwright with proper waiting
             if self.browser_manager:

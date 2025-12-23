@@ -272,14 +272,16 @@ class ScanEngine:
             # Start Discord notifier
             await self.notifier.start()
             
-            # Initialize dashboard if enabled
-            if self.use_dashboard and not resume:
+            # Initialize dashboard if enabled (only once)
+            if self.use_dashboard and not resume and self.dashboard is None:
                 try:
                     self.dashboard = ScanDashboard(self.target, console=console)
                     self.dashboard.start()
                     self.dashboard.update_stats(phase="Starting scan")
+                    self.logger.info("✅ Dashboard initialized successfully")
                 except Exception as e:
                     self.logger.warning(f"Dashboard initialization failed: {e}")
+                    self.use_dashboard = False
                     self.dashboard = None
             
             # Only send status if enabled in config
@@ -1551,16 +1553,25 @@ class ScanEngine:
         return []
     
     async def _cleanup(self):
-        """Cleanup resources"""
+        """Cleanup resources with proper error handling"""
         # Stop dashboard first
         if self.dashboard:
             try:
                 self.dashboard.stop()
+                self.logger.info("✅ Dashboard stopped")
             except Exception as e:
                 self.logger.debug(f"Dashboard cleanup error: {e}")
+            finally:
+                self.dashboard = None
         
+        # Cleanup fetcher with timeout protection
         if self.fetcher:
-            await self.fetcher.cleanup()
+            try:
+                await asyncio.wait_for(self.fetcher.cleanup(), timeout=5.0)
+            except asyncio.TimeoutError:
+                self.logger.warning("⏱️  Fetcher cleanup timeout - forcing shutdown")
+            except Exception as e:
+                self.logger.debug(f"Fetcher cleanup error: {e}")
     
     def _deduplicate_urls(self, urls: List[str]) -> List[str]:
         """
