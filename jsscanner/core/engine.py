@@ -1035,15 +1035,26 @@ class ScanEngine:
             nonlocal completed
             async with semaphore:
                 try:
+                    # 🔍 DIAGNOSTIC: Log every URL being processed in verbose mode
+                    verbose_mode = self.config.get('verbose', False)
+                    if verbose_mode:
+                        self.logger.debug(f"📥 Processing: {url[:80]}")
+                    
                     # Validate URL
                     if not self._is_valid_js_url(url):
-                        self.logger.debug(f"Invalid URL: {url}")
+                        if verbose_mode:
+                            self.logger.info(f"❌ Invalid URL: {url[:80]}")
+                        else:
+                            self.logger.debug(f"Invalid URL: {url}")
                         async with lock:
                             failed_breakdown['invalid_url'] += 1
                         return None
                     
                     if not self._is_target_domain(url):
-                        self.logger.debug(f"Out of scope: {url}")
+                        if verbose_mode:
+                            self.logger.info(f"❌ Out of scope: {url[:80]}")
+                        else:
+                            self.logger.debug(f"Out of scope: {url}")
                         async with lock:
                             failed_breakdown['out_of_scope'] += 1
                         return None
