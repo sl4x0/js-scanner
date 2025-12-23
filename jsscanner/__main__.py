@@ -13,18 +13,26 @@ from .utils.logger import log_banner
 
 def show_version_info():
     """Issue #16: Show enhanced version information with dependencies"""
-    print("JS Scanner v1.0.0")
+    print("JS Scanner v4.0.0 'Stealth & Dashboard'")
     print("\nDependencies:")
     
     # Python version
-    print(f"  Python: {sys.version.split()[0]}")
+    py_version = sys.version.split()[0]
+    status = "✅" if sys.version_info >= (3, 11) else "❌"
+    print(f"  Python: {py_version} {status} (v4.0 requires 3.11+)")
     
     # Key dependencies
     try:
-        import aiohttp
-        print(f"  aiohttp: {aiohttp.__version__}")
+        import curl_cffi
+        print(f"  curl_cffi: {curl_cffi.__version__} ✅ (WAF bypass)")
     except (ImportError, AttributeError):
-        print("  aiohttp: Not installed")
+        print("  curl_cffi: Not installed ❌")
+    
+    try:
+        import rich
+        print(f"  rich: {rich.__version__} ✅ (Live dashboard)")
+    except (ImportError, AttributeError):
+        print("  rich: Not installed ❌")
     
     try:
         from playwright import __version__ as pw_version
@@ -222,6 +230,13 @@ async def main():
 
 def run():
     """Entry point wrapper"""
+    # PHASE 0: Check Python version for TaskGroup support (requires 3.11+)
+    if sys.version_info < (3, 11):
+        print("❌ Error: JS-Scanner v4.0 requires Python 3.11+ (needed for asyncio.TaskGroup)")
+        print(f"   Current version: {sys.version.split()[0]}")
+        print("\n   Upgrade with: pip install --upgrade python (or use pyenv/conda)")
+        sys.exit(1)
+    
     # PHASE 1: Enable high-performance uvloop (Linux/macOS only)
     if sys.platform != 'win32':
         try:

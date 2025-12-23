@@ -958,28 +958,93 @@ class ASTAnalyzer:
         }
         
         # Pattern 1: Webpack manifest - webpackJsonp([chunkIds], modules)
-        manifest_pattern = r'webpackJsonp\\s*\\(\\s*\\[([^\\]]+)\\]'
+        manifest_pattern = r'webpackJsonp\s*\(\s*\[([^\]]+)\]'
         matches = re.findall(manifest_pattern, content)
         for match in matches:
             chunk_ids = [int(x.strip()) for x in match.split(',') if x.strip().isdigit()]
             relationships['entry_chunks'].extend(chunk_ids)
         
         # Pattern 2: Chunk loading calls - __webpack_require__.e(chunkId)
-        chunk_load_pattern = r'__webpack_require__\\.e\\s*\\(\\s*(\\d+)\\s*\\)'
+        chunk_load_pattern = r'__webpack_require__\.e\s*\(\s*(\d+)\s*\)'
         chunk_loads = re.findall(chunk_load_pattern, content)
         relationships['lazy_chunks'] = list(set(int(x) for x in chunk_loads))
         
         # Pattern 3: Chunk filenames - [hash].chunk.js or [name].chunk.js
-        chunk_file_pattern = r'["\']([a-zA-Z0-9\\-_]+\\.chunk\\.js)["\']'
+        chunk_file_pattern = r'["\']([a-zA-Z0-9\-_]+\.chunk\.js)["\']'
         chunk_files = re.findall(chunk_file_pattern, content)
         relationships['chunk_files'] = list(set(chunk_files))
         
         # Pattern 4: Vite chunks - [hash].js in import.meta.url contexts
-        vite_chunk_pattern = r'import\\.meta\\.url.*?["\']([a-zA-Z0-9\\-_]+\\.js)["\']'
+        vite_chunk_pattern = r'import\.meta\.url.*?["\']([a-zA-Z0-9\-_]+\.js)["\']'
         vite_chunks = re.findall(vite_chunk_pattern, content)
         relationships['chunk_files'].extend(list(set(vite_chunks)))
         
+        # Pattern 5: Chunk ID to filename mapping (Webpack)
+        # Looks for: {0:"chunk-0.js", 1:"chunk-1.js"}
+        chunk_map_pattern = r'(\d+)\s*:\s*["\']([^"\']+\.js)["\']'
+        chunk_mappings = re.findall(chunk_map_pattern, content)
+        for chunk_id, filename in chunk_mappings:
+            relationships['chunk_dependencies'][int(chunk_id)] = filename
+        
         return relationships
+    
+    def predict_chunks(self, content: str, base_url: str) -> List[str]:
+        """
+        Predict chunk URLs for SPAs by analyzing webpack/vite patterns.
+        
+        This enables discovery of lazy-loaded chunks that aren't linked in HTML.
+        Example: If main.js references chunks 0-5, generate:
+            - https://example.com/0.js
+            - https://example.com/1.js
+            - ... etc
+        
+        Args:
+            content: JavaScript source code
+            base_url: Base URL to construct absolute chunk URLs
+            
+        Returns:
+            List of predicted chunk URLs
+        """
+        from urllib.parse import urljoin, urlparse
+        
+        predicted_urls = []
+        chunk_map = self._extract_chunk_relationships(content)
+        
+        # Get base path from current URL
+        parsed = urlparse(base_url)
+        base_path = '/'.join(parsed.path.split('/')[:-1]) + '/'  # Remove filename, keep path
+        base_origin = f"{parsed.scheme}://{parsed.netloc}"
+        
+        # Strategy 1: Use explicit chunk mappings
+        for chunk_id, filename in chunk_map.get('chunk_dependencies', {}).items():
+            chunk_url = urljoin(base_origin + base_path, filename)
+            predicted_urls.append(chunk_url)
+        
+        # Strategy 2: Enumerate known chunk IDs
+        all_chunk_ids = set(chunk_map.get('entry_chunks', []) + chunk_map.get('lazy_chunks', []))
+        for chunk_id in all_chunk_ids:
+            # Try common patterns
+            patterns = [
+                f"{chunk_id}.js",
+                f"chunk-{chunk_id}.js",
+                f"{chunk_id}.chunk.js",
+                f"{chunk_id}.{parsed.path.split('/')[-1].split('.')[0]}.js"  # e.g., 0.main.js
+            ]
+            for pattern in patterns:
+                chunk_url = urljoin(base_origin + base_path, pattern)
+                predicted_urls.append(chunk_url)
+        
+        # Strategy 3: Use explicit chunk filenames found in code
+        for chunk_file in chunk_map.get('chunk_files', []):
+            chunk_url = urljoin(base_origin + base_path, chunk_file)
+            predicted_urls.append(chunk_url)
+        
+        # Deduplicate and log
+        predicted_urls = list(set(predicted_urls))
+        if predicted_urls:
+            self.logger.info(f"🧩 Predicted {len(predicted_urls)} webpack/vite chunks from {base_url}")
+        
+        return predicted_urls
     
     async def extract_and_save_dynamic_imports(self, content: str, source_url: str) -> None:
         """

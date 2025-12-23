@@ -15,46 +15,85 @@ class FileOps:
     @staticmethod
     def create_result_structure(target_name: str, base_path: str = "results") -> Dict[str, str]:
         """
-        Creates organized directory structure: Triage Zone + Machine Zone (raw_data)
+        Creates the Tiered Directory Structure (Hunter-Architect Standard)
+        
+        Implements the "Warehouse vs. Showroom" model:
+        - TIER 1: REPORT.md (Executive Summary)
+        - TIER 2: findings/ (High-value intelligence)
+        - TIER 3: artifacts/ (Human-readable evidence)
+        - TIER 4: logs/ (Audit trail)
+        - TIER 5: .warehouse/ (Hidden machine data)
         
         Args:
             target_name: Name of the target (e.g., example.com)
             base_path: Base results directory
             
         Returns:
-            Dictionary mapping folder types to their paths
+            Dictionary mapping folder types to their paths (backward compatible)
         """
-        target_path = Path(base_path) / target_name
+        root = Path(base_path) / target_name
         
-        # Define the "Machine Zone" (Visible but grouped)
-        raw_dir = target_path / "raw_data"
-        
-        # Define structure
-        structure = {
-            'base': target_path,
-            # Triage Zone (Clean)
-            'extracts': target_path / 'extracts',
-            'secrets': target_path / 'secrets',
-            'source_code': target_path / 'source_code',
-            'logs': target_path / 'logs',
+        # Define The Tiers
+        dirs = {
+            # Root
+            'base': root,
             
-            # Machine Zone (Grouped in raw_data/)
-            'unique_js': raw_dir / 'unique_js',
-            'final_source_code': raw_dir / 'final_source_code',
-            'cache': raw_dir / 'cache',
-            'temp': raw_dir / 'temp'
+            # TIER 2: Findings (The intelligence - clean outputs for pipelines)
+            'findings': root / 'findings',
+            
+            # TIER 3: Artifacts (Readable code/evidence)
+            'source_code': root / 'artifacts' / 'source_code',
+            'artifacts': root / 'artifacts',
+            
+            # TIER 4: Logs (Audit trail)
+            'logs': root / 'logs',
+            
+            # TIER 5: The Warehouse (Hidden/Raw data - machine processing zone)
+            'warehouse': root / '.warehouse',
+            'raw_js': root / '.warehouse' / 'raw_js',
+            'db': root / '.warehouse' / 'db',
+            'temp': root / '.warehouse' / 'temp',
+            'minified': root / '.warehouse' / 'minified',
+            'unminified': root / '.warehouse' / 'unminified',
+            'cache': root / '.warehouse' / 'cache',
+            'final_source': root / '.warehouse' / 'final_source'
+        }
+
+        # Create all directories
+        for p in dirs.values():
+            p.mkdir(parents=True, exist_ok=True)
+
+        # Map to backward-compatible keys (Engine expects these exact names)
+        paths = {
+            'base': str(dirs['base']),
+            'logs': str(dirs['logs']),
+            
+            # Findings mapped to TIER 2 (findings/)
+            'extracts': str(dirs['findings']),   # endpoints.txt, params.txt go here
+            'secrets': str(dirs['findings']),    # secrets.json goes here
+            
+            # Artifacts mapped to TIER 3 (artifacts/)
+            'source_code': str(dirs['source_code']),
+            
+            # Warehouse mapped to TIER 5 (.warehouse/)
+            'unique_js': str(dirs['raw_js']),
+            'final_source_code': str(dirs['final_source']),
+            'cache': str(dirs['cache']),
+            'temp': str(dirs['temp']),
+            'files_minified': str(dirs['minified']),
+            'files_unminified': str(dirs['unminified']),
+            
+            # Database files (in .warehouse/db/)
+            'history_file': str(dirs['db'] / 'history.json'),
+            'metadata_file': str(dirs['db'] / 'metadata.json')
         }
         
-        # Create all directories
-        for path in structure.values():
-            path.mkdir(parents=True, exist_ok=True)
-        
-        # Initialize JSON files if they don't exist
+        # Initialize JSON database files if they don't exist
         json_files = {
-            'secrets': target_path / 'secrets.json',
-            'history': raw_dir / 'history.json',
-            'metadata': raw_dir / 'metadata.json',
-            'trufflehog': target_path / 'trufflehog.json'
+            'secrets': dirs['findings'] / 'secrets.json',
+            'trufflehog': dirs['findings'] / 'trufflehog.json',
+            'history': dirs['db'] / 'history.json',
+            'metadata': dirs['db'] / 'metadata.json'
         }
         
         for name, filepath in json_files.items():
@@ -75,8 +114,7 @@ class FileOps:
                     else:
                         json.dump([], f, indent=2)
         
-        # Convert paths to strings for return
-        return {k: str(v) for k, v in structure.items()}
+        return paths
     
     @staticmethod
     async def append_to_json(filepath: str, data: Any):

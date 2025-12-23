@@ -15,7 +15,7 @@ def generate_report(target_name: str, base_path: str, stats: dict) -> None:
     params = []
     domains = []
     
-    for p in [base/'trufflehog.json', base/'raw_data'/'trufflehog.json']:
+    for p in [base/'findings'/'trufflehog.json', base/'.warehouse'/'db'/'trufflehog.json']:
         if p.exists():
             try:
                 with open(p, encoding='utf-8') as f:
@@ -27,7 +27,7 @@ def generate_report(target_name: str, base_path: str, stats: dict) -> None:
                 break
             except: pass
 
-    extracts_dir = base / 'extracts'
+    extracts_dir = base / 'findings'
     if extracts_dir.exists():
         try:
             for filename, data_list in [('endpoints.txt', endpoints), ('params.txt', params), ('domains.txt', domains)]:
@@ -73,12 +73,12 @@ def generate_report(target_name: str, base_path: str, stats: dict) -> None:
     if params:
         md += ", ".join([f"`{p}`" for p in params[:30]]) + "\n"
     
-    md += "\n---\n\n## 📂 Output\n\n"
-    md += "- **REPORT.md** - You are here\n"
-    md += "- **secrets/** - Organized findings\n"
-    md += "- **extracts/** - Wordlists\n"
-    md += "- **source_code/** - Beautified JS\n"
-    md += "- **raw_data/unique_js/** - Raw files (pipe to other tools)\n"
+    md += "\n---\n\n## 📂 Output Structure\n\n"
+    md += "- **REPORT.md** - Executive summary (you are here)\n"
+    md += "- **findings/** - Intelligence (secrets, endpoints, params) 🎯\n"
+    md += "- **artifacts/source_code/** - Beautified JS for review\n"
+    md += "- **logs/** - Scan audit trail\n"
+    md += "- **.warehouse/** - Raw data (pipe to other tools)\n"
     
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write(md)

@@ -19,10 +19,10 @@ class DomainSecretsOrganizer:
             logger: Logger instance
         """
         self.base_path = Path(base_path)
-        self.secrets_dir = self.base_path / 'secrets'
+        self.secrets_dir = self.base_path / 'findings'
         self.logger = logger
         
-        # Create secrets directory
+        # Create findings directory
         self.secrets_dir.mkdir(parents=True, exist_ok=True)
     
     def _extract_domain(self, url: str) -> str:

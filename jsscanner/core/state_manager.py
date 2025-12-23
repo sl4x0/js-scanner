@@ -32,18 +32,20 @@ class StateManager:
         """
         self.target_path = Path(target_path)
         
-        # Updated paths for reorganized structure (raw_data/)
-        raw_data_path = self.target_path / 'raw_data'
-        self.history_file = raw_data_path / 'history.json'
-        self.secrets_file = self.target_path / 'secrets.json'
-        self.metadata_file = raw_data_path / 'metadata.json'
-        self.state_file = self.target_path / 'state.json'
-        self.checkpoint_file = self.target_path / 'checkpoint.json'  # NEW
+        # Updated paths for reorganized structure (.warehouse/db/)
+        db_path = self.target_path / '.warehouse' / 'db'
+        findings_path = self.target_path / 'findings'
+        
+        self.history_file = db_path / 'history.json'
+        self.metadata_file = db_path / 'metadata.json'
+        self.secrets_file = findings_path / 'secrets.json'
+        self.state_file = db_path / 'state.json'
+        self.checkpoint_file = db_path / 'checkpoint.json'
         
         # In-memory state cache for incremental scanning
         self.state = self._load_state()
         
-        # Checkpoint tracking (NEW)
+        # Checkpoint tracking
         self.last_checkpoint_time = time.time()
     
     def _lock_file(self, file_obj, exclusive=True):

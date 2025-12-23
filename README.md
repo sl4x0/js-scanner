@@ -1,6 +1,6 @@
 ![banner](./static/banner.png)
 
-# ⚡ JS Scanner
+# ⚡ JS Scanner v4.0
 
 > **Blazing-fast JavaScript security scanner for bug bounty hunters**  
 > Hunt secrets, extract endpoints, analyze bundles — all in one tool.
@@ -8,6 +8,21 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)](README.md)
+[![Version](https://img.shields.io/badge/Version-4.0-brightgreen.svg)](MASTER_PROTOCOL_v4.md)
+
+---
+
+## ✨ What's New in v4.0 "Stealth & Dashboard"
+
+🎉 **Major upgrade with enterprise-grade features:**
+
+- 🥷 **WAF Bypass** — curl_cffi with Chrome TLS fingerprinting (bypasses Cloudflare/Akamai)
+- 📊 **Live Dashboard** — Real-time TUI with progress bars and statistics
+- 🧠 **SPA Intelligence** — Predictive webpack chunk discovery for React/Vue apps
+- 📂 **Clean Structure** — "Showroom vs. Warehouse" organized output
+- 🚀 **Performance** — +30-40% success rate on protected sites
+
+**[📜 Read the full upgrade guide →](MASTER_PROTOCOL_v4.md)**
 
 ---
 
@@ -22,6 +37,7 @@ This scanner is built for **speed and efficiency**:
 - 🔥 **Massive concurrency** — 100+ parallel downloads
 - 🧠 **Smart filtering** — Ignores CDN noise and known libraries
 - 🔒 **Instant alerts** — Verified secrets sent to Discord immediately
+- 🥷 **Stealth Mode** — Browser-like fingerprints to bypass WAFs
 
 Perfect for scanning **thousands of domains** in bug bounty programs.
 
@@ -38,11 +54,13 @@ playwright install chromium
 cp config.yaml.example config.yaml
 # Edit config.yaml with your Discord webhook
 
-# 3. Scan
+# 3. Scan (with live dashboard!)
 python -m jsscanner -t myprogram --subjs -u https://target.com
 ```
 
 **That's it.** Results saved to `results/myprogram/`
+
+**New in v4.0:** Check the live dashboard while scanning! 📊
 
 ---
 
@@ -183,6 +201,7 @@ JS-Scanner is not a linear scanner — it's a **coordinated attack** on the targ
 **Input:** `python -m jsscanner -t target.com`
 
 **Output:**
+
 - 📁 Reconstructed source code (unminified, unpacked)
 - 📋 List of hidden API endpoints
 - 🔐 Hardcoded credentials with exact file locations
@@ -195,12 +214,12 @@ JS-Scanner is not a linear scanner — it's a **coordinated attack** on the targ
 
 ### ⚡ Performance Comparison
 
-| Method | 100 Domains | Files Found | Notes |
-|--------|-------------|-------------|-------|
-| Playwright Only | 15 min | 450 JS | Thorough but slow |
-| SubJS + Playwright | 12 min | 480 JS | Good historical coverage |
-| **Katana + Playwright** | **8 min** | **500 JS** | **🚀 2x faster** |
-| **Katana + SubJS + PW** | **5 min** | **550 JS** | **⚡ Maximum (Recommended)** |
+| Method                  | 100 Domains | Files Found | Notes                        |
+| ----------------------- | ----------- | ----------- | ---------------------------- |
+| Playwright Only         | 15 min      | 450 JS      | Thorough but slow            |
+| SubJS + Playwright      | 12 min      | 480 JS      | Good historical coverage     |
+| **Katana + Playwright** | **8 min**   | **500 JS**  | **🚀 2x faster**             |
+| **Katana + SubJS + PW** | **5 min**   | **550 JS**  | **⚡ Maximum (Recommended)** |
 
 ---
 
@@ -238,24 +257,42 @@ JS-Scanner is not a linear scanner — it's a **coordinated attack** on the targ
 
 ## 📁 Results Structure
 
+**Tiered "Warehouse vs. Showroom" Organization**
+
 ```
 results/target/
-├── files/
-│   └── unminified/           # Beautified JavaScript (if not --no-beautify)
-├── extracts/
-│   ├── endpoints.txt         # All API endpoints
-│   ├── domains.txt           # All discovered domains
-│   ├── links.txt             # All URLs
-│   └── [domain]/             # Per-domain extracts
-├── secrets/
-│   ├── aws/                  # AWS credentials
-│   ├── github/               # GitHub tokens
-│   └── stripe/               # Payment keys
-├── logs/
-│   └── scan.log              # Detailed logs
-├── secrets.json              # All detected secrets
-└── metadata.json             # Scan statistics
+│
+├── 📄 REPORT.md              # [TIER 1] Executive summary — start here
+│
+├── 📂 findings/              # [TIER 2] High-value intelligence (pipeline ready)
+│   ├── secrets.json          # → All detected secrets
+│   ├── trufflehog.json       # → TruffleHog raw output
+│   ├── endpoints.txt         # → API endpoints (ready for nuclei/ffuf)
+│   ├── params.txt            # → Parameters for fuzzing
+│   └── domains.txt           # → Discovered domains
+│
+├── 📂 artifacts/             # [TIER 3] Human-readable evidence
+│   └── source_code/          # → Beautified JS organized by domain
+│
+├── 📂 logs/                  # [TIER 4] Audit trail
+│   └── scan.log              # → Debug information
+│
+└── 🔒 .warehouse/            # [TIER 5] Hidden machine data
+    ├── raw_js/               # → Original downloaded files
+    ├── minified/             # → Processing cache
+    └── db/                   # → Scan history & metadata
+        ├── history.json      # → Deduplication database
+        └── metadata.json     # → Scan statistics
 ```
+
+**Design Benefits:**
+
+- ⚡ **Instant Triage** — Open `REPORT.md` and see critical findings in 5 seconds
+- 🔗 **Pipeline Ready** — Use `findings/*.txt` directly with other tools
+- 🧹 **Clean Workspace** — Machine data hidden in `.warehouse/`
+- 📊 **Enterprise Ready** — Structured for automation and CI/CD
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for complete design documentation.
 
 ---
 

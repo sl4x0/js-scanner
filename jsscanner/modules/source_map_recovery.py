@@ -3,7 +3,7 @@ Source Map Recovery Module
 Downloads and extracts original source code from source maps
 """
 import json
-import aiohttp
+from curl_cffi.requests import AsyncSession
 import asyncio
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -130,7 +130,7 @@ class SourceMapRecoverer:
         @retry_async(
             max_attempts=max_attempts,
             backoff_base=backoff_base,
-            retry_on=(asyncio.TimeoutError, aiohttp.ClientError),
+            retry_on=(asyncio.TimeoutError, Exception),
             operation_name=f"fetch_map({map_url[:50]}...)"
         )
         async def _do_fetch_map():
@@ -146,19 +146,19 @@ class SourceMapRecoverer:
                     from urllib.parse import unquote
                     return unquote(map_url.split('data:application/json,')[1])
 
-            # Download external map
-            async with aiohttp.ClientSession() as session:
-                async with session.get(map_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    if response.status == 200:
-                        return await response.text()
-                    else:
-                        # Non-200 status - don't retry
-                        self.logger.debug(f"Failed to fetch map (HTTP {response.status}): {map_url}")
-                        return None
+            # Download external map with curl_cffi stealth
+            async with AsyncSession(impersonate="chrome110", timeout=10) as session:
+                response = await session.get(map_url)
+                if response.status_code == 200:
+                    return response.text
+                else:
+                    # Non-200 status - don't retry
+                    self.logger.debug(f"Failed to fetch map (HTTP {response.status_code}): {map_url}")
+                    return None
         
         try:
             return await _do_fetch_map()
-        except (asyncio.TimeoutError, aiohttp.ClientError):
+        except (asyncio.TimeoutError, Exception):
             self.logger.debug(f"Source map fetch failed after retries: {map_url}")
             return None
         except Exception as e:
@@ -226,15 +226,15 @@ class SourceMapRecoverer:
         @retry_async(
             max_attempts=max_attempts,
             backoff_base=backoff_base,
-            retry_on=(asyncio.TimeoutError, aiohttp.ClientError),
+            retry_on=(asyncio.TimeoutError, Exception),
             operation_name=f"fetch_source({source_url[:40]}...)"
         )
         async def _do_fetch_source():
-            async with aiohttp.ClientSession() as session:
-                async with session.get(source_url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                    if response.status == 200:
-                        return await response.text()
-                    return None
+            async with AsyncSession(impersonate="chrome110", timeout=5) as session:
+                response = await session.get(source_url)
+                if response.status_code == 200:
+                    return response.text
+                return None
         
         try:
             return await _do_fetch_source()

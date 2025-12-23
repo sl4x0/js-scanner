@@ -3,10 +3,10 @@ Fetcher Module
 Handles fetching JavaScript files from live sites using Playwright
 """
 import asyncio
-import aiohttp
 import time
 import socket
 import random
+from curl_cffi.requests import AsyncSession
 from playwright.async_api import async_playwright, Browser, BrowserContext
 from typing import List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
@@ -164,10 +164,9 @@ class Fetcher:
             'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0'
         ])
         
-        # Session and connector will be initialized in initialize() method
+        # Session will be initialized in initialize() method
         self.session = None
-        self.connector = None
-        self.ssl_context = None
+        self.ssl_verify = config.get('verify_ssl', False)
         
         # Enforce minimum retry count (minimum 3 retries for reliability)
         if 'retry' not in self.config:
@@ -265,31 +264,16 @@ class Fetcher:
     
     async def initialize(self) -> None:
         """Initialize HTTP session and Playwright browser"""
-        # 1. Initialize shared HTTP session (CRITICAL for connection pooling)
+        # 1. Initialize curl_cffi session with Chrome TLS fingerprint for WAF bypass
         timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
-        timeout = aiohttp.ClientTimeout(total=timeout_val, connect=5.0)
         
-        import ssl
-        verify_ssl = self.config.get('verify_ssl', False)
-        self.ssl_context = ssl.create_default_context()
-        if not verify_ssl:
-            self.ssl_context.check_hostname = False
-            self.ssl_context.verify_mode = ssl.CERT_NONE
-        
-        # Connection pool settings
-        pool_settings = self.config.get('connection_pool', {})
-        self.connector = aiohttp.TCPConnector(
-            ssl=self.ssl_context,
-            limit=pool_settings.get('max_connections', 100),
-            limit_per_host=pool_settings.get('max_per_host', 10),
-            ttl_dns_cache=pool_settings.get('ttl_dns_cache', 300)
+        # curl_cffi impersonates real browsers to bypass WAF/Cloudflare
+        self.session = AsyncSession(
+            impersonate="chrome110",  # Mimics Chrome 110 TLS fingerprint
+            timeout=timeout_val,
+            verify=self.ssl_verify
         )
-        
-        self.session = aiohttp.ClientSession(
-            connector=self.connector,
-            timeout=timeout
-        )
-        self.logger.info("✅ HTTP Session initialized with Connection Pooling (prevents connection exhaustion)")
+        self.logger.info("✅ Stealth HTTP Session initialized (curl_cffi with Chrome fingerprint)")
         
         # 2. Initialize Playwright browser only if needed
         skip_live = self.config.get('skip_live', False)
@@ -427,15 +411,6 @@ class Fetcher:
                     # Traceback Pattern: Clean console + forensic log
                     self.logger.error(f"❌ HTTP session cleanup error: {str(e)}")
                     self.logger.debug("Full session cleanup traceback:", exc_info=True)
-            
-            if self.connector:
-                try:
-                    await self.connector.close()
-                    self.logger.debug("TCP Connector closed successfully")
-                except Exception as e:
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"❌ Connector cleanup error: {str(e)}")
-                    self.logger.debug("Full connector cleanup traceback:", exc_info=True)
             
             # Then close Playwright with proper waiting
             if self.browser_manager:
@@ -700,7 +675,7 @@ class Fetcher:
         
         Retries on:
         - Network timeouts (asyncio.TimeoutError)
-        - Connection errors (aiohttp.ClientError)
+        - Connection errors (curl_cffi exceptions)
         - DNS resolution failures
         
         Does NOT retry on:
@@ -724,10 +699,9 @@ class Fetcher:
         # Define retry exceptions (network-related only)
         retry_exceptions = (
             asyncio.TimeoutError,
-            aiohttp.ClientError,
-            aiohttp.ServerTimeoutError,
-            aiohttp.ClientConnectorError,
             ConnectionError,
+            TimeoutError,
+            OSError,
         )
         
         # Wrap the actual fetch logic with retry decorator
@@ -764,39 +738,41 @@ class Fetcher:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
         
         max_size = self.config.get('max_file_size', 10485760)
-        # Rotate User-Agent for stealth
+        # Rotate User-Agent for stealth (curl_cffi handles this via impersonate)
         headers = {
             'User-Agent': self._get_random_user_agent()
         }
         
-        # Use the shared session - this is the key fix for connection pooling
-        async with self.session.get(url, ssl=self.ssl_context, headers=headers, allow_redirects=False) as response:
+        # Use curl_cffi - automatically handles decompression and TLS fingerprinting
+        response = await self.session.get(url, headers=headers, allow_redirects=False)
+        
+        try:
                 # ========== PHASE 3: Strategic Error Detection (Vulnerability Hinting) ==========
                 # Differentiate between "Network Failure" (Retry) and "Server Crash" (Vulnerability)
                 
                 # Server Error (Potential Vulnerability)
-                if response.status >= 500:
+                if response.status_code >= 500:
                     self.logger.warning(f"🔥 HTTP {response.status} at {url} - Potential Injection Point/DoS Vector")
                     self.last_failure_reason = 'server_error'
                     self.error_stats['http_errors'] += 1
                     return None
                 
                 # Auth Error (Interesting but not critical)
-                if response.status in [401, 403]:
+                if response.status_code in [401, 403]:
                     self.logger.debug(f"🔒 Access Denied (HTTP {response.status}): {url}")
                     self.last_failure_reason = 'auth_error'
                     self.error_stats['http_errors'] += 1
                     return None
                 
                 # Rate Limiting (No retries - fail fast)
-                if response.status in [429, 503]:
+                if response.status_code in [429, 503]:
                     self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")
                     self.last_failure_reason = 'rate_limit'
                     self.error_stats['rate_limits'] += 1
                     return None
 
 
-                if response.status == 200:
+                if response.status_code == 200:
                     content_length = response.headers.get('Content-Length')
                     if content_length and int(content_length) > max_size:
                         self.logger.warning(
@@ -805,20 +781,15 @@ class Fetcher:
                         self.last_failure_reason = 'too_large'
                         return None
 
-                    chunks = []
-                    total_size = 0
-
-                    async for chunk in response.content.iter_chunked(8192):
-                        total_size += len(chunk)
-                        if total_size > max_size:
-                            self.logger.warning(
-                                f"❌ File exceeded size during download: {url}"
-                            )
-                            self.last_failure_reason = 'too_large'
-                            return None
-                        chunks.append(chunk)
-
-                    content = b''.join(chunks).decode('utf-8', errors='ignore')
+                    # curl_cffi returns text directly, handle size limit
+                    content = response.text
+                    
+                    if len(content.encode('utf-8')) > max_size:
+                        self.logger.warning(
+                            f"❌ File exceeded size: {url}"
+                        )
+                        self.last_failure_reason = 'too_large'
+                        return None
 
                     should_skip, reason = self.noise_filter.should_skip_content(content, url)
                     if should_skip:
@@ -849,12 +820,15 @@ class Fetcher:
                     return content
                 else:
                     if self.verbose:
-                        self.logger.warning(f"❌ HTTP {response.status}: {url}")
+                        self.logger.warning(f"❌ HTTP {response.status_code}: {url}")
                     else:
-                        self.logger.debug(f"HTTP {response.status}: {url}")
+                        self.logger.debug(f"HTTP {response.status_code}: {url}")
                     self.last_failure_reason = 'http_error'
                     self.error_stats['http_errors'] += 1
                     return None
+        finally:
+            # curl_cffi responses are auto-closed, but explicit is better
+            pass
     
     async def validate_url_exists(self, url: str) -> Tuple[bool, int]:
         """
@@ -874,9 +848,9 @@ class Fetcher:
         }
         
         try:
-            async with self.session.head(url, ssl=self.ssl_context, headers=headers, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                exists = response.status == 200
-                return (exists, response.status)
+            response = await self.session.head(url, headers=headers, allow_redirects=True, timeout=10)
+            exists = response.status_code == 200
+            return (exists, response.status_code)
         except Exception as e:
             # Traceback Pattern: Clean console + forensic log
             self.logger.error(f"HEAD request failed for {url}: {str(e)}")
