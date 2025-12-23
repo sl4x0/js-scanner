@@ -2158,6 +2158,7 @@ class ScanEngine:
         """
         seen_urls = set()  # Track all URLs we've seen to prevent duplicates
         all_discovered_files = []  # All file objects downloaded during recursion
+        all_discovered_urls = set()  # Track all discovered URLs for reporting
         
         # Initialize seen_urls with all initially downloaded URLs
         for file_info in downloaded_files:
