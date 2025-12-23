@@ -1,6 +1,6 @@
 """
 Logger Utility
-Colorized console output for the scanner with Rich integration
+Colorized console output for the scanner
 """
 import logging
 import sys
@@ -9,15 +9,9 @@ from datetime import datetime
 from colorama import Fore, Style, init
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
-from rich.console import Console
-from rich.logging import RichHandler
 
 # Initialize colorama for Windows support
 init(autoreset=True)
-
-# Separate Rich consoles to avoid Live display conflicts
-console = Console()  # For dashboard Live display
-log_console = Console()  # For logging (separate from Live display)
 
 # Fix Windows UTF-8 encoding for console output (must be at module level)
 if sys.platform == 'win32' and hasattr(sys.stdout, 'buffer'):
@@ -72,17 +66,14 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
     if logger.handlers:
         return logger
     
-    # ========== CONSOLE HANDLER (Rich) ==========
-    # Use separate console to avoid conflicts with Live dashboard
-    console_handler = RichHandler(
-        console=log_console,
-        show_time=True,
-        show_path=False,
-        markup=True,
-        rich_tracebacks=True,
-        tracebacks_show_locals=False
-    )
+    # ========== CONSOLE HANDLER ==========
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
+    console_formatter = ColoredFormatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%m/%d/%y %H:%M:%S'
+    )
+    console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     
     # ========== DUAL FILE HANDLERS ==========

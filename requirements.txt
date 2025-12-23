@@ -1,13 +1,10 @@
-# v4.0 "Stealth & Dashboard" Dependencies
+# v4.0 "Stealth Network" Dependencies
 # Core async I/O
 aiofiles>=23.2.1
 uvloop>=0.19.0; sys_platform != 'win32'
 
 # v4.0 Critical: Stealth networking (WAF bypass)
 curl_cffi>=0.5.10
-
-# v4.0 Critical: Live dashboard
-rich>=13.7.0
 
 # Browser automation
 playwright>=1.40.0

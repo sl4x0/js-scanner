@@ -10,11 +10,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 from ..utils.file_ops import FileOps
-from ..utils.logger import setup_logger, log_stats, console
+from ..utils.logger import setup_logger, log_stats
 from .state_manager import StateManager
 from .notifier import DiscordNotifier
 from ..utils.reporter import generate_report
-from .dashboard import ScanDashboard
 
 
 class ScanEngine:
@@ -65,10 +64,6 @@ class ScanEngine:
         self.phase_start_time = None
         self.phase_progress = {'current': 0, 'total': 0}
         
-        # Dashboard (will be initialized in run)
-        self.dashboard = None
-        self.use_dashboard = config.get('use_dashboard', True)
-        
         # Statistics
         self.start_time = None
         self._last_progress_update = 0
@@ -115,30 +110,9 @@ class ScanEngine:
             self.current_phase = phase_name
             self.phase_start_time = time.time()
             self.phase_progress = {'current': 0, 'total': total}
-            
-            # Update dashboard phase
-            if self.dashboard:
-                self.dashboard.update_stats(phase=phase_name)
         
         # Update progress
         self.phase_progress = {'current': current, 'total': total}
-        
-        # Update dashboard progress
-        if self.dashboard:
-            phase_key = phase_name.lower()
-            if 'discover' in phase_key or 'url' in phase_key:
-                self.dashboard.update_progress('discovery', current, total)
-            elif 'download' in phase_key or 'fetch' in phase_key:
-                self.dashboard.update_progress('download', current, total)
-            elif 'process' in phase_key or 'scan' in phase_key or 'analyz' in phase_key:
-                self.dashboard.update_progress('analysis', current, total)
-            
-            # Update stats
-            self.dashboard.update_stats(
-                files_processed=self.stats['total_files'],
-                secrets_found=self.stats['total_secrets'],
-                errors=len(self.stats['errors'])
-            )
         
         # Calculate progress percentage
         progress_pct = (current / total) * 100
@@ -271,18 +245,6 @@ class ScanEngine:
         try:
             # Start Discord notifier
             await self.notifier.start()
-            
-            # Initialize dashboard if enabled (only once)
-            if self.use_dashboard and not resume and self.dashboard is None:
-                try:
-                    self.dashboard = ScanDashboard(self.target, console=console, logger=self.logger)
-                    self.dashboard.start()
-                    # Don't update immediately - let Live stabilize first
-                    self.logger.info("✅ Dashboard initialized successfully")
-                except Exception as e:
-                    self.logger.warning(f"Dashboard initialization failed: {e}")
-                    self.use_dashboard = False
-                    self.dashboard = None
             
             # Only send status if enabled in config
             if self.config.get('discord_status_enabled', False):
@@ -1554,16 +1516,6 @@ class ScanEngine:
     
     async def _cleanup(self):
         """Cleanup resources with proper error handling"""
-        # Stop dashboard first
-        if self.dashboard:
-            try:
-                self.dashboard.stop()
-                self.logger.info("✅ Dashboard stopped")
-            except Exception as e:
-                self.logger.debug(f"Dashboard cleanup error: {e}")
-            finally:
-                self.dashboard = None
-        
         # Cleanup fetcher with timeout protection
         if self.fetcher:
             try:
