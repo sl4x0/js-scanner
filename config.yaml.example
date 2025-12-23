@@ -42,6 +42,18 @@ playwright:
 subjs:
   enabled: true  # Enable SubJS for URL discovery
   timeout: 60  # Timeout per domain (seconds)
+
+# Katana Fast Crawler (Optional - requires installation)
+# Install: go install github.com/projectdiscovery/katana/cmd/katana@latest
+# Purpose: Fast Go-based crawler for breadth-first JS discovery (speed layer)
+katana:
+  enabled: false  # Set to true after installing katana
+  depth: 2  # Crawl depth (1-5, default: 2 for speed/coverage balance)
+  concurrency: 20  # Number of concurrent fetchers
+  rate_limit: 150  # Maximum requests per second
+  timeout: 300  # Maximum execution time in seconds (5 minutes)
+  args: ""  # Additional custom flags (e.g., "-headless -no-sandbox")
+  # binary_path: ""  # Optional: explicit path to katana binary
   
 # Recursive JS Discovery (NEW - Phase 1 Enhancement)
 # Finds .js URLs inside other .js files for 2nd/3rd level discovery

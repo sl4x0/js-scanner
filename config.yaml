@@ -131,3 +131,17 @@ code_splitting:
   follow_import_chain: false # Recursively fetch discovered imports (expensive - disabled by default)
   max_import_depth: 2 # Maximum recursion depth if follow_import_chain enabled
   probe_common_locales: ["en", "es", "fr", "de", "ja", "zh"] # For template literal imports like ./locales/${lang}.js
+
+
+# Katana Fast Crawler (Optional - requires installation)
+# Install: go install github.com/projectdiscovery/katana/cmd/katana@latest
+# Purpose: Fast Go-based crawler for breadth-first JS discovery (speed layer)
+katana:
+  enabled: true  # Set to true after installing katana
+  depth: 3  # Crawl depth (1-5, default: 2 for speed/coverage balance)
+  concurrency: 50  # Number of concurrent fetchers
+  rate_limit: 100  # Maximum requests per second
+  timeout: 100  # Maximum execution time in seconds (1 minute 40 seconds)
+  args: ""  # Additional custom flags (e.g., "-headless -no-sandbox")
+  # binary_path: ""  # Optional: explicit path to katana binary
+  

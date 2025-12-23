@@ -715,6 +715,7 @@ class ScanEngine:
         from ..modules.secret_scanner import SecretScanner
         from ..modules.ast_analyzer import ASTAnalyzer
         from ..modules.source_map_recovery import SourceMapRecoverer
+        from ..modules.katana_fetcher import KatanaFetcher
         
         self.fetcher = Fetcher(self.config, self.logger)
         skip_beautify = self.config.get('skip_beautification', False)
@@ -728,6 +729,7 @@ class ScanEngine:
         )
         self.ast_analyzer = ASTAnalyzer(self.config, self.logger, self.paths)
         self.source_map_recoverer = SourceMapRecoverer(self.config, self.logger, self.paths)
+        self.katana_fetcher = KatanaFetcher(self.config, self.logger)
         
         # Initialize secrets organizer
         self.secret_scanner.initialize_organizer(self.paths['base'])
@@ -751,6 +753,35 @@ class ScanEngine:
         # Initialize SubJS if enabled
         from ..modules.subjs_fetcher import SubJSFetcher
         subjs_fetcher = SubJSFetcher(self.config, self.logger)
+        
+        # PHASE 1A: Katana Fast-Pass (Speed Layer)
+        # Run Katana first for breadth-first discovery at maximum speed
+        if self.katana_fetcher.enabled and self.katana_fetcher.katana_path:
+            # Filter inputs to only domains/URLs (not direct JS files)
+            katana_targets = [item for item in inputs if not self._is_valid_js_url(item)]
+            
+            if katana_targets:
+                # Get scope domains for filtering
+                scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
+                
+                # Run Katana in thread to avoid blocking asyncio loop
+                self.logger.info(f"\n{'='*70}")
+                self.logger.info("⚡ PHASE 1A: KATANA FAST-PASS (Speed Layer)")
+                self.logger.info(f"{'='*70}")
+                
+                katana_urls = await asyncio.to_thread(
+                    self.katana_fetcher.fetch_urls,
+                    katana_targets,
+                    scope_domains
+                )
+                
+                if katana_urls:
+                    all_urls.extend(katana_urls)
+                    self.logger.info(f"✓ Katana phase complete: {len(katana_urls)} JS files discovered\n")
+                else:
+                    self.logger.info("✓ Katana phase complete: No JS files found\n")
+        elif self.katana_fetcher.enabled and not self.katana_fetcher.katana_path:
+            self.logger.warning("⚠️  Katana enabled but not installed. Install with: go install github.com/projectdiscovery/katana/cmd/katana@latest\n")
         
         # OPTIMIZATION: Batch SubJS processing for subjs-only mode (massive speedup)
         if subjs_only and SubJSFetcher.is_installed():
