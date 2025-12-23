@@ -1038,7 +1038,7 @@ class ScanEngine:
                     # 🔍 DIAGNOSTIC: Log every URL being processed in verbose mode
                     verbose_mode = self.config.get('verbose', False)
                     if verbose_mode:
-                        self.logger.debug(f"📥 Processing: {url[:80]}")
+                        self.logger.info(f"📥 Download: {url[:80]}")
                     
                     # Validate URL
                     if not self._is_valid_js_url(url):

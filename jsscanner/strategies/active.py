@@ -720,7 +720,7 @@ class ActiveFetcher:
         # 🔍 DIAGNOSTIC: Log every fetch attempt in verbose mode
         verbose_mode = self.config.get('verbose', False)
         if verbose_mode:
-            self.logger.debug(f"📥 Attempting fetch: {url[:80]}")
+            self.logger.info(f"📥 Fetch: {url[:80]}")
         
         # Pre-flight noise filter check (no network call)
         should_skip, reason = self.noise_filter.should_skip_url(url)
