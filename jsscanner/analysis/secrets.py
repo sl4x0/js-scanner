@@ -469,8 +469,14 @@ class SecretScanner:
                 return
             
             with open(secrets_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                findings = data.get('secrets', [])
+                raw_data = json.load(f)
+                # Handle both list (old format) and dict (new format)
+                if isinstance(raw_data, list):
+                    findings = raw_data
+                elif isinstance(raw_data, dict):
+                    findings = raw_data.get('secrets', [])
+                else:
+                    findings = []
             
             if not findings:
                 return
@@ -600,8 +606,14 @@ class SecretScanner:
             return
         
         with open(secrets_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            all_secrets = data.get('secrets', [])
+            raw_data = json.load(f)
+            # Handle both list (old format) and dict (new format)
+            if isinstance(raw_data, list):
+                all_secrets = raw_data
+            elif isinstance(raw_data, dict):
+                all_secrets = raw_data.get('secrets', [])
+            else:
+                all_secrets = []
         
         if not all_secrets:
             self.logger.info("No secrets to organize")

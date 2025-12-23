@@ -70,9 +70,20 @@ class DomainSecretsOrganizer:
             # Load existing secrets
             if self.streaming_file.exists():
                 with open(self.streaming_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+                    raw_data = json.load(f)
+                    # Handle both list (old format) and dict (new format)
+                    if isinstance(raw_data, list):
+                        data = {'secrets': raw_data, 'total_count': len(raw_data)}
+                    elif isinstance(raw_data, dict):
+                        data = raw_data
+                    else:
+                        data = {'secrets': [], 'total_count': 0}
             else:
                 data = {'secrets': [], 'total_count': 0}
+            
+            # Ensure 'secrets' key exists
+            if 'secrets' not in data:
+                data['secrets'] = []
             
             # Append new secrets
             data['secrets'].extend(self._streaming_secrets)

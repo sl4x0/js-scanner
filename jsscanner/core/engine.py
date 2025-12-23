@@ -1899,8 +1899,14 @@ class ScanEngine:
                 if secrets_file.exists():
                     try:
                         with open(secrets_file, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            secrets = data.get('secrets', [])
+                            raw_data = json.load(f)
+                            # Handle both list (old format) and dict (new format)
+                            if isinstance(raw_data, list):
+                                secrets = raw_data
+                            elif isinstance(raw_data, dict):
+                                secrets = raw_data.get('secrets', [])
+                            else:
+                                secrets = []
                             for secret in secrets:
                                 filename = secret.get('filename')
                                 if filename:
@@ -1978,8 +1984,12 @@ class ScanEngine:
                 if secrets_file.exists():
                     try:
                         with open(secrets_file, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            secret_count = len(data.get('secrets', []))
+                            raw_data = json.load(f)
+                            # Handle both list (old format) and dict (new format)
+                            if isinstance(raw_data, list):
+                                secret_count = len(raw_data)
+                            elif isinstance(raw_data, dict):
+                                secret_count = len(raw_data.get('secrets', []))
                     except:
                         pass
             
