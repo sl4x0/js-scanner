@@ -222,6 +222,15 @@ async def main():
 
 def run():
     """Entry point wrapper"""
+    # PHASE 1: Enable high-performance uvloop (Linux/macOS only)
+    if sys.platform != 'win32':
+        try:
+            import uvloop
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+            print("🚀 High-Performance uvloop enabled")
+        except ImportError:
+            pass  # Silently fall back to standard asyncio
+    
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

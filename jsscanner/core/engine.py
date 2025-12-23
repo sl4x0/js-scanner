@@ -664,7 +664,9 @@ class ScanEngine:
                 )
             
         except Exception as e:
-            self.logger.error(f"Scan failed: {e}", exc_info=True)
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"❌ Scan failed: {str(e)}")
+            self.logger.debug("Full scan failure traceback:", exc_info=True)
             
             # Only send error status if enabled
             if self.config.get('discord_status_enabled', False):
@@ -820,7 +822,9 @@ class ScanEngine:
             for idx, result in enumerate(results):
                 if isinstance(result, Exception):
                     task_name = "Katana" if idx == katana_task_info else "SubJS"
-                    self.logger.error(f"❌ {task_name} task failed: {result}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"❌ {task_name} task failed: {str(result)}")
+                    self.logger.debug(f"Full {task_name} task traceback:", exc_info=result)
                 elif result:
                     all_urls.extend(result)
         elif self.katana_fetcher.enabled and not self.katana_fetcher.katana_path:
@@ -958,7 +962,9 @@ class ScanEngine:
                     self.logger.info(f"  └─ Total discovered for {item}: {len(discovered)} JS files")
                     
                 except Exception as e:
-                    self.logger.error(f"[{index+1}/{len(inputs)}] Error processing {item}: {e}", exc_info=True)
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"[{index+1}/{len(inputs)}] Error processing {item}: {str(e)}")
+                    self.logger.debug(f"Full discovery error traceback for {item}:", exc_info=True)
                 
                 return discovered
         
@@ -994,7 +1000,7 @@ class ScanEngine:
     
     async def _download_all_files(self, urls: List[str]) -> List[dict]:
         """
-        PHASE 2: Download all files in parallel
+        PHASE 2: Download all files in parallel using TaskGroup for structured concurrency
         
         Args:
             urls: List of URLs to download
@@ -1099,32 +1105,40 @@ class ScanEngine:
                     }
                 
                 except Exception as e:
-                    # Log ALL errors so we know why downloads fail
-                    self.logger.error(f"❌ CRITICAL DOWNLOAD ERROR for {url[:100]}: {type(e).__name__} - {e}")
-                    import traceback
-                    self.logger.debug(f"Stack trace: {traceback.format_exc()}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"❌ Download failed for {url[:100]}: {str(e)}")
+                    self.logger.debug("Full download error traceback:", exc_info=True)
                     return None
+        
+        # Wrapper to append results to shared list (TaskGroup doesn't return results)
+        async def task_wrapper(url: str):
+            try:
+                result = await download_one(url)
+                if result:
+                    downloaded_files.append(result)
+            except Exception as e:
+                # Catch any uncaught exceptions to prevent TaskGroup failure
+                self.logger.error(f"Task wrapper exception for {url}: {e}")
         
         # Check shutdown before downloading
         if self.shutdown_requested:
             self.logger.warning("⚠️  Download interrupted - shutting down")
             return []
         
-        # Download all files in parallel
-        tasks = [download_one(url) for url in urls]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Download all files using TaskGroup (structured concurrency)
+        try:
+            async with asyncio.TaskGroup() as tg:
+                for url in urls:
+                    tg.create_task(task_wrapper(url))
+        except* Exception as eg:
+            # TaskGroup raises ExceptionGroup if tasks fail critically
+            # Since download_one handles its own errors, this catches system errors
+            self.logger.error(f"Critical batch download error: {eg}")
         
         # Check shutdown after downloads complete
         if self.shutdown_requested:
             self.logger.warning("⚠️  Download processing interrupted - shutting down")
             return downloaded_files
-        
-        # Filter successful downloads
-        for result in results:
-            if isinstance(result, dict):
-                downloaded_files.append(result)
-            elif isinstance(result, Exception):
-                self.logger.error(f"Task exception: {result}")
         
         # Show clean summary
         total_filtered = sum(failed_breakdown.values())
@@ -1176,7 +1190,9 @@ class ScanEngine:
                     return False
                 
                 except Exception as e:
-                    self.logger.debug(f"Error recovering source map for {file_info.get('url', 'unknown')}: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"Source map recovery failed for {file_info.get('url', 'unknown')}: {str(e)}")
+                    self.logger.debug("Full source map recovery traceback:", exc_info=True)
                     return False
         
         # Process all files in parallel
@@ -1189,7 +1205,7 @@ class ScanEngine:
     
     async def _process_all_files_parallel(self, files: List[dict]):
         """
-        PHASE 4: Process all files in parallel (AST analysis on minified files)
+        PHASE 4: Process all files in parallel using TaskGroup (AST analysis on minified files)
         
         Args:
             files: List of file info dictionaries from _download_all_files()
@@ -1226,15 +1242,24 @@ class ScanEngine:
                             self.logger.info(f"⚙️  Extracting: {processed_count}/{total_files} files ({percent:.1f}%)")
                     
                 except Exception as e:
-                    self.logger.error(f"Processing failed {file_info['url']}: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"❌ Processing failed {file_info['url']}: {str(e)}")
+                    self.logger.debug("Full processing error traceback:", exc_info=True)
         
         # Check shutdown before extraction
         if self.shutdown_requested:
             self.logger.warning("⚠️  Extraction interrupted - shutting down")
             return
         
-        tasks = [process_one(f) for f in files]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Process all files using TaskGroup (structured concurrency)
+        try:
+            async with asyncio.TaskGroup() as tg:
+                for f in files:
+                    tg.create_task(process_one(f))
+        except* Exception as eg:
+            # TaskGroup raises ExceptionGroup if tasks fail critically
+            # Since process_one handles its own errors, this catches system errors
+            self.logger.error(f"Critical batch processing error: {eg}")
         
         # Check shutdown before saving extracts
         if self.shutdown_requested:
@@ -1296,7 +1321,9 @@ class ScanEngine:
                     elif timeout_count == max_timeout_logs + 1:
                         self.logger.warning(f"... suppressing further timeout warnings ...")
                 except Exception as e:
-                    self.logger.error(f"Unminify failed {file_info['url']}: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"❌ Unminify failed {file_info['url']}: {str(e)}")
+                    self.logger.debug("Full beautification error traceback:", exc_info=True)
         
         # Check shutdown before beautification
         if self.shutdown_requested:
@@ -1460,7 +1487,9 @@ class ScanEngine:
                 with open(extract_path, 'r', encoding='utf-8') as f:
                     return [line.strip() for line in f if line.strip()]
             except Exception as e:
-                self.logger.debug(f"Could not read {filename}: {e}")
+                # Traceback Pattern: Clean console + forensic log
+                self.logger.error(f"Could not read {filename}: {str(e)}")
+                self.logger.debug(f"Full extract read traceback:", exc_info=True)
                 return []
         return []
     
@@ -1530,8 +1559,9 @@ class ScanEngine:
                         unique_urls[base_url] = url
                         
             except Exception as e:
-                # If parsing fails, skip the URL
-                self.logger.debug(f"Failed to parse URL {url[:100]}: {e}")
+                # Traceback Pattern: Clean console + forensic log
+                self.logger.error(f"Failed to parse URL {url[:100]}: {str(e)}")
+                self.logger.debug("Full URL parsing traceback:", exc_info=True)
                 invalid_urls.append(url)
         
         if invalid_urls:
@@ -1638,7 +1668,9 @@ class ScanEngine:
             self.logger.debug(f"❌ OUT OF SCOPE: {url[:100]} | Domain: {domain_clean} | Allowed: {list(self.allowed_domains)[:5]}")
             return False
         except Exception as e:
-            self.logger.debug(f"Domain check error for {url[:80]}: {e}")
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"Domain check error for {url[:80]}: {str(e)}")
+            self.logger.debug("Full domain check traceback:", exc_info=True)
             return False
     
     @staticmethod
@@ -1905,7 +1937,9 @@ class ScanEngine:
             return deleted_count
             
         except Exception as e:
-            self.logger.warning(f"Error during cleanup: {e}")
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"⚠️  Error during cleanup: {str(e)}")
+            self.logger.debug("Full cleanup error traceback:", exc_info=True)
             return deleted_count
     
     async def _save_current_progress(self):
@@ -1924,7 +1958,9 @@ class ScanEngine:
                     self.secret_scanner.export_results(str(trufflehog_output))
                     self.logger.info(f"  ✓ Saved {len(self.secret_scanner.all_secrets)} secrets")
                 except Exception as e:
-                    self.logger.error(f"  ✗ Failed to save secrets: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"  ✗ Failed to save secrets: {str(e)}")
+                    self.logger.debug("Full secret save traceback:", exc_info=True)
             
             # Save extracts if any were found
             if hasattr(self.ast_analyzer, 'extracts') and self.ast_analyzer.extracts:
@@ -1933,7 +1969,9 @@ class ScanEngine:
                     extract_count = sum(len(v) for v in self.ast_analyzer.extracts.values())
                     self.logger.info(f"  ✓ Saved {extract_count} extracts")
                 except Exception as e:
-                    self.logger.error(f"  ✗ Failed to save extracts: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"  ✗ Failed to save extracts: {str(e)}")
+                    self.logger.debug("Full extract save traceback:", exc_info=True)
             
             # Update metadata with shutdown info
             try:
@@ -1954,7 +1992,9 @@ class ScanEngine:
                 self.state.update_metadata(metadata_update)
                 self.logger.info(f"  ✓ Updated metadata (duration: {duration:.1f}s)")
             except Exception as e:
-                self.logger.error(f"  ✗ Failed to update metadata: {e}")
+                # Traceback Pattern: Clean console + forensic log
+                self.logger.error(f"  ✗ Failed to update metadata: {str(e)}")
+                self.logger.debug("Full metadata update traceback:", exc_info=True)
             
             # Display error summary
             self._display_error_summary()
@@ -1962,7 +2002,9 @@ class ScanEngine:
             self.logger.info("💾 Progress saved successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to save progress: {e}")
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"❌ Failed to save progress: {str(e)}")
+            self.logger.debug("Full progress save traceback:", exc_info=True)
     
     def _display_error_summary(self):
         """Display categorized error summary at scan completion"""
@@ -2075,7 +2117,9 @@ class ScanEngine:
                 pass  # Ignore errors - best effort cleanup
                 
         except Exception as e:
-            self.logger.error(f"Emergency shutdown failed: {e}")
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"❌ Emergency shutdown failed: {str(e)}")
+            self.logger.debug("Full emergency shutdown traceback:", exc_info=True)
     
     def get_url_from_filename(self, filename: str) -> Optional[str]:
         """
@@ -2161,7 +2205,9 @@ class ScanEngine:
                             all_discovered_urls.add(url)
                 
                 except Exception as e:
-                    self.logger.debug(f"Error extracting JS URLs from {file_info.get('url', 'unknown')}: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"Error extracting JS URLs from {file_info.get('url', 'unknown')}: {str(e)}")
+                    self.logger.debug("Full URL extraction traceback:", exc_info=True)
             
             self.logger.info(f"  ✓ Depth {current_depth}: Found {len(discovered_at_depth)} new URLs")
             
@@ -2217,7 +2263,9 @@ class ScanEngine:
                         self.logger.debug(f"HEAD validation failed: {url} (status {status_code})")
                         return None
                 except Exception as e:
-                    self.logger.debug(f"HEAD request error for {url}: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"HEAD request error for {url}: {str(e)}")
+                    self.logger.debug("Full HEAD validation traceback:", exc_info=True)
                     return None
         
         tasks = [validate_one(url) for url in urls]

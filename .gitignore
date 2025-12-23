@@ -37,6 +37,8 @@ cache/
 logs/
 temp/
 *.log
+scan.log*     # Dual-stream logger main telemetry
+errors.log*   # Dual-stream logger error forensics
 
 # Benchmarks (keep scripts, ignore results)
 benchmarks/*.json

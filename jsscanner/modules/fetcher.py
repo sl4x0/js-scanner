@@ -258,6 +258,9 @@ class Fetcher:
             self.error_stats['timeouts'] += 1
             return False, "DNS timeout"
         except Exception as e:
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"Domain validation error: {str(e)}")
+            self.logger.debug("Full validation error traceback:", exc_info=True)
             return False, f"Validation error: {str(e)}"
     
     async def initialize(self) -> None:
@@ -408,7 +411,9 @@ class Fetcher:
             if any(msg in error_msg for msg in ["Target closed", "context has been closed", "Execution context was destroyed", "browser has been closed", "Page.evaluate"]):
                 self.logger.debug(f"Interaction stopped (page closed): {error_msg}")
             else:
-                self.logger.warning(f"⚠️  Interaction triggers failed: {e}")
+                # Traceback Pattern: Clean console + forensic log
+                self.logger.error(f"⚠️  Interaction triggers failed: {str(e)}")
+                self.logger.debug("Full interaction failure traceback:", exc_info=True)
     
     async def cleanup(self) -> None:
         """Cleanup HTTP session and Playwright resources - thread-safe with lock"""
@@ -419,14 +424,18 @@ class Fetcher:
                     await self.session.close()
                     self.logger.info("HTTP Session closed successfully")
                 except Exception as e:
-                    self.logger.warning(f"HTTP session cleanup error: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"❌ HTTP session cleanup error: {str(e)}")
+                    self.logger.debug("Full session cleanup traceback:", exc_info=True)
             
             if self.connector:
                 try:
                     await self.connector.close()
                     self.logger.debug("TCP Connector closed successfully")
                 except Exception as e:
-                    self.logger.debug(f"Connector cleanup error: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"❌ Connector cleanup error: {str(e)}")
+                    self.logger.debug("Full connector cleanup traceback:", exc_info=True)
             
             # Then close Playwright with proper waiting
             if self.browser_manager:
@@ -434,7 +443,9 @@ class Fetcher:
                     await self.browser_manager.close()
                     self.logger.info("Browser manager closed successfully")
                 except Exception as e:
-                    self.logger.warning(f"Browser manager cleanup error: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"❌ Browser manager cleanup error: {str(e)}")
+                    self.logger.debug("Full browser manager cleanup traceback:", exc_info=True)
             
             if self.playwright:
                 try:
@@ -443,7 +454,9 @@ class Fetcher:
                     await asyncio.sleep(0.5)
                     self.logger.info("Playwright stopped successfully")
                 except Exception as e:
-                    self.logger.warning(f"Playwright cleanup error: {e}")
+                    # Traceback Pattern: Clean console + forensic log
+                    self.logger.error(f"❌ Playwright cleanup error: {str(e)}")
+                    self.logger.debug("Full playwright cleanup traceback:", exc_info=True)
     
     async def fetch_live(self, target: str) -> List[str]:
         """Fetch JavaScript URLs from live site using Playwright with smart retries"""
@@ -735,8 +748,9 @@ class Fetcher:
             self.last_failure_reason = 'retry_exhausted'
             return None
         except Exception as e:
-            # Non-retryable error
-            self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url}: {e}")
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url}: {str(e)}")
+            self.logger.debug("Full fetch error traceback:", exc_info=True)
             self.last_failure_reason = 'non_retryable_error'
             return None
     
@@ -757,7 +771,24 @@ class Fetcher:
         
         # Use the shared session - this is the key fix for connection pooling
         async with self.session.get(url, ssl=self.ssl_context, headers=headers, allow_redirects=False) as response:
-                # No retries - fail immediately on rate limiting (return None, not exception)
+                # ========== PHASE 3: Strategic Error Detection (Vulnerability Hinting) ==========
+                # Differentiate between "Network Failure" (Retry) and "Server Crash" (Vulnerability)
+                
+                # Server Error (Potential Vulnerability)
+                if response.status >= 500:
+                    self.logger.warning(f"🔥 HTTP {response.status} at {url} - Potential Injection Point/DoS Vector")
+                    self.last_failure_reason = 'server_error'
+                    self.error_stats['http_errors'] += 1
+                    return None
+                
+                # Auth Error (Interesting but not critical)
+                if response.status in [401, 403]:
+                    self.logger.debug(f"🔒 Access Denied (HTTP {response.status}): {url}")
+                    self.last_failure_reason = 'auth_error'
+                    self.error_stats['http_errors'] += 1
+                    return None
+                
+                # Rate Limiting (No retries - fail fast)
                 if response.status in [429, 503]:
                     self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")
                     self.last_failure_reason = 'rate_limit'
@@ -847,7 +878,9 @@ class Fetcher:
                 exists = response.status == 200
                 return (exists, response.status)
         except Exception as e:
-            self.logger.debug(f"HEAD request failed for {url}: {e}")
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"HEAD request failed for {url}: {str(e)}")
+            self.logger.debug("Full HEAD request traceback:", exc_info=True)
             return (False, 0)
     
     async def fetch_with_playwright(self, url: str) -> Optional[str]:
@@ -867,7 +900,9 @@ class Fetcher:
             return content
 
         except Exception as e:
-            self.logger.error(f"Playwright error {url}: {e}")
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"❌ Playwright error {url}: {str(e)}")
+            self.logger.debug("Full Playwright fetch traceback:", exc_info=True)
             return None
         finally:
             if page:

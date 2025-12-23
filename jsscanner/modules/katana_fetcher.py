@@ -155,7 +155,12 @@ class KatanaFetcher:
         except FileNotFoundError:
             self.logger.error(f"❌ Katana binary not found at {self.katana_path}")
         except Exception as e:
-            self.logger.error(f"❌ Katana execution error: {type(e).__name__}: {str(e)}")
+            # Traceback Pattern: Clean console + forensic log
+            self.logger.error(f"❌ Katana execution error: {str(e)}")
+            self.logger.debug("Full Katana execution traceback:", exc_info=True)
+            # Log subprocess stderr if available
+            if hasattr(process, 'stderr') and process.stderr:
+                self.logger.debug(f"Katana stderr output: {process.stderr}")
         finally:
             # Cleanup temp file
             try:
@@ -251,8 +256,9 @@ class KatanaFetcher:
                     filtered.append(url)
                     
             except Exception as e:
-                # If parsing fails, skip the URL
-                self.logger.debug(f"Failed to parse URL for scope check: {url} ({e})")
+                # Traceback Pattern: Clean console + forensic log
+                self.logger.error(f"Failed to parse URL for scope check: {url}")
+                self.logger.debug(f"URL parsing error details: {str(e)}", exc_info=True)
                 continue
         
         return filtered

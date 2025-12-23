@@ -45,11 +45,16 @@ class ColoredFormatter(logging.Formatter):
 
 def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logger:
     """
-    Sets up a logger with console and optional file output
+    Sets up a logger with console and dual file output (scan.log + errors.log)
+    
+    Architecture:
+        - Console: INFO level with colors
+        - scan.log: DEBUG level (complete telemetry)
+        - errors.log: WARNING+ level (error forensics only)
     
     Args:
         name: Logger name
-        log_file: Optional path to log file
+        log_file: Deprecated. Logs now auto-route to logs/scan.log and logs/errors.log
         
     Returns:
         Configured logger instance
@@ -61,7 +66,7 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
     if logger.handlers:
         return logger
     
-    # Console handler with colors
+    # ========== CONSOLE HANDLER (Retained as-is) ==========
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_formatter = ColoredFormatter(
@@ -71,26 +76,42 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     
-    # File handler (if specified) - Issue #17: Use rotating file handler
-    if log_file:
-        # Create logs directory if needed
-        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
-        
-        # Issue #17: Use RotatingFileHandler with 10MB max size and 5 backup files
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5,
-            encoding='utf-8'
-        )
-        # Only log WARNING and above to file (exclude INFO to reduce file size)
-        file_handler.setLevel(logging.WARNING)
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
+    # ========== DUAL FILE HANDLERS ==========
+    # Define log directory (relative to project root)
+    log_dir = Path('logs')
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Detailed formatter for forensic analysis (includes file location)
+    detailed_formatter = logging.Formatter(
+        '%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # ========== HANDLER A: Main Log (scan.log) ==========
+    # Captures EVERYTHING (DEBUG+) for full scan telemetry
+    main_log_path = log_dir / 'scan.log'
+    main_handler = RotatingFileHandler(
+        main_log_path,
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    main_handler.setLevel(logging.DEBUG)
+    main_handler.setFormatter(detailed_formatter)
+    logger.addHandler(main_handler)
+    
+    # ========== HANDLER B: Error Log (errors.log) ==========
+    # Captures only WARNING+ for error forensics
+    error_log_path = log_dir / 'errors.log'
+    error_handler = RotatingFileHandler(
+        error_log_path,
+        maxBytes=5 * 1024 * 1024,  # 5MB
+        backupCount=3,
+        encoding='utf-8'
+    )
+    error_handler.setLevel(logging.WARNING)
+    error_handler.setFormatter(detailed_formatter)
+    logger.addHandler(error_handler)
     
     return logger
 
