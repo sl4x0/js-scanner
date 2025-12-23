@@ -16,7 +16,7 @@ max_file_size: 209715200 # 200 MB hard limit per file
 katana:
   enabled: true
   depth: 3 # Depth 3 is standard for finding deep JS files
-  concurrency: 40 # High concurrency for Go
+  concurrency: 60 # High concurrency for Go
   rate_limit: 150 # Requests/sec
   timeout: 300 # [CRITICAL] Increased to 5 mins. 100s is too short for depth 3.
   # Custom flags appended to default: -silent -jc -kf all
@@ -51,7 +51,7 @@ recursion:
 # 5. AST & EXTRACTION
 ast:
   enabled: true
-  max_file_size_mb: 25 # Increased for large webpack bundles
+  max_file_size_mb: 100 # Increased for large webpack bundles
 
 code_splitting:
   detect_dynamic_imports: true
@@ -108,11 +108,11 @@ logging:
 
 checkpoint:
   enabled: true
-  frequency: 20 # Save less often to reduce disk I/O, rely on memory.
+  frequency: 60 # Save less often to reduce disk I/O, rely on memory.
   auto_cleanup: true
 
 retry:
-  http_requests: 3 # 5 is overkill and slows down scans. 3 is standard.
+  http_requests: 2 # 5 is overkill and slows down scans. 2 is standard.
   backoff_base: 1.5
   jitter: true
 
@@ -157,4 +157,3 @@ bundle_unpacker:
 
 minimal_storage: false
 max_concurrent_domains: 10
-  
