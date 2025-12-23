@@ -751,16 +751,33 @@ class ActiveFetcher:
         
         try:
             return await _do_fetch()
-        except retry_exceptions:
-            # All retries exhausted
-            self.logger.debug(f"❌ [RETRY EXHAUSTED] {url}")
-            self.last_failure_reason = 'retry_exhausted'
+        except asyncio.TimeoutError:
+            # All retries exhausted due to timeout
+            self.logger.debug(f"❌ [TIMEOUT] {url}")
+            self.last_failure_reason = 'timeout'
+            self.error_stats['timeouts'] += 1
+            return None
+        except (ConnectionError, OSError) as e:
+            # All retries exhausted due to network error
+            self.logger.debug(f"❌ [NETWORK ERROR] {url}: {str(e)}")
+            self.last_failure_reason = 'network_error'
+            
+            # Classify the specific network error
+            if 'Name or service not known' in str(e) or 'getaddrinfo failed' in str(e):
+                self.error_stats['dns_errors'] += 1
+            elif 'Connection refused' in str(e):
+                self.error_stats['connection_refused'] += 1
+            elif 'SSL' in str(e) or 'certificate' in str(e).lower():
+                self.error_stats['ssl_errors'] += 1
+            else:
+                self.error_stats['timeouts'] += 1  # Generic network failure
             return None
         except Exception as e:
             # Traceback Pattern: Clean console + forensic log
             self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url}: {str(e)}")
             self.logger.debug("Full fetch error traceback:", exc_info=True)
             self.last_failure_reason = 'non_retryable_error'
+            self.error_stats['http_errors'] += 1  # Track as generic error
             return None
     
     async def _fetch_content_impl(self, url: str) -> Optional[str]:

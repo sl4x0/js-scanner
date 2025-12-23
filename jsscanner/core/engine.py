@@ -1167,28 +1167,37 @@ class ScanEngine:
         if hasattr(self.fetcher, 'error_stats') and failed_breakdown['fetch_failed'] > 0:
             error_stats = self.fetcher.error_stats
             total_errors = sum(error_stats.values())
-            if total_errors > 0:
-                self.logger.info(f"\n   🔍 Fetch Failure Analysis:")
-                if error_stats['http_errors'] > 0:
-                    self.logger.info(f"      • HTTP errors (403/404/etc): {error_stats['http_errors']}")
-                    
-                    # Show HTTP status code breakdown
-                    if hasattr(self.fetcher, 'http_status_breakdown') and self.fetcher.http_status_breakdown:
-                        status_summary = ", ".join([f"{code}: {count}" for code, count in sorted(self.fetcher.http_status_breakdown.items())])
-                        self.logger.info(f"        └─ Status codes: {status_summary}")
+            
+            self.logger.info(f"\n   🔍 Fetch Failure Analysis:")
+            
+            # Show all error categories (even if 0, for transparency)
+            if error_stats['http_errors'] > 0:
+                self.logger.info(f"      • HTTP errors (403/404/etc): {error_stats['http_errors']}")
                 
-                if error_stats['timeouts'] > 0:
-                    self.logger.info(f"      • Timeouts: {error_stats['timeouts']}")
-                if error_stats['rate_limits'] > 0:
-                    self.logger.info(f"      • Rate limited: {error_stats['rate_limits']}")
-                if error_stats['dns_errors'] > 0:
-                    self.logger.info(f"      • DNS errors: {error_stats['dns_errors']}")
-                if error_stats['ssl_errors'] > 0:
-                    self.logger.info(f"      • SSL errors: {error_stats['ssl_errors']}")
-                if error_stats['connection_refused'] > 0:
-                    self.logger.info(f"      • Connection refused: {error_stats['connection_refused']}")
-                
-                self.logger.info(f"      💡 Enable verbose mode (-v) to see detailed HTTP status codes")
+                # Show HTTP status code breakdown
+                if hasattr(self.fetcher, 'http_status_breakdown') and self.fetcher.http_status_breakdown:
+                    status_summary = ", ".join([f"{code}: {count}" for code, count in sorted(self.fetcher.http_status_breakdown.items())])
+                    self.logger.info(f"        └─ Status codes: {status_summary}")
+            
+            if error_stats['timeouts'] > 0:
+                self.logger.info(f"      • Timeouts: {error_stats['timeouts']}")
+            if error_stats['rate_limits'] > 0:
+                self.logger.info(f"      • Rate limited: {error_stats['rate_limits']}")
+            if error_stats['dns_errors'] > 0:
+                self.logger.info(f"      • DNS errors: {error_stats['dns_errors']}")
+            if error_stats['ssl_errors'] > 0:
+                self.logger.info(f"      • SSL errors: {error_stats['ssl_errors']}")
+            if error_stats['connection_refused'] > 0:
+                self.logger.info(f"      • Connection refused: {error_stats['connection_refused']}")
+            
+            # Show unaccounted failures (failures that didn't increment any error stat)
+            unaccounted = failed_breakdown['fetch_failed'] - total_errors
+            if unaccounted > 0:
+                self.logger.info(f"      • ⚠️  Untracked failures: {unaccounted}")
+                self.logger.info(f"        └─ These failed before HTTP request or weren't logged")
+            
+            if self.verbose or unaccounted > 0:
+                self.logger.info(f"      💡 Run with --verbose to see each failure as it happens")
         
         self.logger.info(f"{'='*60}\n")
         
