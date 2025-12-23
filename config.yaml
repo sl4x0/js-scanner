@@ -16,8 +16,8 @@ max_file_size: 209715200 # 200 MB hard limit per file
 katana:
   enabled: true
   depth: 3 # Depth 3 is standard for finding deep JS files
-  concurrency: 60 # High concurrency for Go
-  rate_limit: 150 # Requests/sec
+  concurrency: 120 # Aggressive concurrency - you have CPU headroom
+  rate_limit: 300 # Requests/sec - doubled for max speed
   timeout: 300 # [CRITICAL] Increased to 5 mins. 100s is too short for depth 3.
   # Custom flags appended to default: -silent -jc -kf all
   args: "-field-scope scope" # Ensure it stays in scope (redundant safety)
@@ -32,12 +32,12 @@ subjs:
 # Deep scan for lazy-loaded code. RAM intensive.
 playwright:
   headless: true
-  max_concurrent: 4 # Lower concurrency prevents browser crashes (3-4 is optimal)
+  max_concurrent: 8 # Increased - you have RAM headroom (11.7GB available)
   restart_after: 50 # Restart frequently to prevent Chromium memory leaks
   page_timeout: 20000 # 20s timeout is enough for most SPAs
 
 # Performance Optimizations
-interaction_delay: 0.5 # Fast interactions
+interaction_delay: 0.3 # Ultra-fast interactions - reduced from 0.5s
 
 # --- ANALYSIS & RECURSION ---
 
@@ -62,21 +62,21 @@ code_splitting:
 
 # Threading (Global)
 # With uvloop, you can handle significantly more I/O concurrency.
-threads: 40 # Balanced for most VPS setups
+threads: 100 # Aggressive - your CPU load is <1.0, use it!
 
 # Batch Processing (The heavy lifting)
 batch_processing:
   enabled: true
   # Phase 2: Mass Download
-  download_threads: 150 # Balanced for bandwidth
+  download_threads: 250 # Aggressive - max out network bandwidth
   # Phase 4: CPU Bound Processing
-  process_threads: 40 # Matches threads setting
+  process_threads: 100 # Matches increased threads setting
   cleanup_minified: false
 
 # Connection Pool
 connection_pool:
-  max_connections: 300 # Matches higher thread counts
-  max_per_host: 20 # Allow slightly more aggression per host
+  max_connections: 500 # Increased - you can handle more parallel connections
+  max_per_host: 30 # More aggressive per-host connections
   ttl_dns_cache: 600
 
 # --- SECRET SCANNING ---
@@ -84,7 +84,7 @@ connection_pool:
 trufflehog_path: "" # Auto-detect
 trufflehog_timeout: 300
 # CPU Bottleneck Warning: TruffleHog is heavy.
-trufflehog_max_concurrent: 3 # Keep CPU load reasonable (3 is optimal)
+trufflehog_max_concurrent: 8 # Increased - your CPU is idle, use it!
 
 # --- ALERTING ---
 
@@ -94,9 +94,9 @@ discord_status_enabled: false # Silence is golden. Only alerts matter.
 
 notification_batching:
   strategy: "verified_immediate"
-  batch_size: 10 # Increased to 10 for denser reporting
+  batch_size: 25 # Larger batches for high-volume scans
   group_by_domain: true
-  min_delay: 1
+  min_delay: 0.5 # Faster Discord updates
 
 # --- LOGGING ---
 logging:
@@ -156,7 +156,7 @@ bundle_unpacker:
   temp_dir: "temp/unpacked"
 
 minimal_storage: false
-max_concurrent_domains: 10
+max_concurrent_domains: 25 # Run more targets in parallel - you have resources
 
 # ========================================
 # v4.1 Performance Improvements (NEW)
@@ -167,7 +167,7 @@ max_concurrent_domains: 10
 # Provides O(1) hash lookups for faster duplicate detection
 bloom_filter:
   enabled: true # Auto-enabled if pybloom-live installed
-  capacity: 100000 # Initial capacity (auto-scales)
+  capacity: 500000 # Large capacity for mass scanning (auto-scales)
   error_rate: 0.001 # 0.1% false positive rate
 
 # Noise Filter Thresholds (Configuration-Driven)
