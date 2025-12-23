@@ -7,10 +7,10 @@ import logging
 import asyncio
 from typing import List, Set, Optional
 from urllib.parse import urlparse
-from ..utils.retry import retry_sync, RETRY_CONFIG_SUBPROCESS
+from ..utils.net import retry_sync, RETRY_CONFIG_SUBPROCESS
 
 
-class SubJSFetcher:
+class PassiveFetcher:
     """Fetch JavaScript URLs using SubJS tool"""
     
     def __init__(self, config: dict, logger=None):

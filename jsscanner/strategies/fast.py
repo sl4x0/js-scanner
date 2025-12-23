@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from pathlib import Path
 
 
-class KatanaFetcher:
+class FastFetcher:
     """Fetch JavaScript URLs using Katana crawler (hybrid fast-pass layer)"""
 
     def __init__(self, config: dict, logger=None):

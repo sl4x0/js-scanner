@@ -20,7 +20,7 @@ else:
     import fcntl
 
 
-class StateManager:
+class State:
     """Manages scanner state using JSON files with file locking"""
     
     def __init__(self, target_path: str):

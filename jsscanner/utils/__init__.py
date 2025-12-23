@@ -1,11 +1,11 @@
 """Utility modules for JS Scanner"""
 
-from .file_ops import FileOps
+from .fs import FileSystem
 from .hashing import calculate_hash, calculate_file_hash, calculate_hash_sync
-from .logger import setup_logger, log_banner, log_stats
+from .log import setup_logger, log_banner, log_stats
 
 __all__ = [
-    'FileOps',
+    'FileSystem',
     'calculate_hash',
     'calculate_file_hash', 
     'calculate_hash_sync',

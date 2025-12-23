@@ -7,11 +7,11 @@ import re
 from tree_sitter import Parser
 from typing import List, Set, Dict, Any
 from pathlib import Path
-from ..utils.file_ops import FileOps
-from .domain_organizer import DomainExtractOrganizer
+from ..utils.fs import FileSystem
+from .organizer import DomainExtractOrganizer
 
 
-class ASTAnalyzer:
+class StaticAnalyzer:
     """Analyzes JavaScript using AST parsing"""
     
     def __init__(self, config: dict, logger, paths: dict) -> None:
@@ -217,26 +217,26 @@ class ASTAnalyzer:
             extracts_path = Path(self.paths['extracts'])
             
             if endpoints:
-                await FileOps.append_unique_lines(
+                await FileSystem.append_unique_lines(
                     str(extracts_path / 'endpoints.txt'),
                     endpoints
                 )
             
             if links:
-                await FileOps.append_unique_lines(
+                await FileSystem.append_unique_lines(
                     str(extracts_path / 'links.txt'),
                     links
                 )
             
             if domains:
-                await FileOps.append_unique_lines(
+                await FileSystem.append_unique_lines(
                     str(extracts_path / 'domains.txt'),
                     domains
                 )
             
             # NEW: Save cloud assets
             if cloud_assets:
-                await FileOps.append_unique_lines(
+                await FileSystem.append_unique_lines(
                     str(extracts_path / 'cloud_assets.txt'),
                     cloud_assets
                 )

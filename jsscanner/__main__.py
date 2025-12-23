@@ -8,7 +8,7 @@ import yaml
 from pathlib import Path
 from .cli import parse_args, validate_config
 from .core.engine import ScanEngine
-from .utils.logger import log_banner
+from .utils.log import log_banner
 
 
 def show_version_info():

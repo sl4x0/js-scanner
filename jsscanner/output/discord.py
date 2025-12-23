@@ -15,7 +15,7 @@ from collections import deque
 from datetime import datetime
 
 
-class DiscordNotifier:
+class Discord:
     """Handles Discord webhook notifications with rate limiting"""
     
     def __init__(self, webhook_url: str, rate_limit: int = 30, max_queue_size: int = 1000, logger=None):

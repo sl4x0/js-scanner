@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from typing import Dict, List, Optional, Tuple
 import re
-from ..utils.retry import retry_async, RETRY_CONFIG_LIGHT
+from ..utils.net import retry_async, RETRY_CONFIG_LIGHT
 
 
 class SourceMapRecoverer:

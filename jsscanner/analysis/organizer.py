@@ -4,7 +4,7 @@ Enhanced AST Analyzer with domain-specific extraction organization
 from pathlib import Path
 import json
 from typing import Dict, Any
-from ..utils.file_ops import FileOps
+from ..utils.fs import FileSystem
 
 
 class DomainExtractOrganizer:
@@ -98,7 +98,7 @@ class DomainExtractOrganizer:
             values = set(extracts_db[extract_type].keys())
             
             if values:
-                await FileOps.append_unique_lines(
+                await FileSystem.append_unique_lines(
                     str(file_path),
                     sorted(list(values))
                 )

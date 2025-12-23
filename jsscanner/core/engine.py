@@ -9,11 +9,11 @@ import signal
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
-from ..utils.file_ops import FileOps
-from ..utils.logger import setup_logger, log_stats
-from .state_manager import StateManager
-from .notifier import DiscordNotifier
-from ..utils.reporter import generate_report
+from ..utils.fs import FileSystem
+from ..utils.log import setup_logger, log_stats
+from .state import State
+from ..output.discord import Discord
+from ..output.reporter import generate_report
 
 
 class ScanEngine:
@@ -32,20 +32,20 @@ class ScanEngine:
         self.target_name = self._sanitize_target_name(target)
         
         # Setup directories
-        self.paths = FileOps.create_result_structure(self.target_name)
+        self.paths = FileSystem.create_result_structure(self.target_name)
         
         # Initialize logger
         log_file = Path(self.paths['logs']) / 'scan.log'
         self.logger = setup_logger(log_file=str(log_file))
         
         # Initialize state manager
-        self.state = StateManager(self.paths['base'])
+        self.state = State(self.paths['base'])
         
         # Initialize Discord notifier
         webhook_url = config.get('discord_webhook')
         rate_limit = config.get('discord_rate_limit', 30)
         max_queue_size = config.get('discord_max_queue', 1000)
-        self.notifier = DiscordNotifier(webhook_url, rate_limit, max_queue_size, self.logger)
+        self.notifier = Discord(webhook_url, rate_limit, max_queue_size, self.logger)
         
         # Modules will be initialized when needed
         self.fetcher = None
@@ -718,14 +718,14 @@ class ScanEngine:
     
     async def _initialize_modules(self):
         """Initializes all scanning modules"""
-        from ..modules.fetcher import Fetcher
-        from ..modules.processor import Processor
-        from ..modules.secret_scanner import SecretScanner
-        from ..modules.ast_analyzer import ASTAnalyzer
-        from ..modules.source_map_recovery import SourceMapRecoverer
-        from ..modules.katana_fetcher import KatanaFetcher
+        from ..strategies.active import ActiveFetcher
+        from ..analysis.processor import Processor
+        from ..analysis.secrets import SecretScanner
+        from ..analysis.static import StaticAnalyzer
+        from ..analysis.sourcemap import SourceMapRecoverer
+        from ..strategies.fast import FastFetcher
         
-        self.fetcher = Fetcher(self.config, self.logger)
+        self.fetcher = ActiveFetcher(self.config, self.logger)
         skip_beautify = self.config.get('skip_beautification', False)
         self.processor = Processor(self.logger, skip_beautification=skip_beautify, config=self.config)
         self.secret_scanner = SecretScanner(
@@ -735,9 +735,9 @@ class ScanEngine:
             self.notifier,
             shutdown_callback=lambda: self.shutdown_requested
         )
-        self.ast_analyzer = ASTAnalyzer(self.config, self.logger, self.paths)
+        self.ast_analyzer = StaticAnalyzer(self.config, self.logger, self.paths)
         self.source_map_recoverer = SourceMapRecoverer(self.config, self.logger, self.paths)
-        self.katana_fetcher = KatanaFetcher(self.config, self.logger)
+        self.katana_fetcher = FastFetcher(self.config, self.logger)
         
         # Initialize secrets organizer
         self.secret_scanner.initialize_organizer(self.paths['base'])
@@ -759,8 +759,8 @@ class ScanEngine:
         all_urls = []
         
         # Initialize SubJS if enabled
-        from ..modules.subjs_fetcher import SubJSFetcher
-        subjs_fetcher = SubJSFetcher(self.config, self.logger)
+        from ..strategies.passive import PassiveFetcher
+        subjs_fetcher = PassiveFetcher(self.config, self.logger)
         
         # PHASE 1A: Parallel Discovery (Katana + SubJS) - Maximum Speed
         # Run Katana and SubJS batch mode in parallel for optimal performance
@@ -838,7 +838,7 @@ class ScanEngine:
         
         # PHASE 1B: SubJS-Only Batch Mode (if enabled)
         # If using subjs-only mode and no batch was already run in parallel
-        if subjs_only and SubJSFetcher.is_installed() and subjs_task_info is None:
+        if subjs_only and PassiveFetcher.is_installed() and subjs_task_info is None:
             self.logger.info(f"\n{'='*70}")
             self.logger.info("📚 PHASE 1B: SUBJS BATCH MODE (subjs-only)")
             self.logger.info(f"{'='*70}")
@@ -940,7 +940,7 @@ class ScanEngine:
                     
                     # SubJS scan
                     if use_subjs or subjs_only:
-                        if SubJSFetcher.is_installed():
+                        if PassiveFetcher.is_installed():
                             # Get scope domains for filtering
                             scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
                             tasks.append(('subjs', asyncio.to_thread(subjs_fetcher.fetch_urls, item, scope_domains)))

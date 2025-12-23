@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 
-class FileOps:
+class FileSystem:
     """Handles all file operations for the scanner"""
     
     @staticmethod

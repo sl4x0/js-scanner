@@ -1,7 +1,7 @@
 """Core modules for JS Scanner"""
 
 from .engine import ScanEngine
-from .state_manager import StateManager
-from .notifier import DiscordNotifier
+from .state import State
+from ..output.discord import Discord
 
-__all__ = ['ScanEngine', 'StateManager', 'DiscordNotifier']
+__all__ = ['ScanEngine', 'State', 'Discord']

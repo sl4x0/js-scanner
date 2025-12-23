@@ -7,7 +7,7 @@ __author__ = 'Bug Bounty Hunter'
 __description__ = 'Context-aware JavaScript scanner for bug bounty hunting'
 
 from .core.engine import ScanEngine
-from .core.state_manager import StateManager
-from .core.notifier import DiscordNotifier
+from .core.state import State
+from .output.discord import Discord
 
-__all__ = ['ScanEngine', 'StateManager', 'DiscordNotifier']
+__all__ = ['ScanEngine', 'State', 'Discord']

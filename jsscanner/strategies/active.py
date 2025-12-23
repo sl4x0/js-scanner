@@ -11,8 +11,8 @@ from playwright.async_api import async_playwright, Browser, BrowserContext
 from typing import List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 import re
-from .noise_filter import NoiseFilter
-from ..utils.retry import retry_async, RETRY_CONFIG_HTTP
+from ..analysis.filtering import NoiseFilter
+from ..utils.net import retry_async, RETRY_CONFIG_HTTP
 
 
 class BrowserManager:
@@ -110,7 +110,7 @@ class BrowserManager:
             await self.browser.close()
 
 
-class Fetcher:
+class ActiveFetcher:
     """
     Fetches JavaScript files from various sources
     """

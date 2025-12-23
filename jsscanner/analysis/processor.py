@@ -28,7 +28,7 @@ class Processor:
         self.beautifier_options.indent_size = 2
         
         # v3.0: Initialize bundle unpacker
-        from .bundle_unpacker import BundleUnpacker
+        from .unpacking import BundleUnpacker
         self.unpacker = BundleUnpacker(logger, config=self.config)
     
     async def process(self, content: str, file_path: str) -> str:
