@@ -227,11 +227,22 @@ class SecretScanner:
                             source_metadata = secret_data.get('SourceMetadata', {})
                             line_num = source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0)
                             
-                            # Add enriched source metadata
+                            # Extract domain from source URL for better context
+                            from urllib.parse import urlparse
+                            domain = 'Unknown'
+                            if source_url:
+                                try:
+                                    parsed = urlparse(source_url)
+                                    domain = parsed.netloc or 'Unknown'
+                                except:
+                                    pass
+                            
+                            # Add enriched source metadata with domain
                             secret_data['SourceMetadata'] = {
                                 'file': file_path,
                                 'url': source_url,
-                                'line': line_num
+                                'line': line_num,
+                                'domain': domain
                             }
                             
                             # Save to state
@@ -405,14 +416,27 @@ class SecretScanner:
                     
                     if file_path and file_manifest:
                         from pathlib import Path
+                        from urllib.parse import urlparse
                         filename = Path(file_path).name
                         
                         if filename in file_manifest:
                             manifest_entry = file_manifest[filename]
+                            url = manifest_entry.get('url', '')
+                            
+                            # Extract domain from URL
+                            domain = 'Unknown'
+                            if url:
+                                try:
+                                    parsed = urlparse(url)
+                                    domain = parsed.netloc or 'Unknown'
+                                except:
+                                    pass
+                            
                             finding['SourceMetadata'] = {
-                                'url': manifest_entry.get('url', ''),
+                                'url': url,
                                 'file': filename,
-                                'line': source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0)
+                                'line': source_metadata.get('Data', {}).get('Filesystem', {}).get('line', 0),
+                                'domain': domain
                             }
                     
                     # STREAM TO DISK IMMEDIATELY (no memory accumulation!)

@@ -291,9 +291,9 @@ class Discord:
         url = source_metadata.get('url', '')
         file_path = source_metadata.get('file', '')
         
-        # Extract domain from URL
-        domain = 'Unknown'
-        if url:
+        # Extract domain from metadata first, then fallback to URL parsing
+        domain = source_metadata.get('domain', 'Unknown')
+        if domain == 'Unknown' and url:
             try:
                 parsed = urlparse(url)
                 domain = parsed.netloc or 'Unknown'
@@ -314,41 +314,35 @@ class Discord:
         if len(display_preview) > 30:
             display_preview = display_preview[:30] + "..."
         
-        # Build description with secret preview only (no full secret to avoid duplication)
-        description = f"**Secret Preview:** `{display_preview}`"
+        # Build description with ALL critical info upfront for quick triaging
+        line_num = source_metadata.get('line', 0)
+        
+        # Build multi-line description with all key details
+        description_parts = []
+        
+        # 1. Domain/Host (CRITICAL - shows target at a glance)
+        if domain != 'Unknown':
+            description_parts.append(f"**🎯 Target Domain:** `{domain}`")
+        
+        # 2. Full JS File URL (CRITICAL - direct link to investigate)
+        if url:
+            # Truncate very long URLs for better readability, but keep full URL in hyperlink
+            display_url = url if len(url) <= 100 else url[:97] + "..."
+            description_parts.append(f"**📄 JavaScript File:** {url}")
+        elif file_context:
+            description_parts.append(f"**📄 File:** `{file_context}`")
+        
+        # 3. Line Number (CRITICAL - exact location in file)
+        if line_num:
+            description_parts.append(f"**📍 Line Number:** `{line_num}`")
+        
+        # 4. Secret Preview (truncated for security)
+        description_parts.append(f"**🔐 Secret Preview:** `{display_preview}`")
+        
+        description = "\n".join(description_parts)
         
         # Build detailed fields
         fields = []
-        
-        # Domain/Host field for easy triaging (CRITICAL FOR BUG BOUNTY)
-        if domain != 'Unknown':
-            fields.append({
-                'name': '🎯 Domain',
-                'value': f'`{domain}`',
-                'inline': False
-            })
-        
-        # Source: Full JS file URL with line number (CRITICAL - shows exactly where to look)
-        line_num = source_metadata.get('line', 0)
-        if url:
-            # Show full URL as clickable link (Discord auto-linkifies)
-            if line_num:
-                source_display = f"[View Source]({url})\nLine: {line_num}"
-            else:
-                source_display = f"[View Source]({url})"
-            
-            fields.append({
-                'name': '📄 JS File',
-                'value': source_display,
-                'inline': False
-            })
-        elif file_context:
-            # Show filename if no URL
-            fields.append({
-                'name': '📄 File',
-                'value': f'`{file_context}`',
-                'inline': False
-            })
         
         # Verification status
         status_icon = "✅" if verified else "⚠️"

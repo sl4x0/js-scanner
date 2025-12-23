@@ -135,8 +135,8 @@ user_agents:
 
 # --- LEGACY COMPATIBILITY (for code that may reference these) ---
 timeouts:
-  http_request: 10  # Fail fast on slow/dead assets
-  playwright_page: 20000  # Match playwright.page_timeout
+  http_request: 10 # Fail fast on slow/dead assets
+  playwright_page: 20000 # Match playwright.page_timeout
   trufflehog: 300
 
 beautification:
@@ -158,7 +158,6 @@ bundle_unpacker:
 minimal_storage: false
 max_concurrent_domains: 10
 
-
 # ========================================
 # v4.1 Performance Improvements (NEW)
 # ========================================
@@ -167,18 +166,18 @@ max_concurrent_domains: 10
 # Install: pip install pybloom-live
 # Provides O(1) hash lookups for faster duplicate detection
 bloom_filter:
-  enabled: true  # Auto-enabled if pybloom-live installed
-  capacity: 100000  # Initial capacity (auto-scales)
-  error_rate: 0.001  # 0.1% false positive rate
+  enabled: true # Auto-enabled if pybloom-live installed
+  capacity: 100000 # Initial capacity (auto-scales)
+  error_rate: 0.001 # 0.1% false positive rate
 
 # Noise Filter Thresholds (Configuration-Driven)
 # Adjust these to control vendor library detection sensitivity
 noise_filter:
-  min_file_size_kb: 1  # Ignore tiny files (1KB minimum)
-  max_newlines: 10     # Heuristic for minified code (fewer newlines = vendor lib)
+  min_file_size_kb: 1 # Ignore tiny files (1KB minimum)
+  max_newlines: 10 # Heuristic for minified code (fewer newlines = vendor lib)
 
 # Secrets Streaming (Automatic)
 # Prevents memory exhaustion on large scans
 secrets:
-  buffer_size: 10  # Flush every N secrets to disk
-  streaming_enabled: true  # Always enabled (no config needed)
+  buffer_size: 10 # Flush every N secrets to disk
+  streaming_enabled: true # Always enabled (no config needed)
