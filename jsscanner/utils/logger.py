@@ -15,8 +15,9 @@ from rich.logging import RichHandler
 # Initialize colorama for Windows support
 init(autoreset=True)
 
-# Global Rich console for dashboard
-console = Console()
+# Separate Rich consoles to avoid Live display conflicts
+console = Console()  # For dashboard Live display
+log_console = Console()  # For logging (separate from Live display)
 
 # Fix Windows UTF-8 encoding for console output (must be at module level)
 if sys.platform == 'win32' and hasattr(sys.stdout, 'buffer'):
@@ -72,8 +73,9 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
         return logger
     
     # ========== CONSOLE HANDLER (Rich) ==========
+    # Use separate console to avoid conflicts with Live dashboard
     console_handler = RichHandler(
-        console=console,
+        console=log_console,
         show_time=True,
         show_path=False,
         markup=True,
