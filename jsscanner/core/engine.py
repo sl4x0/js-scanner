@@ -754,8 +754,13 @@ class ScanEngine:
         from ..modules.subjs_fetcher import SubJSFetcher
         subjs_fetcher = SubJSFetcher(self.config, self.logger)
         
-        # PHASE 1A: Katana Fast-Pass (Speed Layer)
-        # Run Katana first for breadth-first discovery at maximum speed
+        # PHASE 1A: Parallel Discovery (Katana + SubJS) - Maximum Speed
+        # Run Katana and SubJS batch mode in parallel for optimal performance
+        parallel_tasks = []
+        katana_task_info = None
+        subjs_task_info = None
+        
+        # Prepare Katana task if enabled
         if self.katana_fetcher.enabled and self.katana_fetcher.katana_path:
             # Filter inputs to only domains/URLs (not direct JS files)
             katana_targets = [item for item in inputs if not self._is_valid_js_url(item)]
@@ -764,28 +769,69 @@ class ScanEngine:
                 # Get scope domains for filtering
                 scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
                 
-                # Run Katana in thread to avoid blocking asyncio loop
-                self.logger.info(f"\n{'='*70}")
-                self.logger.info("⚡ PHASE 1A: KATANA FAST-PASS (Speed Layer)")
-                self.logger.info(f"{'='*70}")
+                # Create async task wrapper for Katana
+                async def run_katana():
+                    self.logger.info(f"\n{'='*70}")
+                    self.logger.info("⚡ PHASE 1A-1: KATANA FAST-PASS (Speed Layer)")
+                    self.logger.info(f"{'='*70}")
+                    
+                    katana_urls = await asyncio.to_thread(
+                        self.katana_fetcher.fetch_urls,
+                        katana_targets,
+                        scope_domains
+                    )
+                    
+                    if katana_urls:
+                        self.logger.info(f"✓ Katana phase complete: {len(katana_urls)} JS files discovered\n")
+                    return katana_urls or []
                 
-                katana_urls = await asyncio.to_thread(
-                    self.katana_fetcher.fetch_urls,
-                    katana_targets,
-                    scope_domains
-                )
+                parallel_tasks.append(run_katana())
+                katana_task_info = len(parallel_tasks) - 1
+        
+        # Prepare SubJS batch task if enabled and has batch targets
+        if use_subjs:
+            batch_targets = [item for item in inputs if not self._is_valid_js_url(item)]
+            
+            if batch_targets:
+                # Create async task wrapper for SubJS batch mode
+                async def run_subjs_batch():
+                    self.logger.info(f"\n{'='*70}")
+                    self.logger.info("📚 PHASE 1A-2: SUBJS HISTORICAL SCAN (History Layer)")
+                    self.logger.info(f"{'='*70}")
+                    
+                    subjs_urls = await subjs_fetcher.fetch_batch(batch_targets)
+                    
+                    if subjs_urls:
+                        self.logger.info(f"✓ SubJS batch phase complete: {len(subjs_urls)} JS files discovered\n")
+                    return subjs_urls or []
                 
-                if katana_urls:
-                    all_urls.extend(katana_urls)
-                    self.logger.info(f"✓ Katana phase complete: {len(katana_urls)} JS files discovered\n")
-                else:
-                    self.logger.info("✓ Katana phase complete: No JS files found\n")
+                parallel_tasks.append(run_subjs_batch())
+                subjs_task_info = len(parallel_tasks) - 1
+        
+        # Execute parallel tasks if any
+        if parallel_tasks:
+            self.logger.info(f"\n{'='*70}")
+            self.logger.info(f"🚀 LAUNCHING {len(parallel_tasks)} PARALLEL DISCOVERY TASKS")
+            self.logger.info(f"{'='*70}\n")
+            
+            results = await asyncio.gather(*parallel_tasks, return_exceptions=True)
+            
+            # Process results
+            for idx, result in enumerate(results):
+                if isinstance(result, Exception):
+                    task_name = "Katana" if idx == katana_task_info else "SubJS"
+                    self.logger.error(f"❌ {task_name} task failed: {result}")
+                elif result:
+                    all_urls.extend(result)
         elif self.katana_fetcher.enabled and not self.katana_fetcher.katana_path:
             self.logger.warning("⚠️  Katana enabled but not installed. Install with: go install github.com/projectdiscovery/katana/cmd/katana@latest\n")
         
-        # OPTIMIZATION: Batch SubJS processing for subjs-only mode (massive speedup)
-        if subjs_only and SubJSFetcher.is_installed():
-            self.logger.info("🚀 SubJS-only mode: Using batch processing for maximum speed")
+        # PHASE 1B: SubJS-Only Batch Mode (if enabled)
+        # If using subjs-only mode and no batch was already run in parallel
+        if subjs_only and SubJSFetcher.is_installed() and subjs_task_info is None:
+            self.logger.info(f"\n{'='*70}")
+            self.logger.info("📚 PHASE 1B: SUBJS BATCH MODE (subjs-only)")
+            self.logger.info(f"{'='*70}")
             
             # Write inputs to temp file for batch processing
             import tempfile
@@ -808,12 +854,11 @@ class ScanEngine:
                     if self._is_valid_js_url(item):
                         batch_urls.append(item)
                 
-                # Deduplicate and return
-                all_urls = self._deduplicate_urls(batch_urls)
+                # Deduplicate and add to all_urls
+                unique_batch_urls = self._deduplicate_urls(batch_urls)
+                all_urls.extend(unique_batch_urls)
                 
-                self.logger.info(f"{'='*60}")
-                self.logger.info(f"📊 Batch SubJS found {len(all_urls)} unique JS files")
-                self.logger.info(f"{'='*60}\n")
+                self.logger.info(f"✓ SubJS batch phase complete: {len(unique_batch_urls)} JS files discovered\n")
                 
                 # Store in metadata
                 self.state.update_metadata({

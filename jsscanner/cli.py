@@ -98,6 +98,18 @@ Performance Tips:
     )
     
     parser.add_argument(
+        '--katana',
+        action='store_true',
+        help='Enable Katana fast crawler (overrides config)'
+    )
+    
+    parser.add_argument(
+        '--no-katana',
+        action='store_true',
+        help='Disable Katana fast crawler (overrides config)'
+    )
+    
+    parser.add_argument(
         '--no-scope-filter',
         action='store_true',
         help='Disable scope filtering (include CDN and third-party JS files)'
@@ -190,6 +202,12 @@ Performance Tips:
         parser.error(
             "Error: Cannot use both --subjs and --subjs-only together.\n"
             "Use --subjs-only for SubJS only, or --subjs to combine with live scanning."
+        )
+    
+    if args.katana and args.no_katana:
+        parser.error(
+            "Error: Cannot use both --katana and --no-katana together.\n"
+            "Use one flag to override config.yaml setting."
         )
     
     if args.no_live and not args.subjs and not args.subjs_only:

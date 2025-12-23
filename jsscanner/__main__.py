@@ -119,6 +119,13 @@ async def main():
     if args.subjs_only:
         config['skip_live'] = True
     
+    # Apply CLI overrides for Katana
+    if args.katana:
+        config.setdefault('katana', {})['enabled'] = True
+    
+    if args.no_katana:
+        config.setdefault('katana', {})['enabled'] = False
+    
     if args.no_scope_filter:
         config['no_scope_filter'] = True
     
