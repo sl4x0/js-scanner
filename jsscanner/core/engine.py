@@ -1196,7 +1196,9 @@ class ScanEngine:
                 self.logger.info(f"      • ⚠️  Untracked failures: {unaccounted}")
                 self.logger.info(f"        └─ These failed before HTTP request or weren't logged")
             
-            if self.verbose or unaccounted > 0:
+            # Show tip about verbose mode
+            verbose_mode = self.config.get('verbose', False)
+            if verbose_mode or unaccounted > 0:
                 self.logger.info(f"      💡 Run with --verbose to see each failure as it happens")
         
         self.logger.info(f"{'='*60}\n")
