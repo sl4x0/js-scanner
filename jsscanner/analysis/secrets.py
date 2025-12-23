@@ -38,11 +38,14 @@ class SecretScanner:
         max_concurrent = config.get('trufflehog_max_concurrent', 5)
         self.semaphore = asyncio.Semaphore(max_concurrent)
         
-        # Track all secrets found for export
-        self.all_secrets = []
+        # Track secret count instead of storing all in memory (fixes memory leak)
+        self.secrets_count = 0
         
         # Initialize domain organizer for secrets
         self.secrets_organizer = None  # Will be initialized with base_path
+        
+        # Track if TruffleHog is available (graceful degradation)
+        self.trufflehog_available = False
     
     def initialize_organizer(self, base_path: str):
         """
@@ -107,17 +110,19 @@ class SecretScanner:
         return binary_name
     
     def _validate_trufflehog(self):
-        """Validate TruffleHog is installed and executable"""
+        """Validate TruffleHog is installed and executable (graceful degradation)"""
         import shutil
         import subprocess
         
         if not shutil.which(self.trufflehog_path):
-            self.logger.error(
-                f"❌ TruffleHog not found at: {self.trufflehog_path}\n"
+            self.logger.warning(
+                f"⚠️  TruffleHog not found at: {self.trufflehog_path}\n"
+                f"   Secret scanning will be SKIPPED.\n"
                 f"   Install: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin\n"
                 f"   Or update 'trufflehog_path' in config.yaml"
             )
-            raise FileNotFoundError(f"TruffleHog not found: {self.trufflehog_path}")
+            self.trufflehog_available = False
+            return
         
         try:
             result = subprocess.run(
@@ -127,9 +132,10 @@ class SecretScanner:
             )
             version = result.stdout.decode().strip()
             self.logger.info(f"✅ TruffleHog validated: {version}")
+            self.trufflehog_available = True
         except Exception as e:
-            self.logger.error(f"❌ TruffleHog is not executable: {e}")
-            raise
+            self.logger.warning(f"⚠️  TruffleHog is not executable: {e}. Secret scanning will be SKIPPED.")
+            self.trufflehog_available = False
     
     async def scan_file(self, file_path: str, source_url: str) -> int:
         """
@@ -148,6 +154,10 @@ class SecretScanner:
     
     async def _scan_file_impl(self, file_path: str, source_url: str) -> int:
         """Internal implementation of file scanning"""
+        # Graceful degradation: skip if TruffleHog not available
+        if not self.trufflehog_available:
+            return 0
+            
         self.logger.info(f"Scanning for secrets: {file_path}")
         
         secrets_found = 0
@@ -227,8 +237,12 @@ class SecretScanner:
                             # Save to state
                             self.state.add_secret(secret_data)
                             
-                            # Track all secrets for export
-                            self.all_secrets.append(secret_data)
+                            # Stream to disk immediately (fixes memory leak)
+                            if self.secrets_organizer:
+                                await self.secrets_organizer.save_single_secret(secret_data)
+                            
+                            # Increment counter instead of storing in memory
+                            self.secrets_count += 1
                             
                             # ✅ OPTIMIZATION: Collect secrets for batch notification
                             file_secrets.append(secret_data)

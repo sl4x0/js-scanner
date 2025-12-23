@@ -846,7 +846,8 @@ class ActiveFetcher:
                 
                 # Server Error (Potential Vulnerability)
                 if response.status_code >= 500:
-                    self.logger.warning(f"🔥 HTTP {response.status} at {url} - Potential Injection Point/DoS Vector")
+                    # Use correct attribute name - avoid AttributeError
+                    self.logger.warning(f"🔥 HTTP {response.status_code} at {url} - Potential Injection Point/DoS Vector")
                     self.last_failure_reason = 'server_error'
                     self.error_stats['http_errors'] += 1
                     return None

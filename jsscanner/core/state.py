@@ -41,12 +41,54 @@ class State:
         self.secrets_file = findings_path / 'secrets.json'
         self.state_file = db_path / 'state.json'
         self.checkpoint_file = db_path / 'checkpoint.json'
+        self.bloom_path = db_path / 'state.bloom'
         
         # In-memory state cache for incremental scanning
         self.state = self._load_state()
         
         # Checkpoint tracking
         self.last_checkpoint_time = time.time()
+        
+        # Bloom filter for O(1) hash lookups (optional, requires pybloom_live)
+        self.bloom_filter = self._load_bloom_filter()
+        self.bloom_enabled = self.bloom_filter is not None
+        
+        # Thread lock for Bloom filter operations (thread safety)
+        import threading
+        self._bloom_lock = threading.Lock()
+    
+    def _load_bloom_filter(self):
+        """
+        Load Bloom filter from disk or create new one (optional optimization)
+        
+        Returns:
+            Bloom filter instance or None if pybloom_live not available
+        """
+        try:
+            from pybloom_live import ScalableBloomFilter
+            
+            if self.bloom_path.exists():
+                with open(self.bloom_path, 'rb') as f:
+                    return ScalableBloomFilter.fromfile(f)
+            else:
+                # Create new bloom filter with reasonable defaults
+                return ScalableBloomFilter(initial_capacity=100000, error_rate=0.001)
+        except ImportError:
+            # pybloom_live not installed - graceful degradation to JSON-only
+            return None
+        except Exception as e:
+            # Failed to load bloom filter - continue without it
+            return None
+    
+    def _save_bloom_filter(self):
+        """Save Bloom filter to disk"""
+        if self.bloom_filter:
+            try:
+                self.bloom_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.bloom_path, 'wb') as f:
+                    self.bloom_filter.tofile(f)
+            except Exception:
+                pass  # Silent failure - not critical
     
     def _lock_file(self, file_obj, exclusive=True):
         """
@@ -89,7 +131,7 @@ class State:
     
     def is_scanned(self, file_hash: str) -> bool:
         """
-        Checks if a file hash has already been scanned
+        Checks if a file hash has already been scanned (O(1) with Bloom filter)
         
         Args:
             file_hash: SHA256 hash of the file
@@ -97,6 +139,13 @@ class State:
         Returns:
             True if already scanned, False otherwise
         """
+        # Fast path: Check Bloom filter first (O(1)) with thread safety
+        if self.bloom_enabled:
+            with self._bloom_lock:
+                if file_hash in self.bloom_filter:
+                    return True
+        
+        # Fallback to disk check for accuracy
         with open(self.history_file, 'r+', encoding='utf-8') as f:
             # Acquire shared lock for reading
             self._lock_file(f, exclusive=False)
@@ -124,6 +173,14 @@ class State:
                 
                 if file_hash not in data['scanned_hashes']:
                     data['scanned_hashes'].append(file_hash)
+                    
+                    # Add to Bloom filter for fast lookups (with thread safety)
+                    if self.bloom_enabled:
+                        with self._bloom_lock:
+                            self.bloom_filter.add(file_hash)
+                            # Periodically save bloom filter
+                            if len(self.bloom_filter) % 1000 == 0:
+                                self._save_bloom_filter()
                     
                     # Optionally store metadata about the hash
                     if 'scan_metadata' not in data:

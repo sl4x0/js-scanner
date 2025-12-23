@@ -744,9 +744,114 @@ class ScanEngine:
         
         await self.fetcher.initialize()
     
+    async def _strategy_katana(self, inputs: List[str]) -> List[str]:
+        """
+        Strategy 1: Katana-based URL discovery (isolated logic)
+        
+        Args:
+            inputs: List of target URLs/domains
+            
+        Returns:
+            List of discovered JavaScript URLs
+        """
+        targets = [item for item in inputs if not self._is_valid_js_url(item)]
+        if not targets:
+            return []
+        
+        scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
+        
+        self.logger.info(f"\n{'='*70}")
+        self.logger.info("⚡ STRATEGY: KATANA FAST-PASS (Speed Layer)")
+        self.logger.info(f"{'='*70}")
+        
+        katana_urls = await asyncio.to_thread(
+            self.katana_fetcher.fetch_urls,
+            targets,
+            scope_domains
+        )
+        
+        if katana_urls:
+            self.logger.info(f"✓ Katana complete: {len(katana_urls)} JS files discovered\n")
+        
+        return katana_urls or []
+    
+    async def _strategy_subjs(self, inputs: List[str]) -> List[str]:
+        """
+        Strategy 2: SubJS-based URL discovery (isolated logic)
+        
+        Args:
+            inputs: List of target URLs/domains
+            
+        Returns:
+            List of discovered JavaScript URLs
+        """
+        from ..strategies.passive import PassiveFetcher
+        
+        targets = [item for item in inputs if not self._is_valid_js_url(item)]
+        if not targets:
+            return []
+        
+        subjs_fetcher = PassiveFetcher(self.config, self.logger)
+        if not PassiveFetcher.is_installed():
+            self.logger.warning("⚠️  SubJS not installed, skipping SubJS strategy")
+            return []
+        
+        self.logger.info(f"\n{'='*70}")
+        self.logger.info("📚 STRATEGY: SUBJS HISTORICAL SCAN (History Layer)")
+        self.logger.info(f"{'='*70}")
+        
+        subjs_urls = await subjs_fetcher.fetch_batch(targets)
+        
+        if subjs_urls:
+            self.logger.info(f"✓ SubJS complete: {len(subjs_urls)} JS files discovered\n")
+        
+        return subjs_urls or []
+    
+    async def _strategy_live_browser(self, inputs: List[str]) -> List[str]:
+        """
+        Strategy 3: Live browser-based URL discovery (isolated logic)
+        
+        Args:
+            inputs: List of target URLs/domains
+            
+        Returns:
+            List of discovered JavaScript URLs
+        """
+        self.logger.info(f"\n{'='*70}")
+        self.logger.info("🌐 STRATEGY: LIVE BROWSER SCAN")
+        self.logger.info(f"{'='*70}")
+        
+        all_urls = []
+        max_concurrent = self.config.get('max_concurrent_domains', 10)
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def scan_one(item: str) -> List[str]:
+            async with semaphore:
+                if self._is_valid_js_url(item):
+                    return [item]
+                
+                is_valid, reason = await self.fetcher.validate_domain(item)
+                if not is_valid:
+                    return []
+                
+                result = await self.fetcher.fetch_live(item)
+                return result if isinstance(result, list) else []
+        
+        tasks = [scan_one(item) for item in inputs]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for result in results:
+            if isinstance(result, list):
+                all_urls.extend(result)
+        
+        if all_urls:
+            self.logger.info(f"✓ Live browser complete: {len(all_urls)} JS files discovered\n")
+        
+        return all_urls
+    
     async def _discover_all_domains_concurrent(self, inputs: List[str], use_subjs: bool, subjs_only: bool) -> List[str]:
         """
-        PHASE 1: Concurrent domain discovery with SubJS and/or Live scanning
+        PHASE 1: Concurrent domain discovery using strategy pattern
         
         Args:
             inputs: List of URLs or domains to scan
@@ -757,240 +862,39 @@ class ScanEngine:
             List of discovered JavaScript URLs
         """
         all_urls = []
+        strategies = []
         
-        # Initialize SubJS if enabled
-        from ..strategies.passive import PassiveFetcher
-        subjs_fetcher = PassiveFetcher(self.config, self.logger)
-        
-        # PHASE 1A: Parallel Discovery (Katana + SubJS) - Maximum Speed
-        # Run Katana and SubJS batch mode in parallel for optimal performance
-        parallel_tasks = []
-        katana_task_info = None
-        subjs_task_info = None
-        
-        # Prepare Katana task if enabled
+        # Strategy 1: Katana (if enabled)
         if self.katana_fetcher.enabled and self.katana_fetcher.katana_path:
-            # Filter inputs to only domains/URLs (not direct JS files)
-            katana_targets = [item for item in inputs if not self._is_valid_js_url(item)]
-            
-            if katana_targets:
-                # Get scope domains for filtering
-                scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
-                
-                # Create async task wrapper for Katana
-                async def run_katana():
-                    self.logger.info(f"\n{'='*70}")
-                    self.logger.info("⚡ PHASE 1A-1: KATANA FAST-PASS (Speed Layer)")
-                    self.logger.info(f"{'='*70}")
-                    
-                    katana_urls = await asyncio.to_thread(
-                        self.katana_fetcher.fetch_urls,
-                        katana_targets,
-                        scope_domains
-                    )
-                    
-                    if katana_urls:
-                        self.logger.info(f"✓ Katana phase complete: {len(katana_urls)} JS files discovered\n")
-                    return katana_urls or []
-                
-                parallel_tasks.append(run_katana())
-                katana_task_info = len(parallel_tasks) - 1
-        
-        # Prepare SubJS batch task if enabled and has batch targets
-        if use_subjs:
-            batch_targets = [item for item in inputs if not self._is_valid_js_url(item)]
-            
-            if batch_targets:
-                # Create async task wrapper for SubJS batch mode
-                async def run_subjs_batch():
-                    self.logger.info(f"\n{'='*70}")
-                    self.logger.info("📚 PHASE 1A-2: SUBJS HISTORICAL SCAN (History Layer)")
-                    self.logger.info(f"{'='*70}")
-                    
-                    subjs_urls = await subjs_fetcher.fetch_batch(batch_targets)
-                    
-                    if subjs_urls:
-                        self.logger.info(f"✓ SubJS batch phase complete: {len(subjs_urls)} JS files discovered\n")
-                    return subjs_urls or []
-                
-                parallel_tasks.append(run_subjs_batch())
-                subjs_task_info = len(parallel_tasks) - 1
-        
-        # Execute parallel tasks if any
-        if parallel_tasks:
-            self.logger.info(f"\n{'='*70}")
-            self.logger.info(f"🚀 LAUNCHING {len(parallel_tasks)} PARALLEL DISCOVERY TASKS")
-            self.logger.info(f"{'='*70}\n")
-            
-            results = await asyncio.gather(*parallel_tasks, return_exceptions=True)
-            
-            # Process results
-            for idx, result in enumerate(results):
-                if isinstance(result, Exception):
-                    task_name = "Katana" if idx == katana_task_info else "SubJS"
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"❌ {task_name} task failed: {str(result)}")
-                    self.logger.debug(f"Full {task_name} task traceback:", exc_info=result)
-                elif result:
-                    all_urls.extend(result)
+            strategies.append(self._strategy_katana(inputs))
         elif self.katana_fetcher.enabled and not self.katana_fetcher.katana_path:
             self.logger.warning("⚠️  Katana enabled but not installed. Install with: go install github.com/projectdiscovery/katana/cmd/katana@latest\n")
         
-        # PHASE 1B: SubJS-Only Batch Mode (if enabled)
-        # If using subjs-only mode and no batch was already run in parallel
-        if subjs_only and PassiveFetcher.is_installed() and subjs_task_info is None:
+        # Strategy 2: SubJS (if enabled)
+        if use_subjs:
+            strategies.append(self._strategy_subjs(inputs))
+        
+        # Strategy 3: Live Browser (if not disabled)
+        if not subjs_only and not self.config.get('skip_live', False):
+            strategies.append(self._strategy_live_browser(inputs))
+        
+        # Execute all strategies in parallel
+        if strategies:
             self.logger.info(f"\n{'='*70}")
-            self.logger.info("📚 PHASE 1B: SUBJS BATCH MODE (subjs-only)")
-            self.logger.info(f"{'='*70}")
+            self.logger.info(f"🚀 LAUNCHING {len(strategies)} PARALLEL DISCOVERY STRATEGIES")
+            self.logger.info(f"{'='*70}\n")
             
-            # Write inputs to temp file for batch processing
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
-                for item in inputs:
-                    # Only add domains, not full JS URLs
-                    if not self._is_valid_js_url(item):
-                        f.write(item + '\n')
-                temp_file = f.name
+            results = await asyncio.gather(*strategies, return_exceptions=True)
             
-            try:
-                # Get scope domains for filtering
-                scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
-                
-                # Single batch SubJS call instead of thousands of subprocesses
-                batch_urls = await asyncio.to_thread(subjs_fetcher.fetch_from_file, temp_file, scope_domains)
-                
-                # Add any direct JS URLs from input
-                for item in inputs:
-                    if self._is_valid_js_url(item):
-                        batch_urls.append(item)
-                
-                # Deduplicate and add to all_urls
-                unique_batch_urls = self._deduplicate_urls(batch_urls)
-                all_urls.extend(unique_batch_urls)
-                
-                self.logger.info(f"✓ SubJS batch phase complete: {len(unique_batch_urls)} JS files discovered\n")
-                
-                # Store in metadata
-                self.state.update_metadata({
-                    'source_urls': all_urls[:100]
-                })
-                
-                return all_urls
-                
-            finally:
-                # Cleanup temp file
-                import os
-                try:
-                    os.unlink(temp_file)
-                except:
-                    pass
+            # Collect results
+            for idx, result in enumerate(results):
+                if isinstance(result, Exception):
+                    self.logger.error(f"❌ Strategy {idx+1} failed: {str(result)}")
+                    self.logger.debug(f"Full strategy traceback:", exc_info=result)
+                elif isinstance(result, list):
+                    all_urls.extend(result)
         
-        # Configure concurrency level with smart defaults based on scan mode
-        skip_live = self.config.get('skip_live', False)
-        
-        # Dynamic concurrency: Higher for SubJS-only (CPU-bound), lower for live scans (RAM-bound)
-        if 'max_concurrent_domains' in self.config:
-            # User explicitly set concurrency - respect it
-            max_concurrent_domains = self.config['max_concurrent_domains']
-        elif subjs_only or skip_live:
-            # SubJS-only mode: can handle more concurrent domains (lightweight)
-            max_concurrent_domains = 50
-            self.logger.info("🚀 SubJS-only mode detected - using high concurrency (50 domains)")
-        else:
-            # Live browser scan: keep concurrency conservative (RAM-intensive)
-            max_concurrent_domains = 10
-            self.logger.info("🌐 Live scan mode - using moderate concurrency (10 domains)")
-        
-        semaphore = asyncio.Semaphore(max_concurrent_domains)
-        
-        # Log concurrency settings to clarify expected timeout behavior
-        playwright_max_concurrent = self.config.get('playwright', {}).get('max_concurrent', 3)
-        playwright_timeout_ms = self.config.get('playwright', {}).get('page_timeout', 30000)
-        max_total_wait = (playwright_max_concurrent * playwright_timeout_ms) / 1000
-        self.logger.info(f"🚀 Processing {len(inputs)} domains with concurrency level: {max_concurrent_domains}")
-        self.logger.info(f"   Browser: {playwright_max_concurrent} concurrent instances, {playwright_timeout_ms/1000:.0f}s timeout each (max total wait: {max_total_wait:.0f}s)")
-        
-        async def discover_one_domain(index: int, item: str) -> List[str]:
-            """Discover JS files for a single domain/URL"""
-            async with semaphore:
-                discovered = []
-                
-                try:
-                    # Check if shutdown was requested
-                    if self.shutdown_requested:
-                        self.logger.warning("Shutdown requested, stopping input processing")
-                        return []
-                    
-                    # CASE A: It's already a full JS URL (scan immediately)
-                    if self._is_valid_js_url(item):
-                        self.logger.info(f"[{index+1}/{len(inputs)}] ✓ Direct JS URL: {item}")
-                        return [item]
-                    
-                    # CASE B: It's a Domain/Page URL (needs JS extraction)
-                    # Fast DNS pre-validation to skip dead domains
-                    is_valid, reason = await self.fetcher.validate_domain(item)
-                    if not is_valid:
-                        self.logger.warning(f"[{index+1}/{len(inputs)}] ⏭️  Skipping {item}: {reason}")
-                        return []
-                    
-                    self.logger.info(f"[{index+1}/{len(inputs)}] 📍 Processing: {item}")
-                    
-                    # Determine which discovery methods to use
-                    tasks = []
-                    
-                    # SubJS scan
-                    if use_subjs or subjs_only:
-                        if PassiveFetcher.is_installed():
-                            # Get scope domains for filtering
-                            scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
-                            tasks.append(('subjs', asyncio.to_thread(subjs_fetcher.fetch_urls, item, scope_domains)))
-                        else:
-                            self.logger.warning(f"  ⚠️  SubJS not installed, skipping SubJS scan")
-                    
-                    # Live browser scan (unless subjs_only mode)
-                    if not subjs_only and not self.config.get('skip_live', False):
-                        tasks.append(('live', self.fetcher.fetch_live(item)))
-                    
-                    # Execute discovery methods concurrently
-                    if tasks:
-                        results = await asyncio.gather(*[task[1] for task in tasks], return_exceptions=True)
-                        
-                        for i, result in enumerate(results):
-                            source_type = tasks[i][0]
-                            if isinstance(result, Exception):
-                                self.logger.error(f"  ├─ {source_type.capitalize()} scan error: {result}")
-                            elif isinstance(result, list):
-                                discovered.extend(result)
-                                self.logger.info(f"  ├─ {source_type.capitalize()} scan: Found {len(result)} JS files")
-                            else:
-                                self.logger.warning(f"  ├─ {source_type.capitalize()} scan: Unexpected result type")
-                    
-                    self.logger.info(f"  └─ Total discovered for {item}: {len(discovered)} JS files")
-                    
-                except Exception as e:
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"[{index+1}/{len(inputs)}] Error processing {item}: {str(e)}")
-                    self.logger.debug(f"Full discovery error traceback for {item}:", exc_info=True)
-                
-                return discovered
-        
-        # Process all domains concurrently
-        tasks = [discover_one_domain(i, item) for i, item in enumerate(inputs)]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Check shutdown before collecting URLs
-        if self.shutdown_requested:
-            self.logger.warning("⚠️  Discovery interrupted - shutting down")
-            return []
-        
-        # Collect all URLs
-        for result in results:
-            if isinstance(result, list):
-                all_urls.extend(result)
-            elif isinstance(result, Exception):
-                self.logger.error(f"Task exception during discovery: {result}")
-        
-        # Deduplicate URLs
+        # Deduplicate and return
         all_urls = self._deduplicate_urls(all_urls)
         
         self.logger.info(f"{'='*60}")
@@ -999,7 +903,7 @@ class ScanEngine:
         
         # Store source URLs in metadata
         self.state.update_metadata({
-            'source_urls': all_urls[:100]  # Store first 100 to avoid bloat
+            'source_urls': all_urls[:100]
         })
         
         return all_urls
@@ -1027,6 +931,7 @@ class ScanEngine:
             'invalid_url': 0,
             'out_of_scope': 0,
             'fetch_failed': 0,
+            'filtered': 0,
             'duplicate': 0
         }
         lock = asyncio.Lock()  # For thread-safe counter updates
@@ -1062,8 +967,37 @@ class ScanEngine:
                     # Fetch content
                     content = await self.fetcher.fetch_content(url)
                     if not content:
+                        # Classify failure using fetcher's last_failure_reason to avoid "untracked failures"
+                        reason = getattr(self.fetcher, 'last_failure_reason', None)
                         async with lock:
-                            failed_breakdown['fetch_failed'] += 1
+                            if reason and str(reason).startswith('filtered'):
+                                # Noise-filtered URLs should not be treated as fetch failures
+                                failed_breakdown['filtered'] += 1
+                            else:
+                                failed_breakdown['fetch_failed'] += 1
+
+                        # Update engine-level network error counters where applicable
+                        if reason:
+                            # Map common fetcher reasons to engine stats
+                            if reason in ('timeout',):
+                                self.stats['network_errors']['timeouts'] += 1
+                                self.stats['failures']['timeout'] += 1
+                            elif reason in ('dns_errors', 'dns'):
+                                self.stats['network_errors']['dns_errors'] += 1
+                            elif reason in ('connection_refused',):
+                                self.stats['network_errors']['connection_refused'] += 1
+                            elif reason in ('ssl_errors',):
+                                self.stats['network_errors']['ssl_errors'] += 1
+                            elif reason in ('rate_limit', 'rate_limits'):
+                                self.stats['network_errors']['rate_limits'] += 1
+                            elif reason in ('not_found',) or str(reason).startswith('http_') or reason in ('http_errors','non_retryable_error'):
+                                self.stats['network_errors']['http_errors'] += 1
+                                self.stats['failures']['http_error'] += 1
+
+                        # Verbose log for quick triage
+                        if verbose_mode:
+                            self.logger.info(f"❌ Fetch failed ({reason}) {url[:80]}")
+
                         return None
                     
                     # Calculate hash

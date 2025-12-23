@@ -13,17 +13,25 @@ from typing import Dict, List, Tuple, Optional
 class NoiseFilter:
     """Filter vendor libraries, CDNs, and analytics scripts"""
     
-    def __init__(self, config_path: str = "data/ignored_patterns.json", logger=None):
+    def __init__(self, config_path: str = "data/ignored_patterns.json", logger=None, scan_config: dict = None):
         """
         Initialize noise filter
         
         Args:
             config_path: Path to ignored patterns configuration
             logger: Logger instance
+            scan_config: Scanner configuration for thresholds
         """
         self.config_path = Path(config_path)
         self.logger = logger
+        self.scan_config = scan_config or {}
         self.config = self._load_config()
+        
+        # Load configurable thresholds (configuration-driven filtering)
+        noise_filter_config = self.scan_config.get('noise_filter', {})
+        self.min_size_kb = noise_filter_config.get('min_file_size_kb', 50)
+        self.max_newlines = noise_filter_config.get('max_newlines', 20)
+        
         self.stats = {
             'filtered_cdn': 0,
             'filtered_pattern': 0,
@@ -147,8 +155,9 @@ class NoiseFilter:
             size = len(content)
             newline_count = content.count('\n')
             
-            # Large minified files (>50KB) with very few newlines = likely vendor lib
-            if size > 50000 and newline_count < 20:
+            # Use configurable thresholds instead of hardcoded values
+            min_size_bytes = self.min_size_kb * 1024
+            if size > min_size_bytes and newline_count < self.max_newlines:
                 return True, "Vendor (large minified file)"
             
             # Check for common vendor signatures in first 1000 chars

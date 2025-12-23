@@ -157,3 +157,28 @@ bundle_unpacker:
 
 minimal_storage: false
 max_concurrent_domains: 10
+
+
+# ========================================
+# v4.1 Performance Improvements (NEW)
+# ========================================
+
+# Bloom Filter (Optional - requires pybloom-live)
+# Install: pip install pybloom-live
+# Provides O(1) hash lookups for faster duplicate detection
+bloom_filter:
+  enabled: true  # Auto-enabled if pybloom-live installed
+  capacity: 100000  # Initial capacity (auto-scales)
+  error_rate: 0.001  # 0.1% false positive rate
+
+# Noise Filter Thresholds (Configuration-Driven)
+# Adjust these to control vendor library detection sensitivity
+noise_filter:
+  min_file_size_kb: 50  # Files larger than this...
+  max_newlines: 20      # ...with fewer newlines = likely vendor lib
+
+# Secrets Streaming (Automatic)
+# Prevents memory exhaustion on large scans
+secrets:
+  buffer_size: 10  # Flush every N secrets to disk
+  streaming_enabled: true  # Always enabled (no config needed)

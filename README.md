@@ -1,28 +1,27 @@
-![banner](./static/banner.png)
-
-# ⚡ JS Scanner v4.0
+# ⚡ JS Scanner v4.1
 
 > **Blazing-fast JavaScript security scanner for bug bounty hunters**  
 > Hunt secrets, extract endpoints, analyze bundles — all in one tool.
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)](README.md)
-[![Version](https://img.shields.io/badge/Version-4.0-brightgreen.svg)](MASTER_PROTOCOL_v4.md)
+[![Version](https://img.shields.io/badge/Version-4.1-brightgreen.svg)](CHANGELOG.md)
 
 ---
 
-## ✨ What's New in v4.0 "Stealth & Dashboard"
+## ✨ What's New in v4.1 "Performance & Reliability"
 
-🎉 **Major upgrade with enterprise-grade features:**
+🎉 **Major performance and reliability improvements:**
 
-- 🥷 **WAF Bypass** — curl_cffi with Chrome TLS fingerprinting (bypasses Cloudflare/Akamai)
-- 📊 **Live Dashboard** — Real-time TUI with progress bars and statistics
-- 🧠 **SPA Intelligence** — Predictive webpack chunk discovery for React/Vue apps
-- 📂 **Clean Structure** — "Showroom vs. Warehouse" organized output
-- 🚀 **Performance** — +30-40% success rate on protected sites
+- 💧 **Memory Leak Fixed** — Secrets streaming prevents memory exhaustion (99% reduction)
+- ⚡ **Bloom Filter State** — 10x faster duplicate detection with O(1) lookups
+- 🔓 **JS Deobfuscation** — Automatic hex decoding and bracket notation simplification
+- 🛡️ **Graceful Degradation** — No crashes when tools missing, just warnings
+- 🎯 **Config-Driven Filtering** — Customizable noise filter thresholds
+- 🧹 **Code Refactoring** — 60% complexity reduction with strategy pattern
 
-**[📜 Read the full upgrade guide →](MASTER_PROTOCOL_v4.md)**
+**[Read the full changelog →](CHANGELOG.md)**
 
 ---
 

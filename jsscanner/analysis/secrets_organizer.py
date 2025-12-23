@@ -24,6 +24,68 @@ class DomainSecretsOrganizer:
         
         # Create findings directory
         self.secrets_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Track secrets file for streaming
+        self.streaming_file = self.secrets_dir / 'secrets.json'
+        self._streaming_secrets = []
+    
+    def __del__(self):
+        """Ensure buffer is flushed on cleanup"""
+        if hasattr(self, '_streaming_secrets') and self._streaming_secrets:
+            try:
+                import asyncio
+                # Try to flush remaining secrets
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self._flush_secrets())
+                else:
+                    loop.run_until_complete(self._flush_secrets())
+            except Exception as e:
+                if hasattr(self, 'logger') and self.logger:
+                    self.logger.warning(f"Failed to flush secrets buffer on cleanup: {e}")
+    
+    async def save_single_secret(self, secret: dict):
+        """
+        Stream a single secret to disk immediately (prevents memory exhaustion)
+        
+        Args:
+            secret: Single secret finding to save
+        """
+        try:
+            # Append to in-memory buffer
+            self._streaming_secrets.append(secret)
+            
+            # Periodically flush to disk (every 10 secrets)
+            if len(self._streaming_secrets) % 10 == 0:
+                await self._flush_secrets()
+        except Exception as e:
+            self.logger.error(f"Error saving single secret: {e}")
+    
+    async def _flush_secrets(self):
+        """Flush buffered secrets to disk"""
+        if not self._streaming_secrets:
+            return
+        
+        try:
+            # Load existing secrets
+            if self.streaming_file.exists():
+                with open(self.streaming_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            else:
+                data = {'secrets': [], 'total_count': 0}
+            
+            # Append new secrets
+            data['secrets'].extend(self._streaming_secrets)
+            data['total_count'] = len(data['secrets'])
+            
+            # Write back
+            with open(self.streaming_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            
+            # Clear buffer
+            self._streaming_secrets = []
+        except Exception as e:
+            self.logger.error(f"Error flushing secrets to disk: {e}")
     
     def _extract_domain(self, url: str) -> str:
         """

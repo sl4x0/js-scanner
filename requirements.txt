@@ -20,5 +20,9 @@ tree-sitter-javascript>=0.20.0
 # UI/Terminal
 colorama>=0.4.6
 
+# Performance optimization (optional)
+# Install for Bloom filter support: pip install pybloom-live
+pybloom-live>=1.0.3
+
 # Legacy (for compatibility)
 requests>=2.31.0

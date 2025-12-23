@@ -72,6 +72,56 @@ class Processor:
         # Otherwise, beautify the minified code
         return await self._beautify(content)
     
+    async def deobfuscate(self, content: str) -> str:
+        """
+        Advanced deobfuscation pipeline for obfuscated JavaScript
+        
+        Args:
+            content: Obfuscated JavaScript content
+            
+        Returns:
+            Deobfuscated content
+        """
+        # 1. Basic Beautification
+        content = await self._beautify(content)
+        
+        # 2. Packed Array Decoding (Hex/Unicode)
+        content = await self._decode_hex_arrays(content)
+        
+        # 3. Simplify Bracket Notation: object['property'] -> object.property
+        content = re.sub(r"\['([a-zA-Z_$][a-zA-Z0-9_$]*)'\]", r".\1", content)
+        
+        return content
+    
+    async def _decode_hex_arrays(self, content: str) -> str:
+        """
+        Helper to decode hex string literals in JavaScript
+        
+        Args:
+            content: JavaScript content with hex-encoded strings
+            
+        Returns:
+            Content with decoded strings
+        """
+        def decode_match(match):
+            try:
+                hex_str = match.group(1).replace('\\x', '')
+                # Validate hex string length
+                if len(hex_str) % 2 != 0:
+                    return match.group(0)
+                # Decode hex sequence to UTF-8 string
+                decoded = bytes.fromhex(hex_str).decode('utf-8', errors='ignore')
+                # Validate decoded result is printable
+                if all(c.isprintable() or c.isspace() for c in decoded):
+                    return f'"{decoded}"'
+                return match.group(0)
+            except (ValueError, OverflowError, UnicodeDecodeError):
+                # Return original if decoding fails
+                return match.group(0)
+        
+        # Regex for hex strings like "\xNN\xNN..."
+        return re.sub(r'"((\\x[0-9a-fA-F]{2})+)"', decode_match, content)
+    
     async def _beautify(self, content: str) -> str:
         """
         Beautifies minified JavaScript
