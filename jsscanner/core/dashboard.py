@@ -14,19 +14,25 @@ from typing import Dict
 
 
 class ScanDashboard:
-    """Real-time TUI dashboard for scan progress"""
+    """  Real-time TUI dashboard for scan progress"""
     
-    def __init__(self, target: str, console: Console = None):
+    def __init__(self, target: str, console: Console = None, logger=None):
         """
         Initialize dashboard
         
         Args:
             target: Target domain being scanned
             console: Rich console instance
+            logger: Logger instance to manage console output
         """
         self.target = target
         self.console = console or Console()
+        self.logger = logger
         self.start_time = datetime.now()
+        
+        # Store original console handler state
+        self._console_handler = None
+        self._original_level = None
         
         # Progress tracking
         self.progress = Progress(
@@ -57,7 +63,15 @@ class ScanDashboard:
         self.live = None
     
     def start(self):
-        """Start the live dashboard"""
+        """Start the live dashboard and disable console logging"""
+        # Disable console logging to prevent interference with Live display
+        if self.logger:
+            for handler in self.logger.handlers:
+                if hasattr(handler, '__class__') and 'RichHandler' in handler.__class__.__name__:
+                    self._console_handler = handler
+                    self._original_level = handler.level
+                    handler.setLevel(100)  # Effectively disable (higher than CRITICAL)
+        
         self.discovery_task = self.progress.add_task("[cyan]Discovery", total=100)
         self.download_task = self.progress.add_task("[yellow]Download", total=100)
         self.analysis_task = self.progress.add_task("[green]Analysis", total=100)
@@ -71,9 +85,13 @@ class ScanDashboard:
         self.live.start()
     
     def stop(self):
-        """Stop the live dashboard"""
+        """Stop the live dashboard and re-enable console logging"""
         if self.live:
             self.live.stop()
+        
+        # Re-enable console logging
+        if self._console_handler and self._original_level is not None:
+            self._console_handler.setLevel(self._original_level)
     
     def update_stats(self, **kwargs):
         """Update statistics"""

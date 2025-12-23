@@ -275,7 +275,7 @@ class ScanEngine:
             # Initialize dashboard if enabled (only once)
             if self.use_dashboard and not resume and self.dashboard is None:
                 try:
-                    self.dashboard = ScanDashboard(self.target, console=console)
+                    self.dashboard = ScanDashboard(self.target, console=console, logger=self.logger)
                     self.dashboard.start()
                     self.dashboard.update_stats(phase="Starting scan")
                     self.logger.info("✅ Dashboard initialized successfully")
