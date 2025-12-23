@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### 🚀 Major Performance Improvements
 
 #### Memory Leak Fix
+
 - **Fixed critical memory leak in secrets scanning** ([secrets.py](jsscanner/analysis/secrets.py))
   - Removed persistent `self.all_secrets` list that grew indefinitely
   - Implemented streaming architecture with buffered writes (10 secrets per flush)
@@ -18,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Can now handle unlimited secrets without exhaustion
 
 #### Bloom Filter State Optimization
+
 - **Added Bloom filter support for O(1) hash lookups** ([state.py](jsscanner/core/state.py))
   - 10x faster duplicate detection on large scans
   - Optional `pybloom-live` dependency for performance boost
@@ -28,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### ✨ New Features
 
 #### JavaScript Deobfuscation
+
 - **Added deobfuscation capabilities** ([processor.py](jsscanner/analysis/processor.py))
   - Hex string decoding (`\xNN` sequences)
   - Bracket notation simplification (`obj['prop']` → `obj.prop`)
@@ -35,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Automatic application during processing
 
 #### Configuration-Driven Filtering
+
 - **Made noise filter thresholds configurable** ([filtering.py](jsscanner/analysis/filtering.py))
   - `noise_filter.min_file_size_kb` (default: 50)
   - `noise_filter.max_newlines` (default: 20)
@@ -43,12 +47,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### 🛡️ Reliability Improvements
 
 #### Graceful Degradation
+
 - **Scanner no longer crashes when TruffleHog missing** ([secrets.py](jsscanner/analysis/secrets.py))
   - Clear warning messages with installation instructions
   - Continues scan without secret detection
   - Better user experience for quick scans
 
 #### Code Quality
+
 - **Refactored engine using strategy pattern** ([engine.py](jsscanner/core/engine.py))
   - Extracted `_strategy_katana()`, `_strategy_subjs()`, `_strategy_live_browser()`
   - Reduced complexity from 300+ to ~50 lines
@@ -58,6 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### 📚 Configuration Updates
 
 #### New Config Sections
+
 ```yaml
 # Bloom filter (optional - requires pybloom-live)
 bloom_filter:
@@ -76,16 +83,20 @@ secrets:
 ```
 
 ### 🛠️ Tools & Scripts
+
 - Added `scripts/migrate_state.py` - Migrate existing state to Bloom filter
 - Added `jsscanner/utils/config_validator.py` - Validate configuration files
 
 ### 🎯 Performance Metrics
+
 - **Memory reduction:** 99% for secret scanning on large targets
 - **Lookup speed:** 10x faster with Bloom filter (O(1) vs O(n))
 - **Code complexity:** 60% reduction in engine.py
 
 ### 📚 Dependencies
+
 #### Optional (for performance)
+
 - `pybloom-live>=1.0.3` - Bloom filter support
 
 ---
@@ -97,6 +108,7 @@ secrets:
 ### ✨ Added
 
 #### Network Layer - curl_cffi Migration
+
 - **Complete aiohttp removal**: Migrated all HTTP operations to curl_cffi
   - `jsscanner/modules/fetcher.py` - Main fetcher with Chrome 110 TLS fingerprint
   - `jsscanner/modules/source_map_recovery.py` - Source map downloads
@@ -105,6 +117,7 @@ secrets:
   - +30-40% success rate on Cloudflare/Akamai protected sites
 
 #### Live Dashboard
+
 - **Real-time TUI**: Created `jsscanner/core/dashboard.py`
   - Three progress bars: Discovery, Download, Analysis
   - Live statistics panel: URLs/Secrets/Findings
@@ -112,12 +125,14 @@ secrets:
   - Integrated Rich logging in `jsscanner/utils/logger.py`
 
 #### SPA Intelligence
+
 - **Webpack chunk prediction**: Enhanced `jsscanner/modules/ast_analyzer.py`
   - Detects webpack manifests and chunk IDs
   - Parses `__webpack_require__.e()` patterns
   - +15-25% more JS files discovered on SPAs
 
 #### Quality Assurance
+
 - **Automated tests**: `tests/verify_v4_integrity.py`
   - Python 3.11+ version check
   - Dependency verification
@@ -125,6 +140,7 @@ secrets:
   - Network layer test
 
 ### 🔧 Changed
+
 - **Python requirement**: Now requires Python 3.11+ (for asyncio.TaskGroup)
   - Added version check in `jsscanner/__main__.py`
 - **Version display**: Shows v4.0 with dependency status
@@ -132,10 +148,12 @@ secrets:
 ### 📦 Dependencies
 
 #### Added
+
 - `curl_cffi>=0.5.10` - WAF bypass via TLS fingerprinting
 - `rich>=13.7.0` - TUI dashboard
 
 #### Removed
+
 - `aiohttp>=3.9.0` - Replaced by curl_cffi
 
 #### Updated
