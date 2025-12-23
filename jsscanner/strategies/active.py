@@ -140,6 +140,9 @@ class ActiveFetcher:
             'rate_limits': 0,
             'http_errors': 0
         }
+        
+        # 🔍 DIAGNOSTIC: Track HTTP status codes for debugging
+        self.http_status_breakdown = {}
 
         # Initialize noise filter
         self.noise_filter = NoiseFilter(logger=logger)
@@ -816,16 +819,45 @@ class ActiveFetcher:
                 
                 # Auth Error (Interesting but not critical)
                 if response.status_code in [401, 403]:
-                    self.logger.debug(f"🔒 Access Denied (HTTP {response.status}): {url}")
+                    # 🔍 DIAGNOSTIC: Log HTTP 403/401 with details for troubleshooting
+                    self.http_status_breakdown[response.status_code] = self.http_status_breakdown.get(response.status_code, 0) + 1
+                    if self.verbose or response.status_code == 403:
+                        self.logger.warning(f"🚫 HTTP {response.status_code} (Access Denied): {url[:80]}")
+                        self.logger.debug(f"   Headers sent: {headers}")
+                        self.logger.debug(f"   Cookies: {list(self.valid_cookies.keys()) if self.valid_cookies else 'None'}")
+                    else:
+                        self.logger.debug(f"🔒 Access Denied (HTTP {response.status_code}): {url}")
                     self.last_failure_reason = 'auth_error'
                     self.error_stats['http_errors'] += 1
                     return None
                 
                 # Rate Limiting (No retries - fail fast)
                 if response.status_code in [429, 503]:
-                    self.logger.debug(f"[RATE LIMITED] {url} (status {response.status})")
+                    self.logger.debug(f"[RATE LIMITED] {url} (status {response.status_code})")
                     self.last_failure_reason = 'rate_limit'
                     self.error_stats['rate_limits'] += 1
+                    return None
+                
+                # 🔍 DIAGNOSTIC: Handle 404 and other non-success status codes
+                if response.status_code == 404:
+                    self.http_status_breakdown[404] = self.http_status_breakdown.get(404, 0) + 1
+                    if self.verbose:
+                        self.logger.warning(f"📉 HTTP 404 (Not Found): {url[:80]}")
+                    else:
+                        self.logger.debug(f"📉 HTTP 404 (Not Found): {url[:80]}")
+                    self.last_failure_reason = 'not_found'
+                    self.error_stats['http_errors'] += 1
+                    return None
+                
+                # Any other non-200 status
+                if response.status_code != 200:
+                    self.http_status_breakdown[response.status_code] = self.http_status_breakdown.get(response.status_code, 0) + 1
+                    if self.verbose:
+                        self.logger.warning(f"⚠️  HTTP {response.status_code}: {url[:80]}")
+                    else:
+                        self.logger.debug(f"HTTP {response.status_code}: {url[:80]}")
+                    self.last_failure_reason = f'http_{response.status_code}'
+                    self.error_stats['http_errors'] += 1
                     return None
 
 
