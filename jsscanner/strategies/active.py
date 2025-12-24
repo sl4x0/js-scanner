@@ -102,17 +102,34 @@ class BrowserManager:
                 raise e
             finally:
                 # CRITICAL: Always close to prevent memory leaks
+                # Suppress TargetClosedError during shutdown (Ctrl+C)
                 if page:
-                    await page.close()
+                    try:
+                        await page.close()
+                    except Exception as e:
+                        # Suppress "Target closed" errors during forced shutdown
+                        if 'Target' not in str(e) and 'closed' not in str(e).lower():
+                            raise
                 if context:
-                    await context.close()
+                    try:
+                        await context.close()
+                    except Exception as e:
+                        # Suppress "Target closed" errors during forced shutdown
+                        if 'Target' not in str(e) and 'closed' not in str(e).lower():
+                            raise
 
             return js_urls
     
     async def close(self):
-        """Close browser"""
+        """Close browser - suppress TargetClosedError during shutdown"""
         if self.browser:
-            await self.browser.close()
+            try:
+                await self.browser.close()
+            except Exception as e:
+                # Suppress "Target closed" errors during forced shutdown (Ctrl+C)
+                if 'Target' not in str(e) and 'closed' not in str(e).lower():
+                    # Re-raise unexpected errors
+                    raise
 
 
 class ActiveFetcher:

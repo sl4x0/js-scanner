@@ -246,6 +246,18 @@ def run():
         except ImportError:
             pass  # Silently fall back to standard asyncio
     
+    # Suppress "Future exception was never retrieved" warnings during shutdown
+    # This prevents Playwright TargetClosedError spam when pressing Ctrl+C
+    import warnings
+    import logging
+    
+    # Suppress asyncio warnings about uncollected futures
+    warnings.filterwarnings('ignore', message='.*Future exception was never retrieved.*')
+    
+    # Suppress Playwright TargetClosedError in asyncio logger
+    asyncio_logger = logging.getLogger('asyncio')
+    asyncio_logger.setLevel(logging.CRITICAL)
+    
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

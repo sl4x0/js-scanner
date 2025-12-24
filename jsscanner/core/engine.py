@@ -2097,10 +2097,46 @@ class ScanEngine:
         Saves critical data synchronously before exit
         """
         try:
-            # Run async save in event loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self._save_current_progress())
+            # Get the current event loop (where tasks are running)
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # If no loop exists, create a new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Cancel all pending tasks in the ORIGINAL loop first
+            # This prevents "Future exception was never retrieved" spam
+            try:
+                pending_tasks = asyncio.all_tasks(loop)
+                self.logger.debug(f"Cancelling {len(pending_tasks)} pending tasks...")
+                
+                for task in pending_tasks:
+                    if not task.done():
+                        task.cancel()
+                
+                # Wait for all tasks to acknowledge cancellation
+                if pending_tasks:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending_tasks, return_exceptions=True)
+                    )
+                self.logger.debug("All tasks cancelled successfully")
+            except Exception as e:
+                self.logger.debug(f"Task cancellation error (expected): {e}")
+            
+            # Force cleanup browser if it exists (prevents Playwright TargetClosedError)
+            if hasattr(self, 'fetcher') and self.fetcher:
+                try:
+                    loop.run_until_complete(self.fetcher.cleanup())
+                    self.logger.info("Browser cleanup completed")
+                except Exception as e:
+                    self.logger.debug(f"Browser cleanup error: {e}")
+            
+            # Now save progress
+            try:
+                loop.run_until_complete(self._save_current_progress())
+            except Exception as e:
+                self.logger.debug(f"Progress save error: {e}")
             
             # Stop Discord notifier
             if hasattr(self, 'notifier') and self.notifier:
@@ -2109,24 +2145,11 @@ class ScanEngine:
                 except Exception as e:
                     self.logger.debug(f"Notifier cleanup error: {e}")
             
-            # Force cleanup browser if it exists
-            if hasattr(self, 'fetcher') and self.fetcher:
-                try:
-                    loop.run_until_complete(self.fetcher.cleanup())
-                    self.logger.info("Browser cleanup completed")
-                except Exception as e:
-                    self.logger.debug(f"Browser cleanup error: {e}")
-            
-            # Cancel all pending tasks
+            # Close the loop
             try:
-                pending = asyncio.all_tasks(loop)
-                for task in pending:
-                    task.cancel()
-                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                loop.close()
             except Exception as e:
-                self.logger.debug(f"Task cleanup error: {e}")
-            
-            loop.close()
+                self.logger.debug(f"Loop close error: {e}")
             
             # Force kill any remaining playwright processes (with verification)
             try:
