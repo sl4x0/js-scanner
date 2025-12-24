@@ -15,6 +15,11 @@ from ..analysis.filtering import NoiseFilter
 from ..utils.net import retry_async, RETRY_CONFIG_HTTP
 
 
+class IncompleteDownloadError(Exception):
+    """Raised when a download completes but Content-Length doesn't match received bytes"""
+    pass
+
+
 class BrowserManager:
     """Manages Playwright browser instances with memory leak prevention"""
 
@@ -172,8 +177,17 @@ class ActiveFetcher:
         ])
         
         # Session will be initialized in initialize() method
-        self.session = None
+        self.session = None  # Legacy - kept for compatibility
+        self.session_pool = []  # Pool of sessions for load distribution
+        self.session_counter = 0  # Round-robin counter for session selection
+        self.download_counter = 0  # Track downloads for rotation
         self.ssl_verify = config.get('verify_ssl', False)
+        
+        # Session management configuration
+        session_config = config.get('session_management', {})
+        self.session_pool_size = session_config.get('pool_size', 3)
+        self.rotate_after = session_config.get('rotate_after', 150)
+        self.download_timeout = config.get('timeouts', {}).get('download_timeout', 300)
         
         # Enforce minimum retry count (minimum 3 retries for reliability)
         if 'retry' not in self.config:
@@ -268,18 +282,23 @@ class ActiveFetcher:
             return False, f"Validation error: {str(e)}"
     
     async def initialize(self) -> None:
-        """Initialize HTTP session and Playwright browser"""
-        # 1. Initialize curl_cffi session with Chrome TLS fingerprint for WAF bypass
+        """Initialize HTTP session pool and Playwright browser"""
+        # 1. Initialize curl_cffi session pool with Chrome TLS fingerprint for WAF bypass
         timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
         
-        # curl_cffi impersonates real browsers to bypass WAF/Cloudflare
-        # Using chrome120 for better Cloudflare compatibility (newer = less suspicious)
-        self.session = AsyncSession(
-            impersonate="chrome120",  # Mimics Chrome 120 TLS fingerprint
-            timeout=timeout_val,
-            verify=self.ssl_verify
-        )
-        self.logger.info("✅ Stealth HTTP Session initialized (curl_cffi with Chrome 120 fingerprint)")
+        # Create session pool for load distribution and resilience
+        self.logger.info(f"Creating session pool with {self.session_pool_size} sessions...")
+        for i in range(self.session_pool_size):
+            session = AsyncSession(
+                impersonate="chrome120",  # Mimics Chrome 120 TLS fingerprint
+                timeout=timeout_val,
+                verify=self.ssl_verify
+            )
+            self.session_pool.append(session)
+        
+        # Set primary session for backward compatibility
+        self.session = self.session_pool[0]
+        self.logger.info(f"✅ Stealth HTTP Session Pool initialized ({self.session_pool_size} sessions with Chrome 120 fingerprint)")
         
         # 2. Initialize Playwright browser only if needed
         skip_live = self.config.get('skip_live', False)
@@ -295,6 +314,44 @@ class ActiveFetcher:
             self.logger.info("Playwright browser manager initialized")
         else:
             self.logger.info("Playwright initialization skipped (--no-live flag)")
+    
+    def _get_session(self) -> AsyncSession:
+        """Get next session from pool using round-robin selection"""
+        if not self.session_pool:
+            raise RuntimeError("Session pool not initialized!")
+        
+        session = self.session_pool[self.session_counter % len(self.session_pool)]
+        self.session_counter += 1
+        return session
+    
+    async def _rotate_session(self, session_index: int) -> None:
+        """Rotate a specific session in the pool to prevent staleness"""
+        try:
+            timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
+            old_session = self.session_pool[session_index]
+            
+            # Close old session
+            try:
+                await asyncio.wait_for(old_session.close(), timeout=2.0)
+            except Exception as e:
+                self.logger.debug(f"Error closing old session: {str(e)}")
+            
+            # Create new session with same config
+            new_session = AsyncSession(
+                impersonate="chrome120",
+                timeout=timeout_val,
+                verify=self.ssl_verify
+            )
+            
+            self.session_pool[session_index] = new_session
+            
+            # Update primary session if rotating first one
+            if session_index == 0:
+                self.session = new_session
+            
+            self.logger.debug(f"✅ Rotated session {session_index} (downloads: {self.download_counter})")
+        except Exception as e:
+            self.logger.error(f"Failed to rotate session {session_index}: {str(e)}")
     
     async def _smart_interactions(self, page) -> None:
         """Trigger lazy loaders through smart interactions"""
@@ -406,26 +463,27 @@ class ActiveFetcher:
                 self.logger.debug("Full interaction failure traceback:", exc_info=True)
     
     async def cleanup(self) -> None:
-        """Cleanup HTTP session and Playwright resources - thread-safe with lock"""
+        """Cleanup HTTP session pool and Playwright resources - thread-safe with lock"""
         async with self._browser_lock:
-            # Close HTTP session first (curl_cffi's close is async but may fail during shutdown)
-            if self.session and not getattr(self.session, 'closed', False):
-                try:
-                    # Check if event loop is still alive before attempting cleanup
-                    loop = asyncio.get_event_loop()
-                    if not loop.is_closed():
-                        await asyncio.wait_for(self.session.close(), timeout=2.0)
-                        self.logger.info("HTTP Session closed successfully")
-                except asyncio.TimeoutError:
-                    # Session close timed out - suppress during shutdown
-                    self.logger.debug("Session close timeout (acceptable during shutdown)")
-                except RuntimeError as e:
-                    # Suppress event loop closed errors during shutdown
-                    if 'Event loop is closed' not in str(e):
-                        self.logger.debug(f"Session cleanup error: {str(e)}")
-                except Exception as e:
-                    # Suppress cleanup errors during forced exit
-                    self.logger.debug(f"Session cleanup error: {str(e)}")
+            # Close all sessions in the pool
+            if self.session_pool:
+                for i, session in enumerate(self.session_pool):
+                    if session and not getattr(session, 'closed', False):
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if not loop.is_closed():
+                                await asyncio.wait_for(session.close(), timeout=2.0)
+                        except asyncio.TimeoutError:
+                            self.logger.debug(f"Session {i} close timeout (acceptable during shutdown)")
+                        except RuntimeError as e:
+                            if 'Event loop is closed' not in str(e):
+                                self.logger.debug(f"Session {i} cleanup error: {str(e)}")
+                        except Exception as e:
+                            self.logger.debug(f"Session {i} cleanup error: {str(e)}")
+                
+                self.logger.info(f"HTTP Session pool closed successfully ({len(self.session_pool)} sessions)")
+                self.session_pool = []
+                self.session = None
             
             # Then close Playwright with proper waiting
             if self.browser_manager:
@@ -757,6 +815,7 @@ class ActiveFetcher:
             ConnectionError,
             TimeoutError,
             OSError,
+            IncompleteDownloadError,  # Retry on incomplete downloads
         )
         
         # Wrap the actual fetch logic with retry decorator
@@ -815,10 +874,20 @@ class ActiveFetcher:
         This method may raise exceptions that trigger retries.
         Uses the SHARED session to prevent connection exhaustion.
         """
-        if not self.session:
+        if not self.session_pool:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
         
         max_size = self.config.get('max_file_size', 10485760)
+        
+        # Get session from pool using round-robin
+        session = self._get_session()
+        
+        # Increment download counter and check for rotation
+        self.download_counter += 1
+        if self.download_counter % self.rotate_after == 0:
+            # Rotate the session that was just used
+            session_index = (self.session_counter - 1) % len(self.session_pool)
+            await self._rotate_session(session_index)
         
         # 🛡️ SESSION INHERITANCE: Build headers with Referer to bypass hotlink protection
         parsed_url = urlparse(url)
@@ -843,13 +912,19 @@ class ActiveFetcher:
             headers['Referer'] = origin
         
         # 🍪 Use curl_cffi with inherited cookies from Playwright (Cloudflare bypass)
-        # Pass valid cookies if we have them (from live browser scan)
-        response = await self.session.get(
-            url, 
-            headers=headers, 
-            cookies=self.valid_cookies if self.valid_cookies else None,
-            allow_redirects=False
-        )
+        # Apply download_timeout for large file downloads
+        try:
+            response = await asyncio.wait_for(
+                session.get(
+                    url,
+                    headers=headers,
+                    cookies=self.valid_cookies if self.valid_cookies else None,
+                    allow_redirects=False
+                ),
+                timeout=self.download_timeout
+            )
+        except asyncio.TimeoutError:
+            raise asyncio.TimeoutError(f"Download timeout after {self.download_timeout}s: {url}")
         
         try:
                 # ========== PHASE 3: Strategic Error Detection (Vulnerability Hinting) ==========
@@ -916,8 +991,56 @@ class ActiveFetcher:
                         self.last_failure_reason = 'too_large'
                         return None
 
-                    # curl_cffi returns text directly, handle size limit
-                    content = response.text
+                    # Streaming download with Content-Length validation
+                    # Fixes: curl error (18) "end of response with X bytes missing"
+                    try:
+                        # Check if response has content attribute for streaming
+                        if hasattr(response, 'content') and hasattr(response.content, 'iter_chunked'):
+                            # Stream the response in chunks
+                            chunks = []
+                            async for chunk in response.content.iter_chunked(8192):
+                                chunks.append(chunk)
+                            
+                            content_bytes = b''.join(chunks)
+                            
+                            # Validate Content-Length if provided
+                            if content_length:
+                                expected_size = int(content_length)
+                                actual_size = len(content_bytes)
+                                
+                                if actual_size != expected_size:
+                                    missing_bytes = expected_size - actual_size
+                                    raise IncompleteDownloadError(
+                                        f"Incomplete download: expected {expected_size} bytes, "
+                                        f"got {actual_size} bytes ({missing_bytes} bytes missing)"
+                                    )
+                            
+                            # Decode to string
+                            content = content_bytes.decode('utf-8', errors='ignore')
+                        else:
+                            # Fallback to response.text if streaming not available
+                            content = response.text
+                            
+                            # Validate size if Content-Length was provided
+                            if content_length:
+                                expected_size = int(content_length)
+                                actual_size = len(content.encode('utf-8'))
+                                
+                                if actual_size != expected_size:
+                                    missing_bytes = expected_size - actual_size
+                                    # Allow small discrepancies (compression, encoding differences)
+                                    if abs(missing_bytes) > 100:  # More than 100 bytes difference
+                                        raise IncompleteDownloadError(
+                                            f"Incomplete download: expected {expected_size} bytes, "
+                                            f"got {actual_size} bytes ({missing_bytes} bytes missing)"
+                                        )
+                    
+                    except IncompleteDownloadError:
+                        # Re-raise to trigger retry
+                        raise
+                    except Exception as e:
+                        self.logger.warning(f"Streaming download error, falling back to text: {str(e)}")
+                        content = response.text
                     
                     if len(content.encode('utf-8')) > max_size:
                         self.logger.warning(

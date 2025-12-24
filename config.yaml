@@ -61,23 +61,23 @@ code_splitting:
 # --- PERFORMANCE TUNING (uvloop Optimized) ---
 
 # Threading (Global)
+# CRITICAL: 'threads' controls ACTUAL download concurrency (not 'download_threads')
 # With uvloop, you can handle significantly more I/O concurrency.
 threads: 100 # Aggressive - your CPU load is <1.0, use it!
 
 # Batch Processing (The heavy lifting)
 batch_processing:
   enabled: true
-  # Phase 2: Mass Download
-  download_threads: 250 # Aggressive - max out network bandwidth
   # Phase 4: CPU Bound Processing
   process_threads: 100 # Matches increased threads setting
   cleanup_minified: false
 
-# Connection Pool
-connection_pool:
-  max_connections: 500 # Increased - you can handle more parallel connections
-  max_per_host: 30 # More aggressive per-host connections
-  ttl_dns_cache: 600
+# Session Management (curl_cffi HTTP Client)
+# Fixes "curl: (18) end of response with X bytes missing" errors
+session_management:
+  pool_size: 3 # Number of concurrent sessions (3-5 optimal)
+  rotate_after: 150 # Rotate sessions every N downloads to prevent staleness
+  download_timeout: 300 # 5 min timeout for large files (separate from http_request timeout)
 
 # --- SECRET SCANNING ---
 
@@ -133,9 +133,10 @@ user_agents:
   - "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0"
   - "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0"
 
-# --- LEGACY COMPATIBILITY (for code that may reference these) ---
+# --- TIMEOUTS ---
 timeouts:
-  http_request: 10 # Fail fast on slow/dead assets
+  http_request: 10 # Connection timeout for fast failure detection
+  download_timeout: 300 # Large file download timeout (overrides http_request for downloads)
   playwright_page: 20000 # Match playwright.page_timeout
   trufflehog: 300
 
