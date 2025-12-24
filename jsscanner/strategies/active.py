@@ -910,14 +910,16 @@ class ActiveFetcher:
         parsed_url = urlparse(url)
         origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
         
+        # More realistic browser headers to bypass 403 (anti-bot) protection
+        # Key changes: Remove Sec-Fetch headers (bot detection), add realistic Accept header
         headers = {
             'User-Agent': self._get_random_user_agent(),
-            'Accept': '*/*',
+            'Accept': 'application/javascript, */*;q=0.8',  # More specific than '*/*'
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
-            'Sec-Fetch-Dest': 'script',
-            'Sec-Fetch-Mode': 'no-cors',
-            'Sec-Fetch-Site': 'same-origin',
+            'Cache-Control': 'no-cache',  # Browsers send this
+            'Pragma': 'no-cache',  # Legacy but many servers expect it
+            # Removed Sec-Fetch-* headers - bot fingerprints that trigger 403
         }
         
         # Add Referer and Origin if we have a target domain (from browser scan)

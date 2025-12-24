@@ -34,7 +34,7 @@ playwright:
   headless: true
   max_concurrent: 8 # Increased - you have RAM headroom (11.7GB available)
   restart_after: 50 # Restart frequently to prevent Chromium memory leaks
-  page_timeout: 20000 # 20s timeout is enough for most SPAs
+  page_timeout: 30000 # 30s timeout for slow sites (geico.com, service-now.com)
 
 # Performance Optimizations
 interaction_delay: 0.3 # Ultra-fast interactions - reduced from 0.5s
@@ -135,9 +135,9 @@ user_agents:
 
 # --- TIMEOUTS ---
 timeouts:
-  http_request: 10 # Connection timeout for fast failure detection
+  http_request: 15 # Connection timeout (increased for slow networks like nba.com)
   download_timeout: 300 # Large file download timeout (overrides http_request for downloads)
-  playwright_page: 20000 # Match playwright.page_timeout
+  playwright_page: 30000 # Match playwright.page_timeout (increased to 30s)
   trufflehog: 300
 
 beautification:

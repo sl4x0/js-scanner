@@ -36,6 +36,11 @@ class State:
         db_path = self.target_path / '.warehouse' / 'db'
         findings_path = self.target_path / 'findings'
         
+        # CRITICAL: Ensure directories exist BEFORE accessing files
+        # Fixes: FileNotFoundError: [Errno 2] No such file or directory
+        db_path.mkdir(parents=True, exist_ok=True)
+        findings_path.mkdir(parents=True, exist_ok=True)
+        
         self.history_file = db_path / 'history.json'
         self.metadata_file = db_path / 'metadata.json'
         self.secrets_file = findings_path / 'secrets.json'
