@@ -594,7 +594,7 @@ class ScanEngine:
             
             # Generate Hunter's Report (instant triage summary)
             try:
-                generate_report(self.target_name, str(self.paths['base']), self.stats)
+                generate_report(self.target_name, str(self.paths['base']), self.stats, self.logger)
             except Exception as e:
                 self.logger.warning(f"Report generation failed: {e}")
             
