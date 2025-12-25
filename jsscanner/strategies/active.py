@@ -932,13 +932,15 @@ class ActiveFetcher:
         
         # 🍪 Use curl_cffi with inherited cookies from Playwright (Cloudflare bypass)
         # Apply download_timeout for large file downloads
+        # PERFORMANCE: Follow redirects automatically (301/302/308) to avoid treating them as errors
         try:
             response = await asyncio.wait_for(
                 session.get(
                     url,
                     headers=headers,
                     cookies=self.valid_cookies if self.valid_cookies else None,
-                    allow_redirects=False
+                    allow_redirects=True,  # CRITICAL: Follow redirects for performance
+                    max_redirects=5  # Reasonable limit to prevent redirect loops
                 ),
                 timeout=self.download_timeout
             )

@@ -238,10 +238,11 @@ def retry_sync(
 
 
 # Common retry configurations for different use cases
+# PERFORMANCE: Reduced backoff delays for faster failure recovery in large-scale scans
 RETRY_CONFIG_HTTP = {
     'max_attempts': 3,
-    'backoff_base': 1.0,
-    'backoff_multiplier': 2.0,
+    'backoff_base': 0.3,  # Reduced from 1.0s to 0.3s (faster recovery)
+    'backoff_multiplier': 1.5,  # Reduced from 2.0 to 1.5 (less aggressive backoff)
     'jitter': True
 }
 
@@ -254,7 +255,7 @@ RETRY_CONFIG_SUBPROCESS = {
 
 RETRY_CONFIG_LIGHT = {
     'max_attempts': 2,
-    'backoff_base': 0.5,
-    'backoff_multiplier': 2.0,
+    'backoff_base': 0.2,  # Reduced from 0.5s to 0.2s for fast operations
+    'backoff_multiplier': 1.5,  # Reduced from 2.0 to 1.5
     'jitter': True
 }
