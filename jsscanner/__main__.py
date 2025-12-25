@@ -263,6 +263,14 @@ def run():
     except KeyboardInterrupt:
         print("\n\nExiting...")
         sys.exit(0)
+    except BrokenPipeError:
+        # Gracefully handle broken pipe (e.g., when output is piped to `head` or `tail`)
+        # This prevents crash when the reading end of a pipe closes
+        import os
+        # Close stdout and stderr to prevent further write attempts
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(0)
 
 
 if __name__ == '__main__':

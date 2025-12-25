@@ -244,6 +244,13 @@ class ScanEngine:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
         
+        # Ignore SIGPIPE to prevent crashes when stdout is closed (e.g., piped to `head` or `tail`)
+        # This allows the scan to continue even if the reading end of a pipe closes
+        try:
+            signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+        except AttributeError:
+            pass  # SIGPIPE not available on Windows
+        
         try:
             # Start Discord notifier
             await self.notifier.start()
