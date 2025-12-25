@@ -52,6 +52,7 @@ class ScanEngine:
         self.processor = None
         self.secret_scanner = None
         self.ast_analyzer = None
+        self.semgrep_analyzer = None
         
         # Shutdown flag for graceful exit
         self.shutdown_requested = False
@@ -70,6 +71,7 @@ class ScanEngine:
         self.stats = {
             'total_files': 0,
             'total_secrets': 0,
+            'semgrep_findings': 0,
             'errors': [],
             'failures': {
                 'fetch_failed': 0,
@@ -515,6 +517,24 @@ class ScanEngine:
                 self.logger.info(f"{'='*60}")
             
             # ============================================================
+            # PHASE 5.5: SEMGREP STATIC ANALYSIS (Optional)
+            # ============================================================
+            if self.shutdown_requested:
+                self.logger.warning("⚠️  Shutdown requested before Semgrep analysis")
+                await self._save_current_progress()
+                return
+            
+            # Run Semgrep if enabled
+            if self.config.get('semgrep', {}).get('enabled', False):
+                self.logger.info(f"\n{'═'*70}")
+                self.logger.info("🔬 PHASE 5.5: SEMGREP STATIC ANALYSIS")
+                self.logger.info(f"{'═'*70}")
+                
+                await self._run_semgrep_analysis(unique_js_dir)
+            else:
+                self.logger.debug("ℹ️  Semgrep analysis disabled in config")
+            
+            # ============================================================
             # PHASE 6: CLEANUP
             # ============================================================
             if self.shutdown_requested:
@@ -724,6 +744,7 @@ class ScanEngine:
         from ..analysis.static import StaticAnalyzer
         from ..analysis.sourcemap import SourceMapRecoverer
         from ..strategies.fast import FastFetcher
+        from ..analysis.semgrep import SemgrepAnalyzer
         
         self.fetcher = ActiveFetcher(self.config, self.logger)
         skip_beautify = self.config.get('skip_beautification', False)
@@ -738,6 +759,7 @@ class ScanEngine:
         self.ast_analyzer = StaticAnalyzer(self.config, self.logger, self.paths)
         self.source_map_recoverer = SourceMapRecoverer(self.config, self.logger, self.paths)
         self.katana_fetcher = FastFetcher(self.config, self.logger)
+        self.semgrep_analyzer = SemgrepAnalyzer(self.config, self.logger, self.paths)
         
         # Initialize secrets organizer
         self.secret_scanner.initialize_organizer(self.paths['base'])
@@ -1341,6 +1363,39 @@ class ScanEngine:
         
         if timeout_count > 0:
             self.logger.info(f"ℹ️  {timeout_count} files timed out during beautification (using original)")
+    
+    async def _run_semgrep_analysis(self, directory_path: str):
+        """
+        PHASE 5.5: Run Semgrep static analysis on JS files
+        
+        Args:
+            directory_path: Path to directory containing deduplicated JS files (unique_js/)
+        """
+        # Validate Semgrep is available
+        if not self.semgrep_analyzer.validate():
+            self.logger.warning("⚠️  Semgrep validation failed, skipping static analysis")
+            return
+        
+        self.logger.info("🔍 Running Semgrep static analysis...")
+        self.logger.info(f"📂 Target: {directory_path}")
+        
+        # Run Semgrep scan
+        findings = await self.semgrep_analyzer.scan_directory(directory_path)
+        
+        # Update stats
+        self.stats['semgrep_findings'] = len(findings)
+        
+        # Save findings to file
+        if findings:
+            findings_path = Path(self.paths['base']) / 'findings' / 'semgrep.json'
+            self.semgrep_analyzer.save_findings(findings, str(findings_path))
+            
+            self.logger.info(f"✅ Semgrep analysis complete: {len(findings)} findings")
+            self.logger.info(f"💾 Results saved to: {findings_path}")
+        else:
+            self.logger.info("✅ Semgrep analysis complete: No findings")
+        
+        self.logger.info("")
     
     async def _cleanup_minified_files(self):
         """

@@ -182,3 +182,14 @@ noise_filter:
 secrets:
   buffer_size: 10 # Flush every N secrets to disk
   streaming_enabled: true # Always enabled (no config needed)
+
+
+# Semgrep Static Analysis (v4.2 NEW)
+# Requires: pip install semgrep && semgrep login
+# Purpose: Fast security pattern detection in downloaded JS files
+semgrep:
+  enabled: true  # Set to true after installing and logging in to Semgrep
+  timeout: 600  # Maximum scan time in seconds (10 minutes default)
+  max_target_bytes: 5000000  # Max file size to scan (5MB, prevents hanging on large files)
+  jobs: 5  # Parallel jobs for faster scanning
+  binary_path: ""  # Optional: explicit path to semgrep binary (leave empty for auto-detect)

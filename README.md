@@ -1,4 +1,4 @@
-# ⚡ JS Scanner v4.1
+# ⚡ JS Scanner v4.2
 
 > **Blazing-fast JavaScript security scanner for bug bounty hunters**  
 > Hunt secrets, extract endpoints, analyze bundles — all in one tool.
@@ -6,7 +6,21 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)](README.md)
-[![Version](https://img.shields.io/badge/Version-4.1-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-4.2-brightgreen.svg)](CHANGELOG.md)
+
+---
+
+## ✨ What's New in v4.2 "Semgrep Static Analysis"
+
+🎉 **New security pattern detection:**
+
+- 🔬 **Semgrep Integration** — Static analysis for security vulnerabilities (XSS, crypto, injection patterns)
+- ⚡ **Fast Parallel Scanning** — Configurable jobs for optimal performance
+- 📊 **Investigation Workflow** — Results saved to `findings/semgrep.json` for manual review
+- 🎯 **Smart Execution** — Runs on deduplicated, beautified JS files after Phase 5
+- 🛡️ **Graceful Degradation** — No crashes if Semgrep not installed
+
+**[Read the full changelog →](CHANGELOG.md)**
 
 ---
 
@@ -178,7 +192,23 @@ JS-Scanner is not a linear scanner — it's a **coordinated attack** on the targ
 └────────────────────────────┬────────────────────────────────────┘
                              │
 ┌────────────────────────────▼────────────────────────────────────┐
-│          PHASE 5: INTELLIGENCE REPORTING                        │
+│       PHASE 5.5: SEMGREP STATIC ANALYSIS (Optional)             │
+├─────────────────────────────────────────────────────────────────┤
+│  Semgrep Security Patterns:                                     │
+│  • Scan beautified JS for security vulnerabilities              │
+│  • Detect:                                                      │
+│    - XSS sinks (innerHTML, eval, document.write)                │
+│    - Insecure crypto (MD5, weak random)                         │
+│    - Path traversal patterns                                    │
+│    - SQL injection risks                                        │
+│  • Fast parallel scanning with configurable jobs                │
+│  • Results saved to findings/semgrep.json                       │
+│                                                                 │
+│                    ✓ 0-100+ patterns                            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+┌────────────────────────────▼────────────────────────────────────┐
+│          PHASE 6: INTELLIGENCE REPORTING                        │
 ├─────────────────────────────────────────────────────────────────┤
 │  Discord Alerts:                                                │
 │  • 🔴 RED: Verified Secrets (immediate alert)                  │
@@ -266,6 +296,7 @@ results/target/
 ├── 📂 findings/              # [TIER 2] High-value intelligence (pipeline ready)
 │   ├── secrets.json          # → All detected secrets
 │   ├── trufflehog.json       # → TruffleHog raw output
+│   ├── semgrep.json          # → Semgrep security patterns (if enabled)
 │   ├── endpoints.txt         # → API endpoints (ready for nuclei/ffuf)
 │   ├── params.txt            # → Parameters for fuzzing
 │   └── domains.txt           # → Discovered domains
@@ -309,6 +340,13 @@ katana:
 subjs:
   enabled: true # Historical JS file discovery
 
+# Static Analysis (Optional)
+semgrep:
+  enabled: false # Semgrep security pattern detection (install: pip install semgrep && semgrep login)
+  timeout: 600 # 10 minutes
+  max_target_bytes: 5000000 # 5MB max per file
+  jobs: 4 # Parallel scanning
+
 # Speed vs Completeness
 retry:
   http_requests: 1 # No retries (fast)
@@ -345,6 +383,46 @@ katana:
 - ⚡ 10x faster than Playwright for standard JS discovery
 - 🌐 Breadth-first crawling (robots.txt, sitemaps, known files)
 - 🔗 Works alongside Playwright (Katana for speed, Playwright for depth)
+
+---
+
+### Optional: Semgrep Static Analysis
+
+For **security pattern detection** in downloaded JavaScript files:
+
+```bash
+# Install Semgrep
+pip install semgrep
+
+# Login to access registry rules (free account)
+semgrep login
+# Follow the browser link and authorize
+
+# Enable in config.yaml
+semgrep:
+  enabled: true
+  timeout: 600
+  jobs: 4  # Parallel scanning for speed
+```
+
+**What it detects:**
+
+- 🔴 **XSS Sinks** — innerHTML, eval, document.write patterns
+- 🔐 **Insecure Crypto** — MD5, weak random, hardcoded salts
+- 📂 **Path Traversal** — Unsafe file path operations
+- 🗃️ **SQL Injection** — String concatenation in queries
+- 🌐 **SSRF Patterns** — User-controlled URLs in fetch/axios
+- 🔑 **Authentication Issues** — Weak JWT, missing validation
+
+**Performance Tips:**
+
+- Uses `--config=auto` to leverage Semgrep registry rules
+- Runs on **deduplicated, beautified** JS files (Phase 5.5)
+- Parallel processing with configurable `jobs` (default: 4)
+- `max_target_bytes` prevents hanging on large files (5MB default)
+- Results saved to `findings/semgrep.json` for manual review
+
+**Note:** This is for **investigation purposes only** — no Discord notifications sent. Review findings manually to identify patterns worth deeper investigation.
 
 ---
 

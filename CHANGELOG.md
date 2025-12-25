@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.2.0] - 2025-12-25 - "Semgrep Static Analysis"
+
+### ✨ New Features
+
+#### Semgrep Integration (Phase 5.5)
+
+- **Added Semgrep static analysis for security pattern detection** ([semgrep.py](jsscanner/analysis/semgrep.py))
+  - Runs after beautification on deduplicated JS files
+  - Detects security vulnerabilities: XSS sinks, insecure crypto, path traversal, SQL injection patterns
+  - Fast parallel scanning with configurable jobs (default: 4)
+  - Results saved to `findings/semgrep.json` for manual investigation
+  - Graceful degradation if Semgrep not installed
+  - Uses `--config=auto` for registry rules (requires `semgrep login`)
+  - Performance-optimized with `max_target_bytes` (5MB) to prevent hanging on large files
+  - **No Discord notifications** — designed for extraction and investigation workflow
+
+#### Engine Integration
+
+- **Integrated Semgrep as Phase 5.5** ([engine.py](jsscanner/core/engine.py))
+  - Runs between beautification (Phase 5) and cleanup (Phase 6)
+  - Automatic module initialization with other analyzers
+  - Stats tracking for `semgrep_findings` count
+  - Validation checks before execution
+
+#### Configuration
+
+- **Added Semgrep configuration section** ([config.yaml.example](config.yaml.example))
+  - `semgrep.enabled`: Toggle feature on/off (default: false)
+  - `semgrep.timeout`: Maximum scan time in seconds (default: 600)
+  - `semgrep.max_target_bytes`: Max file size to scan (default: 5MB)
+  - `semgrep.jobs`: Parallel jobs for faster scanning (default: 4)
+  - `semgrep.binary_path`: Optional explicit path to binary
+
+#### Documentation
+
+- **Updated README.md with Semgrep section**
+  - Installation instructions with `pip install semgrep && semgrep login`
+  - Configuration examples and performance tips
+  - Phase 5.5 added to architecture diagram
+  - Results structure updated to include `findings/semgrep.json`
+  - Use cases: investigation-focused, no alerting
+
+---
+
 ## [4.1.0] - 2025-12-23 - "Performance & Reliability"
 
 ### 🚀 Major Performance Improvements
