@@ -400,15 +400,12 @@ class ScanEngine:
             self.logger.info("🔍 PHASE 3: SCANNING FOR SECRETS (TruffleHog)")
             self.logger.info(f"{'='*60}")
             
-            # Reset all_secrets before scanning (in case of multiple scan_directory calls)
-            self.secret_scanner.all_secrets = []
-            
             # NEW: Scan unique_js directory (MD5-based content deduplication)
             unique_js_dir = str(Path(self.paths['unique_js']))
             
             # Scan unique JS files
             verified_secrets = await self.secret_scanner.scan_directory(unique_js_dir)
-            total_findings = len(self.secret_scanner.all_secrets)  # All findings (verified + unverified)
+            total_findings = self.secret_scanner.secrets_count  # Total findings counter (v4.1 fix)
             self.stats['total_secrets'] = total_findings
             self.stats['verified_secrets'] = len(verified_secrets)
             

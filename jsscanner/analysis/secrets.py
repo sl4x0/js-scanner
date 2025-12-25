@@ -633,7 +633,13 @@ class SecretScanner:
                 # Load to get count for logging
                 with open(output_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    secret_count = len(data.get('secrets', []))
+                    # Handle both list (old format) and dict (new format)
+                    if isinstance(data, list):
+                        secret_count = len(data)
+                    elif isinstance(data, dict):
+                        secret_count = len(data.get('secrets', []))
+                    else:
+                        secret_count = 0
                 
                 if secret_count > 0:
                     self.logger.info(f"Exported {secret_count} secrets to {output_path}")
