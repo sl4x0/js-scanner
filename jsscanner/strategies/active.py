@@ -1023,16 +1023,22 @@ class ActiveFetcher:
                             content_bytes = b''.join(chunks)
                             
                             # Validate Content-Length if provided
+                            # NOTE: Content-Length represents the compressed size if gzip is used
+                            # We receive uncompressed data, so actual size may be larger
                             if content_length:
                                 expected_size = int(content_length)
                                 actual_size = len(content_bytes)
                                 
-                                if actual_size != expected_size:
+                                # Only validate if we got LESS than expected (missing data)
+                                # If we got MORE, it means the server used compression (this is normal)
+                                if actual_size < expected_size:
                                     missing_bytes = expected_size - actual_size
-                                    raise IncompleteDownloadError(
-                                        f"Incomplete download: expected {expected_size} bytes, "
-                                        f"got {actual_size} bytes ({missing_bytes} bytes missing)"
-                                    )
+                                    # Allow small discrepancies (chunking boundaries)
+                                    if missing_bytes > 100:
+                                        raise IncompleteDownloadError(
+                                            f"Incomplete download: expected {expected_size} bytes, "
+                                            f"got {actual_size} bytes ({missing_bytes} bytes missing)"
+                                        )
                             
                             # Decode to string
                             content = content_bytes.decode('utf-8', errors='ignore')
@@ -1041,14 +1047,16 @@ class ActiveFetcher:
                             content = response.text
                             
                             # Validate size if Content-Length was provided
+                            # NOTE: Content-Length may represent compressed size
                             if content_length:
                                 expected_size = int(content_length)
                                 actual_size = len(content.encode('utf-8'))
                                 
-                                if actual_size != expected_size:
+                                # Only flag as error if we got significantly LESS than expected
+                                if actual_size < expected_size:
                                     missing_bytes = expected_size - actual_size
                                     # Allow small discrepancies (compression, encoding differences)
-                                    if abs(missing_bytes) > 100:  # More than 100 bytes difference
+                                    if missing_bytes > 100:  # More than 100 bytes difference
                                         raise IncompleteDownloadError(
                                             f"Incomplete download: expected {expected_size} bytes, "
                                             f"got {actual_size} bytes ({missing_bytes} bytes missing)"
