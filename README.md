@@ -1,6 +1,6 @@
 # ⚡ JS Scanner
 
-![CI](https://github.com/sl4x0/js-scanner/actions/workflows/test.yml/badge.svg)
+![CI](https://github.com/sl4x0/js-scanner/workflows/CI/badge.svg)
 ![Release](https://img.shields.io/github/v/tag/sl4x0/js-scanner?label=release)
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -59,3 +59,4 @@ If you'd like, I can (a) add a CI badge and small logo, or (b) expand Quick Star
 Found a bug? Have an idea? Open an issue or PR!
 
 **Made with ⚡ for bug bounty hunters**
+
