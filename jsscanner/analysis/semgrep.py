@@ -30,9 +30,11 @@ class SemgrepAnalyzer:
         # Extract semgrep config with defaults
         semgrep_config = config.get('semgrep', {})
         self.enabled = semgrep_config.get('enabled', False)
-        self.timeout = semgrep_config.get('timeout', 600)  # 10 minutes default
-        self.max_target_bytes = semgrep_config.get('max_target_bytes', 5000000)  # 5MB per file
-        self.jobs = semgrep_config.get('jobs', 4)  # Parallel jobs
+        self.timeout = semgrep_config.get('timeout', 120)  # 2 minutes default (was 600s)
+        self.max_target_bytes = semgrep_config.get('max_target_bytes', 2000000)  # 2MB per file (was 5MB)
+        self.jobs = semgrep_config.get('jobs', 8)  # Parallel jobs (increase)
+        self.ruleset = semgrep_config.get('ruleset', semgrep_config.get('config', 'p/javascript'))
+        self.max_files = semgrep_config.get('max_files', 100)
         
         # Semgrep binary detection
         self.semgrep_path = self._find_semgrep_binary(config)
@@ -133,6 +135,10 @@ class SemgrepAnalyzer:
             self.logger.warning("Semgrep is not available, skipping scan")
             return []
         
+        # Ensure Semgrep is present and usable
+        if not self.validate():
+            return []
+
         directory = Path(directory_path)
         if not directory.exists() or not directory.is_dir():
             self.logger.warning(f"Directory does not exist: {directory_path}")
@@ -140,19 +146,53 @@ class SemgrepAnalyzer:
         
         self.logger.info(f"📂 Scanning directory: {directory_path}")
         
-        # Build Semgrep command for maximum speed
+        # Gather JS files and pre-filter vendor/large files
+        js_files = list(directory.rglob('*.js'))
+        filtered_files: List[Path] = []
+        vendor_signs = ['webpack', 'umd', 'jquery', 'bootstrap', 'react.production', 'chunk-vendors', '__webpack_require__', 'vite']
+
+        for js_file in js_files:
+            try:
+                size = js_file.stat().st_size
+                if size > self.max_target_bytes:
+                    self.logger.debug(f"⏭️  Skipping large file for Semgrep: {js_file.name} ({size/1024/1024:.1f}MB)")
+                    continue
+
+                with open(js_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    first_kb = f.read(1024).lower()
+
+                if any(sign in first_kb for sign in vendor_signs):
+                    self.logger.debug(f"⏭️  Skipping vendor file for Semgrep: {js_file.name}")
+                    continue
+
+                filtered_files.append(js_file)
+            except Exception:
+                continue
+
+        self.logger.info(f"🔍 Semgrep scanning {len(filtered_files)}/{len(js_files)} files (filtered {len(js_files) - len(filtered_files)} vendor)")
+
+        if not filtered_files:
+            self.logger.info("ℹ️  No files to scan after filtering")
+            return []
+
+        # Build Semgrep command with SPEED optimizations
         cmd = [
             self.semgrep_path,
             'scan',
-            '--config=auto',  # Use registry rules (requires login)
-            '--json',  # JSON output for parsing
+            '--config', self.ruleset,
+            '--json',
             '--timeout', str(self.timeout),
             '--max-target-bytes', str(self.max_target_bytes),
-            '--jobs', str(self.jobs),  # Parallel processing
-            '--no-git-ignore',  # Scan all files, ignore .gitignore
-            '--skip-unknown-extensions',  # Only JS files
-            str(directory)
+            '--jobs', str(self.jobs),
+            '--no-git-ignore',
+            '--skip-unknown-extensions',
+            '--metrics=off',
+            '--optimizations=all',
         ]
+
+        # Add file paths directly (faster than scanning directory)
+        for f in filtered_files[: self.max_files]:
+            cmd.append(str(f))
         
         self.logger.debug(f"Running: {' '.join(cmd)}")
         

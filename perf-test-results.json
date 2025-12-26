@@ -1,0 +1,272 @@
+{
+  "target": "perf-test",
+  "scan_date": "2025-12-25T16:55:14.509986Z",
+  "statistics": {
+    "total_files": 32,
+    "total_secrets": 0,
+    "semgrep_findings": 0,
+    "errors": [],
+    "failures": {
+      "fetch_failed": 0,
+      "empty_content": 0,
+      "html_not_js": 0,
+      "too_short": 0,
+      "too_large": 0,
+      "timeout": 0,
+      "http_error": 0,
+      "duplicates": 0,
+      "invalid_url": 0
+    },
+    "network_errors": {
+      "dns_errors": 0,
+      "connection_refused": 0,
+      "ssl_errors": 0,
+      "timeouts": 0,
+      "rate_limits": 0,
+      "http_errors": 0
+    },
+    "verified_secrets": 0,
+    "secrets_summary": {
+      "total_domains": 0,
+      "total_secrets": 0,
+      "verified_secrets": 0,
+      "domains": {}
+    },
+    "extracts_detailed": {
+      "endpoints": [],
+      "domains": [],
+      "links": [
+        {
+          "value": ".pdf",
+          "sources": [
+            {
+              "file": "https://allergieaulaitdevache.fr/_next/static/dOZK68SWgSb0Awx50YPiN/pages/index.js",
+              "domain": "allergieaulaitdevache.fr",
+              "occurrences": 1
+            },
+            {
+              "file": "https://allergieaulaitdevache.fr/_next/static/chunks/commons.2c415b21221f020c3a41.js",
+              "domain": "allergieaulaitdevache.fr",
+              "occurrences": 1
+            }
+          ],
+          "total_occurrences": 2,
+          "unique_domains": [
+            "allergieaulaitdevache.fr"
+          ],
+          "domain_count": 1
+        },
+        {
+          "value": ".json",
+          "sources": [
+            {
+              "file": "https://allergieaulaitdevache.fr/_next/static/dOZK68SWgSb0Awx50YPiN/pages/index.js",
+              "domain": "allergieaulaitdevache.fr",
+              "occurrences": 1
+            }
+          ],
+          "total_occurrences": 1,
+          "unique_domains": [
+            "allergieaulaitdevache.fr"
+          ],
+          "domain_count": 1
+        },
+        {
+          "value": "sitemap.xml",
+          "sources": [
+            {
+              "file": "https://allergieaulaitdevache.fr/_next/static/dOZK68SWgSb0Awx50YPiN/pages/index.js",
+              "domain": "allergieaulaitdevache.fr",
+              "occurrences": 1
+            }
+          ],
+          "total_occurrences": 1,
+          "unique_domains": [
+            "allergieaulaitdevache.fr"
+          ],
+          "domain_count": 1
+        }
+      ],
+      "domains_summary": {}
+    },
+    "domain_summary": {
+      "allergieaulaitdevache.fr": {
+        "endpoints_count": 0
+      }
+    },
+    "scan_duration": 280.6953670978546
+  },
+  "files_scanned": [
+    "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+    "https://www.winterawards.ch/de/home/navdata?navVersion=1766678099",
+    "https://www.winterawards.ch/js/bundle.min.js?1765203390",
+    "https://enfagrow.com.pr/_next/static/chunks/fd9d1056-1392b586d7749940.js",
+    "https://enfagrow.com.pr/_next/static/chunks/7023-9ae8f9a68f711c65.js",
+    "https://enfagrow.com.pr/_next/static/chunks/main-app-55bbd77d79f9187f.js",
+    "https://enfagrow.com.pr/_next/static/chunks/d2a4ab90-2665f61674986b60.js",
+    "https://enfagrow.com.pr/_next/static/chunks/aaea2bcf-45c601d73a123aa1.js",
+    "https://enfagrow.com.pr/_next/static/chunks/9210-f393ac7f4d81ef49.js",
+    "https://enfagrow.com.pr/_next/static/chunks/231-a720311db5adf8e4.js",
+    "https://enfagrow.com.pr/_next/static/chunks/5200-f0d5e84f7973afa8.js",
+    "https://enfagrow.com.pr/_next/static/chunks/6158-51d3fe58855e2459.js",
+    "https://enfagrow.com.pr/_next/static/chunks/2674-646dc384d79b4824.js",
+    "https://enfagrow.com.pr/_next/static/chunks/5555-773197383f7878b0.js",
+    "https://enfagrow.com.pr/_next/static/chunks/3858-0a6a3f9d22d8c6dd.js",
+    "https://enfagrow.com.pr/_next/static/chunks/1336-62bbf4c2290b0b59.js",
+    "https://enfagrow.com.pr/_next/static/chunks/1415-e41b02c9fdfe3e01.js",
+    "https://enfagrow.com.pr/_next/static/chunks/8685-48a62979ea26ae3a.js",
+    "https://enfagrow.com.pr/_next/static/chunks/6204-21750e7240cc28fc.js",
+    "https://enfagrow.com.pr/_next/static/chunks/7874-aaebcfd646440eb0.js",
+    "https://enfagrow.com.pr/_next/static/chunks/1929-672dae94c22c40eb.js",
+    "https://enfagrow.com.pr/_next/static/chunks/2341-7906952ad142c841.js",
+    "https://enfagrow.com.pr/_next/static/chunks/4338-7d756ffa5c3d405f.js",
+    "https://enfagrow.com.pr/_next/static/chunks/2229-31ea29e52f80fd99.js",
+    "https://enfagrow.com.pr/_next/static/chunks/347-5716a2194f954c0f.js",
+    "https://enfagrow.com.pr/_next/static/chunks/7737-4223732554172387.js",
+    "https://enfagrow.com.pr/_next/static/chunks/2594-0c7f10e7132e6ea6.js",
+    "https://enfagrow.com.pr/_next/static/chunks/8502-9c61f7a781ceab2b.js",
+    "https://enfagrow.com.pr/_next/static/chunks/7382-c3dc3f5d1b65da23.js",
+    "https://enfagrow.com.pr/_next/static/chunks/2989-75da7ae3d8a2dc62.js",
+    "https://enfagrow.com.pr/_next/static/chunks/9381-ec5418639df3e0ee.js",
+    "https://enfagrow.com.pr/_next/static/chunks/app/%5Blocale%5D/%5B...slug%5D/page-0a46bc15f16f057b.js",
+    "https://enfagrow.com.pr/_next/static/chunks/8448-6cbba9c1f5f07b97.js",
+    "https://enfagrow.com.pr/_next/static/chunks/app/%5Blocale%5D/layout-ad7bad64017e499b.js",
+    "https://enfagrow.com.pr/_next/static/chunks/polyfills-78c92fac7aa8fdd8.js",
+    "https://enfagrow.com.pr/_next/static/chunks/webpack-db1fdc872242f519.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js",
+    "https://enfa.baby/checkouts/internal/preloads.js?locale=th-TH",
+    "https://www.enfababy.com/cdn/shopifycloud/shop-js/modules/v2/client.init-shop-cart-sync_LW2ol3EY.th.esm.js",
+    "https://www.enfababy.com/cdn/shopifycloud/shop-js/modules/v2/chunk.common_DPUnY-h6.esm.js",
+    "https://www.enfababy.com/cdn/shopifycloud/storefront/assets/storefront/load_feature-a0a9edcb.js",
+    "https://www.enfababy.com/cdn/shop/t/189/compiled_assets/scripts.js?68365",
+    "https://www.googletagmanager.com/gtag/js?id=DC-9145322",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/global.js?v=88558128918567037191739791308",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/form_validation.js?v=70057962773507847281762438966",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/jquery-3.7.1.min.js?v=158417595810649192771739791309",
+    "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.14.1/jquery-ui.min.js",
+    "https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/i18n/datepicker-th.js",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/app.min.js?v=143281814784847084671762438966",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/ls.script.min.js?v=141749522514624603181739791308",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/ls.bgset.min.js?v=178837292882797969851739791308",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/ls.rias.min.js?v=107658252925626787731739791308",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/lazysizes.min.js?v=56805471290311245611739791308",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/navToggleTwo.js?v=110157133518539410081757995516",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/cart.js?v=36883481313235385421757995507",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/quantity-cart.js?v=155529695327086882511739791308",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/featured-nav-pill.js?v=97437357955322624181739791308",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/anchor-tag.js?v=42783633939698904261739885386",
+    "https://maps.googleapis.com/maps/api/js?key=",
+    "https://www.enfababy.com/cdn/shopifycloud/perf-kit/shopify-perf-kit-2.1.2.min.js",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/details-modal.js?v=25581673532751508451739791309",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/search-form.js?v=47646789966334129911739791308",
+    "https://www.enfababy.com/cdn/shop/t/189/assets/anchor-article.js?v=144466480494317628871762438966",
+    "https://cdn.cookielaw.org/consent/2af39b44-6676-4de9-a43c-9c4a01e3a940/OtAutoBlock.js",
+    "https://allergieaulaitdevache.fr/_next/static/dOZK68SWgSb0Awx50YPiN/pages/index.js",
+    "https://allergieaulaitdevache.fr/_next/static/dOZK68SWgSb0Awx50YPiN/pages/_app.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/commons.2c415b21221f020c3a41.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/07fd.fe97e7473205ca75f0bb.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/styles.26b105e287793a6dc2d8.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/b98e.a2a8a43088553a44d5d3.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/c6b8.18d3d5740e79e6f3ddb1.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/5ddb.fc1ee6d2ab7ea303ba75.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/38f5.00b5ba96758dd5d67d80.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/91b0.c4e71ba9e6eee691e25c.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/a232.00e0a45965577a1b06f8.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/6608.1da74a921ff410051cf4.js",
+    "https://allergieaulaitdevache.fr/_next/static/chunks/f681.2095bbbcb66bf1996dfc.js",
+    "https://allergieaulaitdevache.fr/_next/static/runtime/webpack-0510e64631356297407c.js",
+    "https://allergieaulaitdevache.fr/_next/static/runtime/main-395827c41d51ec2af06d.js",
+    "https://cdn.cookielaw.org/consent/b4321030-8b9c-49b3-853d-3f12f5f5d6cd/OtAutoBlock.js",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/jquery.2.2.3.min.js?v=83030660623817882011601549630",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/lazysizes.min.js?v=154412560399573946731601549637",
+    "http://clubenfamama.com/checkouts/internal/preloads.js?locale=es-ES",
+    "http://www.enfamil.es/cdn/shopifycloud/shop-js/modules/v2/client.init-shop-cart-sync_CKHg5p7x.es.esm.js",
+    "http://www.enfamil.es/cdn/shopifycloud/shop-js/modules/v2/chunk.common_DkoBXfB9.esm.js",
+    "http://www.enfamil.es/cdn/shopifycloud/storefront/assets/storefront/load_feature-a0a9edcb.js",
+    "https://www.enfamil.es/cdn/shopifycloud/perf-kit/shopify-perf-kit-2.1.2.min.js",
+    "http://www.enfamil.es/cdn/shopifycloud/storefront/assets/themes_support/api.jquery-7ab1a3a4.js",
+    "http://www.enfamil.es/cdn/shopifycloud/storefront/assets/themes_support/option_selection-b017cd28.js",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/jquery.fancybox.js?v=98388074616830255951601549632",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/jquery.history.js?v=97881352713305193381601549633",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/jquery.scrollto.js?v=167258463914274652001601549635",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/jquery.master.js?v=165988298315719005311601549679",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/jquery.matchHeight-min.js?v=33058873599050103281601549634",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/jquery.cookie.js?v=72365755745404048181601549631",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/product.js?v=26810143986409672861629989029",
+    "http://www.enfamil.es/cdn/shop/t/29/assets/enfa-custom.js?v=150183629850732629541629383608",
+    "https://d1um8515vdn9kb.cloudfront.net/files/gempagev2.js?v=1.0",
+    "https://enfababy.com/checkouts/internal/preloads.js?locale=th-TH",
+    "https://www.enfabebe.com.do/sites/dominican/files/advagg_js/js__JBWAf6haYesowMnqN6pHOgqwj11X6ZX5y4VNjCLyCOc__UT9J09dZUc7DyTGFRjbwKOEDTVYnmBNdSz9Aea4cUqM__hfprwMIMJJDMBAWPU-2LksNS2lgudBqkBthDbzxX5MM.js",
+    "https://www.enfabebe.com.do/sites/dominican/files/advagg_js/js__AbgteLDZrVyDoajsR0xApPhhnomcPjhLCAOXtOVfDDw__WPK4ILp2hILKztWD1Px3rIvEtMR753tWSp19Ze2t0t0__hfprwMIMJJDMBAWPU-2LksNS2lgudBqkBthDbzxX5MM.js",
+    "https://cdn.cookielaw.org/consent/d9f75037-0f6c-43da-90c1-9b5c416bced4/OtAutoBlock.js",
+    "https://service.force.com/embeddedservice/5.0/esw.min.js",
+    "https://www.enfabebe.com.do/sites/dominican/files/advagg_js/js__FZ2njB-_PWkPjbrXXiFvlnhIn4sAX_nxTU43iwQcajg__cIopW-_UnrAfBs9Gmp_OhWRv3IGlt7oQn49mSEQfpVc__hfprwMIMJJDMBAWPU-2LksNS2lgudBqkBthDbzxX5MM.js",
+    "https://www.enfabebe.com.do/sites/dominican/files/advagg_js/js__yt3Eg8yJg0zrCeAY6SZMBGGMYBD-sVvdo7OOx1u8nOY__IbvTiVzUfj1xbAFr0S8grFsmGZSh6G0OAMbg_Izc7v8__hfprwMIMJJDMBAWPU-2LksNS2lgudBqkBthDbzxX5MM.js",
+    "http://enfaclub.sg/js/core.min.js",
+    "http://enfaclub.sg/js/custom.js"
+  ],
+  "secrets_found": 0,
+  "extracts": {
+    "endpoints": [],
+    "domains": [],
+    "links": [
+      {
+        "value": ".pdf",
+        "sources": [
+          {
+            "file": "https://allergieaulaitdevache.fr/_next/static/dOZK68SWgSb0Awx50YPiN/pages/index.js",
+            "domain": "allergieaulaitdevache.fr",
+            "occurrences": 1
+          },
+          {
+            "file": "https://allergieaulaitdevache.fr/_next/static/chunks/commons.2c415b21221f020c3a41.js",
+            "domain": "allergieaulaitdevache.fr",
+            "occurrences": 1
+          }
+        ],
+        "total_occurrences": 2,
+        "unique_domains": [
+          "allergieaulaitdevache.fr"
+        ],
+        "domain_count": 1
+      },
+      {
+        "value": ".json",
+        "sources": [
+          {
+            "file": "https://allergieaulaitdevache.fr/_next/static/dOZK68SWgSb0Awx50YPiN/pages/index.js",
+            "domain": "allergieaulaitdevache.fr",
+            "occurrences": 1
+          }
+        ],
+        "total_occurrences": 1,
+        "unique_domains": [
+          "allergieaulaitdevache.fr"
+        ],
+        "domain_count": 1
+      },
+      {
+        "value": "sitemap.xml",
+        "sources": [
+          {
+            "file": "https://allergieaulaitdevache.fr/_next/static/dOZK68SWgSb0Awx50YPiN/pages/index.js",
+            "domain": "allergieaulaitdevache.fr",
+            "occurrences": 1
+          }
+        ],
+        "total_occurrences": 1,
+        "unique_domains": [
+          "allergieaulaitdevache.fr"
+        ],
+        "domain_count": 1
+      }
+    ],
+    "domains_summary": {}
+  },
+  "extracts_legacy": {
+    "endpoints": [],
+    "params": [],
+    "domains": []
+  }
+}

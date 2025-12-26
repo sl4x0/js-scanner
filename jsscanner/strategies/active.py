@@ -331,6 +331,59 @@ class ActiveFetcher:
             self.logger.info("Playwright browser manager initialized")
         else:
             self.logger.info("Playwright initialization skipped (--no-live flag)")
+
+    async def _preflight_check(self, url: str) -> Tuple[bool, str, Optional[int]]:
+        """
+        Fast pre-flight HEAD request to reject large or invalid files quickly.
+        Returns (should_download, reason, content_length_or_none)
+        """
+        try:
+            session = self._get_session()
+
+            # HEAD request with short timeout to fail fast
+            try:
+                resp = await asyncio.wait_for(
+                    session.head(url, allow_redirects=True),
+                    timeout=5.0
+                )
+            except asyncio.TimeoutError:
+                return False, 'head_timeout', None
+
+            # Check HTTP status
+            status = getattr(resp, 'status_code', None)
+            if status is None or status >= 400:
+                return False, f'http_{status}', None
+
+            # Content-Length check
+            content_length = None
+            cl = resp.headers.get('Content-Length') if getattr(resp, 'headers', None) else None
+            if cl:
+                try:
+                    content_length = int(cl)
+                except Exception:
+                    content_length = None
+
+                if content_length:
+                    size_mb = content_length / (1024 * 1024)
+                    # Hard reject very large files (vendor bundles)
+                    if size_mb > self.config.get('max_file_size_mb_reject', 5.0):
+                        self.logger.info(f"⏭️  Skipping large file: {url[:80]} ({size_mb:.1f}MB)")
+                        return False, f'too_large_{size_mb:.1f}MB', content_length
+                    if size_mb > 2.0:
+                        self.logger.warning(f"⚠️  Large file detected: {url[:80]} ({size_mb:.1f}MB) - may be vendor code")
+
+            # Content-Type validation
+            ctype = resp.headers.get('Content-Type', '').lower() if getattr(resp, 'headers', None) else ''
+            valid_types = ['javascript', 'ecmascript', 'text/plain', 'application/json']
+            if ctype and not any(t in ctype for t in valid_types):
+                return False, f'invalid_content_type_{ctype}', content_length
+
+            return True, 'ok', content_length
+
+        except Exception as e:
+            # Preflight should never block download on unexpected errors - allow fallback
+            self.logger.debug(f"Preflight check error: {e}")
+            return True, 'preflight_error', None
     
     def _get_session(self) -> AsyncSession:
         """Get next session from pool using round-robin selection"""
@@ -896,6 +949,13 @@ class ActiveFetcher:
         
         max_size = self.config.get('max_file_size', 10485760)
         
+        # Preflight check to reject vendor/huge files quickly
+        should_download, reason, preflight_content_length = await self._preflight_check(url)
+        if not should_download:
+            self.logger.debug(f"⏭️  Preflight rejected: {url} - {reason}")
+            self.last_failure_reason = f'preflight_{reason}'
+            return None
+
         # Get session from pool using round-robin
         session = self._get_session()
         
@@ -931,8 +991,25 @@ class ActiveFetcher:
             headers['Referer'] = origin
         
         # 🍪 Use curl_cffi with inherited cookies from Playwright (Cloudflare bypass)
-        # Apply download_timeout for large file downloads
+        # Apply download_timeout for large file downloads - progressive based on preflight
         # PERFORMANCE: Follow redirects automatically (301/302/308) to avoid treating them as errors
+        # Determine progressive timeout
+        download_timeout = self.config.get('timeouts', {}).get('download_timeout', 30)
+        if preflight_content_length:
+            try:
+                size_mb = int(preflight_content_length) / (1024 * 1024)
+            except Exception:
+                size_mb = 0
+
+            if size_mb < 0.5:
+                download_timeout = 15
+            elif size_mb < 2.0:
+                download_timeout = 45
+            else:
+                download_timeout = min(90, self.config.get('timeouts', {}).get('download_timeout', 90))
+
+        self.logger.debug(f"Download timeout: {download_timeout}s for {url}")
+
         try:
             response = await asyncio.wait_for(
                 session.get(
@@ -942,7 +1019,7 @@ class ActiveFetcher:
                     allow_redirects=True,  # CRITICAL: Follow redirects for performance
                     max_redirects=5  # Reasonable limit to prevent redirect loops
                 ),
-                timeout=self.download_timeout
+                timeout=download_timeout
             )
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(f"Download timeout after {self.download_timeout}s: {url}")

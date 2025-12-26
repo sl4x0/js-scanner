@@ -35,10 +35,28 @@ class NoiseFilter:
         self.stats = {
             'filtered_cdn': 0,
             'filtered_pattern': 0,
+            'filtered_vendor_url': 0,
             'filtered_hash': 0,
             'filtered_vendor': 0,
             'total_checked': 0
         }
+        # Hardcoded vendor URL patterns for aggressive speed mode
+        self.vendor_url_patterns = [
+            '*shopifycloud/checkout-web/assets/*',
+            '*shopifycloud/consent-tracking-api/*',
+            '*shopify.com/s/javascripts/*',
+            '*cdnjs.cloudflare.com/*',
+            '*cdn.jsdelivr.net/*',
+            '*unpkg.com/*',
+            '*googleapis.com/*',
+            '*google-analytics.com/*',
+            '*googletagmanager.com/*',
+            '*facebook.net/*',
+            '*doubleclick.net/*',
+            '*vendor*.js',
+            '*chunk-vendors*.js',
+            '*polyfills*.js',
+        ]
     
     def _load_config(self) -> Dict:
         """Load blacklist configuration"""
@@ -80,6 +98,13 @@ class NoiseFilter:
         self.stats['total_checked'] += 1
         
         try:
+            # Vendor URL patterns (fast rejection)
+            url_lower = url.lower()
+            for pattern in self.vendor_url_patterns:
+                if fnmatch.fnmatch(url_lower, pattern.lower()):
+                    self.stats['filtered_vendor_url'] += 1
+                    return True, f"vendor_pattern: {pattern}"
+
             # Check CDN domains
             parsed = urlparse(url)
             domain = parsed.netloc.lower()
@@ -93,7 +118,6 @@ class NoiseFilter:
                 return True, f"CDN: {domain}"
             
             # Check URL patterns (case-insensitive)
-            url_lower = url.lower()
             for pattern in self.config.get('url_patterns', []):
                 if fnmatch.fnmatch(url_lower, pattern.lower()):
                     self.stats['filtered_pattern'] += 1
