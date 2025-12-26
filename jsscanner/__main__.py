@@ -126,6 +126,7 @@ async def main():
     
     if args.subjs_only:
         config['skip_live'] = True
+        config.setdefault('katana', {})['enabled'] = False  # Disable Katana in SubJS-only mode
     
     # Apply CLI overrides for Katana
     if args.katana:

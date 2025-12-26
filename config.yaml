@@ -7,19 +7,19 @@
 # Global timeout for HTTP requests (per URL)
 timeout: 15 # Connection timeout in seconds (reduced for fail-fast behavior)
 verify_ssl: false # Keep false for bug bounty (expired certs often host dev/staging)
-max_file_size: 209715200  # 200 MB limit to avoid huge files
-max_file_size_mb_download: 200.0
+max_file_size: 5242880  # 5 MB max to keep scans fast for bug bounty
+max_file_size_mb_download: 5.0
 
 # --- HYBRID DISCOVERY (The Funnel) ---
 
 # 1. SPEED LAYER: Katana (Go Binary)
 # Fastest discovery. Covers 80% of surface area.
 katana:
-  enabled: true
-  depth: 3 # Depth 3 is standard for finding deep JS files
-  concurrency: 120 # Aggressive concurrency - you have CPU headroom
-  rate_limit: 300 # Requests/sec - doubled for max speed
-  timeout: 300 # [CRITICAL] Increased to 5 mins. 100s is too short for depth 3.
+  enabled: false
+  depth: 2 # shallower for faster runs
+  concurrency: 20 # reduced concurrency for stable runs
+  rate_limit: 150 # lower RPS conservative default
+  timeout: 60 # faster fail-fast for Katana
   # Custom flags appended to default: -silent -jc -kf all
   args: "-field-scope scope" # Ensure it stays in scope (redundant safety)
 
@@ -78,7 +78,7 @@ batch_processing:
 session_management:
   pool_size: 3 # Number of concurrent sessions (3-5 optimal)
   rotate_after: 100 # Rotate sessions every N downloads to prevent staleness
-  download_timeout: 30 # 30s default download timeout (progressive timeouts used for larger files)
+  download_timeout: 30 # 30s default download timeout (reduced from 300)
 
 # --- SECRET SCANNING ---
 
@@ -175,8 +175,8 @@ bloom_filter:
 # Noise Filter Thresholds (Configuration-Driven)
 # Adjust these to control vendor library detection sensitivity
 noise_filter:
-  min_file_size_kb: 1 # Ignore tiny files (1KB minimum)
-  max_newlines: 10 # Heuristic for minified code (fewer newlines = vendor lib)
+  min_file_size_kb: 100 # Ignore tiny files (1KB -> 100KB for speed)
+  max_newlines: 15 # Heuristic for minified code (tuned)
 
 # Secrets Streaming (Automatic)
 # Prevents memory exhaustion on large scans
@@ -193,6 +193,6 @@ semgrep:
   timeout: 120  # Maximum scan time in seconds (2 minutes default)
   max_target_bytes: 2000000  # Max file size to scan (2MB)
   jobs: 8  # Parallel jobs for faster scanning
-  ruleset: 'p/javascript'
+  ruleset: 'p/security-audit'
   max_files: 100
   binary_path: ""  # Optional: explicit path to semgrep binary (leave empty for auto-detect)
