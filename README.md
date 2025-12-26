@@ -1,228 +1,69 @@
-# ⚡ JS Scanner v4.2
+# ⚡ JS Scanner
 
-> **Blazing-fast JavaScript security scanner for bug bounty hunters**  
-> Hunt secrets, extract endpoints, analyze bundles — all in one tool.
+![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)](README.md)
-[![Version](https://img.shields.io/badge/Version-4.2-brightgreen.svg)](CHANGELOG.md)
+A fast, focused JavaScript reconnaissance tool for bug bounty hunters — discovers JS, extracts endpoints, and hunts secrets with minimal configuration.
 
----
-
-## ✨ What's New in v4.2 "Semgrep Static Analysis"
-
-🎉 **New security pattern detection:**
-
-- 🔬 **Semgrep Integration** — Static analysis for security vulnerabilities (XSS, crypto, injection patterns)
-- ⚡ **Fast Parallel Scanning** — Configurable jobs for optimal performance
-- 📊 **Investigation Workflow** — Results saved to `findings/semgrep.json` for manual review
-- 🎯 **Smart Execution** — Runs on deduplicated, beautified JS files after Phase 5
-- 🛡️ **Graceful Degradation** — No crashes if Semgrep not installed
-
-**[Read the full changelog →](CHANGELOG.md)**
+- Small, portable, and automation-friendly
+- Streams downloads to disk to avoid memory pressure
+- Hybrid discovery: Katana | SubJS | Playwright
+- Optional Semgrep + TruffleHog integrations
 
 ---
 
-## ✨ What's New in v4.1 "Performance & Reliability"
+**Quick Start**
 
-🎉 **Major performance and reliability improvements:**
-
-- 💧 **Memory Leak Fixed** — Secrets streaming prevents memory exhaustion (99% reduction)
-- ⚡ **Bloom Filter State** — 10x faster duplicate detection with O(1) lookups
-- 🔓 **JS Deobfuscation** — Automatic hex decoding and bracket notation simplification
-- 🛡️ **Graceful Degradation** — No crashes when tools missing, just warnings
-- 🎯 **Config-Driven Filtering** — Customizable noise filter thresholds
-- 🧹 **Code Refactoring** — 60% complexity reduction with strategy pattern
-
-**[Read the full changelog →](CHANGELOG.md)**
-
----
-
-## 🎯 Why Use This?
-
-**Traditional scanners waste time on dead endpoints and slow sites.**  
-This scanner is built for **speed and efficiency**:
-
-- ⚡ **Fail-fast** — Skips non-responsive sites instantly (5s timeout)
-- 🚫 **No redirects** — Treats redirects as failures (no wasted retries)
-- 🎯 **No retries** — Single attempt per URL (skip bad targets immediately)
-- 🔥 **Massive concurrency** — 100+ parallel downloads
-- 🧠 **Smart filtering** — Ignores CDN noise and known libraries
-- 🔒 **Instant alerts** — Verified secrets sent to Discord immediately
-- 🥷 **Stealth Mode** — Browser-like fingerprints to bypass WAFs
-
-Perfect for scanning **thousands of domains** in bug bounty programs.
-
----
-
-## 🚀 Quick Start
-
-```bash
-# 1. Setup
+```powershell
+# 1. Install deps
 pip install -r requirements.txt
 playwright install chromium
 
-# 2. Configure
-cp config.yaml.example config.yaml
-# Edit config.yaml with your Discord webhook
+# 2. Copy config
+copy config.yaml.example config.yaml
+# edit config.yaml (add discord_webhook, tune threads)
 
-# 3. Scan (with live dashboard!)
-python -m jsscanner -t myprogram --subjs -u https://target.com
+# 3. Run a quick scan
+python -m jsscanner -t mytarget -u https://example.com --subjs
 ```
 
-**That's it.** Results saved to `results/myprogram/`
-
-**New in v4.0:** Check the live dashboard while scanning! 📊
+Results are saved under `results/<target>/`.
 
 ---
 
-## 💡 Usage Examples
+**Minimal Workflow**
 
-### Fast Discovery Scan
+1. Discovery — Katana/SubJS/Browser find JS files
+2. Filter & Download — stream-to-disk, hash, dedupe
+3. Analyze — AST, source-maps, semgrep, secrets
+4. Report — findings, endpoints, Discord alerts
 
-```bash
-# SubJS API only — fastest way to find JS files
-python -m jsscanner -t target --subjs-only -u https://example.com --no-beautify
+Simple ASCII flow:
+
 ```
-
-### Full Deep Scan
-
-```bash
-# Browser crawling + SubJS + source maps + beautification
-python -m jsscanner -t target --subjs -u https://example.com --source-maps
-```
-
-### Secrets Only (Ultra-Fast)
-
-```bash
-# Skip extraction and beautification — just hunt secrets
-python -m jsscanner -t target --subjs-only --no-extraction --no-beautify -u https://example.com
-```
-
-### Bulk Domain Scan
-
-```bash
-# Scan multiple domains from file
-python -m jsscanner -t bug-bounty -i domains.txt --subjs --no-beautify
+inputs -> [Discovery (Katana / SubJS / Playwright)]
+  -> [Filter & Download (stream -> disk)]
+  -> [Analysis (AST / Semgrep / Secrets)]
+  -> [Report (files/, findings/, discord)]
 ```
 
 ---
 
-## 📊 How It Works
+Why this README is short:
 
-## 📊 How It Works
+- This repo focuses on tools and automation; detailed design and examples live in `ARCHITECTURE.md` and `CHANGELOG.md`.
 
-### 🏗️ Architecture: Multi-Stage Hunter
+Helpful links
 
-JS-Scanner is not a linear scanner — it's a **coordinated attack** on the target's JavaScript surface using three discovery speeds:
+- Changelog: CHANGELOG.md
+- Architecture: ARCHITECTURE.md
+- Config example: config.yaml.example
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     INITIALIZATION & STATE                      │
-│  • Load history.json (remember scanned hashes)                  │
-│  • Verify dependencies (katana, subjs, trufflehog)              │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│               PHASE 1: HYBRID DISCOVERY (The Funnel)            │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐   │
-│  │   KATANA     │  │    SubJS     │  │   PLAYWRIGHT       │   │
-│  │  (Speed)     │  │  (History)   │  │ (Intelligence)     │   │
-│  ├──────────────┤  ├──────────────┤  ├────────────────────┤   │
-│  │ Go binary    │  │ Wayback/     │  │ Headless Chrome    │   │
-│  │ 1000s req/s  │  │ CommonCrawl  │  │ Smart interactions:│   │
-│  │ robots.txt   │  │ Orphaned JS  │  │ • Scroll           │   │
-│  │ sitemaps     │  │ Old configs  │  │ • Hover menus      │   │
-│  │              │  │              │  │ • Click tabs       │   │
-│  │ 80% in secs  │  │ Historical   │  │ Lazy-loaded 20%    │   │
-│  └──────┬───────┘  └──────┬───────┘  └─────────┬──────────┘   │
-│         └──────────────────┴──────────────────────┘             │
-│                            │                                    │
-│                    ✓ 500-1000 JS URLs                           │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│              PHASE 2: THE FILTER (Data Hygiene)                 │
-├─────────────────────────────────────────────────────────────────┤
-│  1. Scope Check     → Drop out-of-scope (analytics.google.com) │
-│  2. Download        → Parallel fetch (100 threads)              │
-│  3. Hash Check      → MD5 fingerprint calculation               │
-│     • Known Library? → DROP (jQuery/React/Bootstrap)            │
-│     • Scanned Before? → DROP (check history.json)               │
-│  4. Result          → Only custom/modified target code          │
-│                                                                 │
-│                    ✓ 200-400 unique files                       │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│          PHASE 3: DEEP ANALYSIS (The Recursion)                 │
-├─────────────────────────────────────────────────────────────────┤
-│  A. AST Recursion (Tree-Sitter)                                │
-│     • Parse: import('./admin.js'), require('config')            │
-│     • Action: Send new URLs back to Phase 2                     │
-│     • Result: Dig deep into app structure (2-3 levels)          │
-│                                                                 │
-│  B. Bundle Unpacking (Webcrack)                                 │
-│     • Detect: app.bundle.js, vendor.chunk.js                    │
-│     • Action: Explode into original source files                │
-│     • Result: src/components/auth/login.js revealed             │
-│                                                                 │
-│  C. Source Map Recovery                                         │
-│     • Find: .map files                                          │
-│     • Action: Reconstruct original TypeScript/unminified code   │
-│     • Result: Human-readable source with comments               │
-│                                                                 │
-│                    ✓ 500-2000 analyzed files                    │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│         PHASE 4: SECRET SCANNING (The Kill Chain)               │
-├─────────────────────────────────────────────────────────────────┤
-│  TruffleHog Streaming:                                          │
-│  • Pipe clean, unique, un-minified code → TruffleHog            │
-│  • Detect:                                                      │
-│    - High-Entropy Strings (API Keys)                            │
-│    - Specific Patterns (AWS, Stripe, Slack, Private Keys)       │
-│    - Hardcoded Credentials (passwords, tokens)                  │
-│  • Context: Record file path + line number                      │
-│                                                                 │
-│                    ✓ 0-50 findings                              │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│       PHASE 5.5: SEMGREP STATIC ANALYSIS (Optional)             │
-├─────────────────────────────────────────────────────────────────┤
-│  Semgrep Security Patterns:                                     │
-│  • Scan beautified JS for security vulnerabilities              │
-│  • Detect:                                                      │
-│    - XSS sinks (innerHTML, eval, document.write)                │
-│    - Insecure crypto (MD5, weak random)                         │
-│    - Path traversal patterns                                    │
-│    - SQL injection risks                                        │
-│  • Fast parallel scanning with configurable jobs                │
-│  • Results saved to findings/semgrep.json                       │
-│                                                                 │
-│                    ✓ 0-100+ patterns                            │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│          PHASE 6: INTELLIGENCE REPORTING                        │
-├─────────────────────────────────────────────────────────────────┤
-│  Discord Alerts:                                                │
-│  • 🔴 RED: Verified Secrets (immediate alert)                  │
-│  • 🟠 ORANGE: Potential Secrets (manual review)                │
-│  • Context: Line of code + file link + domain                   │
-│                                                                 │
-│  Artifact Generation:                                           │
-│  • endpoints.txt     → API routes (feed to Burp/fuzzers)        │
-│  • cloud_assets.txt  → S3 buckets, Azure blobs                  │
-│  • secrets.json      → Full findings database                   │
-│  • domains.txt       → All discovered domains                   │
-│                                                                 │
-│                    ✓ Actionable intelligence                    │
-└─────────────────────────────────────────────────────────────────┘
+---
+
+Want me to (a) add a small project logo image and CI badge, or (b) expand the Quick Start with example outputs? Reply with your choice.
+
 ```
 
 ### 🎯 The Result
@@ -289,31 +130,33 @@ JS-Scanner is not a linear scanner — it's a **coordinated attack** on the targ
 **Tiered "Warehouse vs. Showroom" Organization**
 
 ```
+
 results/target/
 │
-├── 📄 REPORT.md              # [TIER 1] Executive summary — start here
+├── 📄 REPORT.md # [TIER 1] Executive summary — start here
 │
-├── 📂 findings/              # [TIER 2] High-value intelligence (pipeline ready)
-│   ├── secrets.json          # → All detected secrets
-│   ├── trufflehog.json       # → TruffleHog raw output
-│   ├── semgrep.json          # → Semgrep security patterns (if enabled)
-│   ├── endpoints.txt         # → API endpoints (ready for nuclei/ffuf)
-│   ├── params.txt            # → Parameters for fuzzing
-│   └── domains.txt           # → Discovered domains
+├── 📂 findings/ # [TIER 2] High-value intelligence (pipeline ready)
+│ ├── secrets.json # → All detected secrets
+│ ├── trufflehog.json # → TruffleHog raw output
+│ ├── semgrep.json # → Semgrep security patterns (if enabled)
+│ ├── endpoints.txt # → API endpoints (ready for nuclei/ffuf)
+│ ├── params.txt # → Parameters for fuzzing
+│ └── domains.txt # → Discovered domains
 │
-├── 📂 artifacts/             # [TIER 3] Human-readable evidence
-│   └── source_code/          # → Beautified JS organized by domain
+├── 📂 artifacts/ # [TIER 3] Human-readable evidence
+│ └── source_code/ # → Beautified JS organized by domain
 │
-├── 📂 logs/                  # [TIER 4] Audit trail
-│   └── scan.log              # → Debug information
+├── 📂 logs/ # [TIER 4] Audit trail
+│ └── scan.log # → Debug information
 │
-└── 🔒 .warehouse/            # [TIER 5] Hidden machine data
-    ├── raw_js/               # → Original downloaded files
-    ├── minified/             # → Processing cache
-    └── db/                   # → Scan history & metadata
-        ├── history.json      # → Deduplication database
-        └── metadata.json     # → Scan statistics
-```
+└── 🔒 .warehouse/ # [TIER 5] Hidden machine data
+├── raw_js/ # → Original downloaded files
+├── minified/ # → Processing cache
+└── db/ # → Scan history & metadata
+├── history.json # → Deduplication database
+└── metadata.json # → Scan statistics
+
+````
 
 **Design Benefits:**
 
@@ -363,7 +206,7 @@ max_concurrent_domains: 10 # Process 10 domains at once
 discord_webhook: "YOUR_WEBHOOK"
 trufflehog_path: "" # Auto-detected
 verify_ssl: false # Bypass SSL errors
-```
+````
 
 ### Optional: Katana Integration
 

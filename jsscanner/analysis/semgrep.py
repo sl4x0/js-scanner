@@ -158,10 +158,27 @@ class SemgrepAnalyzer:
                     self.logger.debug(f"⏭️  Skipping large file for Semgrep: {js_file.name} ({size/1024/1024:.1f}MB)")
                     continue
 
-                with open(js_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    first_kb = f.read(1024).lower()
+                # Read first and last 1KB to improve vendor detection (some signatures at file end)
+                try:
+                    with open(js_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        first_kb = f.read(1024).lower()
+                        # Read last 1KB safely
+                        try:
+                            file_size = js_file.stat().st_size
+                            if file_size > 1024:
+                                f.seek(max(0, file_size - 1024))
+                                last_kb = f.read().lower()
+                            else:
+                                last_kb = first_kb
+                        except Exception:
+                            last_kb = first_kb
+                except Exception:
+                    # If file can't be read, skip it
+                    continue
 
-                if any(sign in first_kb for sign in vendor_signs):
+                combined_sample = (first_kb + last_kb).lower()
+
+                if any(sign in combined_sample for sign in vendor_signs):
                     self.logger.debug(f"⏭️  Skipping vendor file for Semgrep: {js_file.name}")
                     continue
 

@@ -64,6 +64,18 @@ class ScanEngine:
         self.current_phase = None
         self.phase_start_time = None
         self.phase_progress = {'current': 0, 'total': 0}
+
+        # Sub-engines (thin wrappers) for separation of concerns
+        try:
+            from .subengines import DiscoveryEngine, DownloadEngine, AnalysisEngine
+            self.discovery = DiscoveryEngine(self)
+            self.download = DownloadEngine(self)
+            self.analysis = AnalysisEngine(self)
+        except Exception:
+            # Fallback: leave attributes unset if import fails
+            self.discovery = None
+            self.download = None
+            self.analysis = None
         
         # Statistics
         self.start_time = None
@@ -780,26 +792,8 @@ class ScanEngine:
         Returns:
             List of discovered JavaScript URLs
         """
-        targets = [item for item in inputs if not self._is_valid_js_url(item)]
-        if not targets:
-            return []
-        
-        scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
-        
-        self.logger.info(f"\n{'='*70}")
-        self.logger.info("⚡ STRATEGY: KATANA FAST-PASS (Speed Layer)")
-        self.logger.info(f"{'='*70}")
-        
-        katana_urls = await asyncio.to_thread(
-            self.katana_fetcher.fetch_urls,
-            targets,
-            scope_domains
-        )
-        
-        if katana_urls:
-            self.logger.info(f"✓ Katana complete: {len(katana_urls)} JS files discovered\n")
-        
-        return katana_urls or []
+        # Delegated to DiscoveryEngine (migrated)
+        return await self.discovery.discover_with_katana(inputs)
     
     async def _strategy_subjs(self, inputs: List[str]) -> List[str]:
         """
@@ -811,27 +805,8 @@ class ScanEngine:
         Returns:
             List of discovered JavaScript URLs
         """
-        from ..strategies.passive import PassiveFetcher
-        
-        targets = [item for item in inputs if not self._is_valid_js_url(item)]
-        if not targets:
-            return []
-        
-        subjs_fetcher = PassiveFetcher(self.config, self.logger)
-        if not PassiveFetcher.is_installed():
-            self.logger.warning("⚠️  SubJS not installed, skipping SubJS strategy")
-            return []
-        
-        self.logger.info(f"\n{'='*70}")
-        self.logger.info("📚 STRATEGY: SUBJS HISTORICAL SCAN (History Layer)")
-        self.logger.info(f"{'='*70}")
-        
-        subjs_urls = await subjs_fetcher.fetch_batch(targets)
-        
-        if subjs_urls:
-            self.logger.info(f"✓ SubJS complete: {len(subjs_urls)} JS files discovered\n")
-        
-        return subjs_urls or []
+        # Delegated to DiscoveryEngine (migrated)
+        return await self.discovery.discover_with_subjs(inputs)
     
     async def _strategy_live_browser(self, inputs: List[str]) -> List[str]:
         """
@@ -843,37 +818,8 @@ class ScanEngine:
         Returns:
             List of discovered JavaScript URLs
         """
-        self.logger.info(f"\n{'='*70}")
-        self.logger.info("🌐 STRATEGY: LIVE BROWSER SCAN")
-        self.logger.info(f"{'='*70}")
-        
-        all_urls = []
-        max_concurrent = self.config.get('max_concurrent_domains', 10)
-        semaphore = asyncio.Semaphore(max_concurrent)
-        
-        async def scan_one(item: str) -> List[str]:
-            async with semaphore:
-                if self._is_valid_js_url(item):
-                    return [item]
-                
-                is_valid, reason = await self.fetcher.validate_domain(item)
-                if not is_valid:
-                    return []
-                
-                result = await self.fetcher.fetch_live(item)
-                return result if isinstance(result, list) else []
-        
-        tasks = [scan_one(item) for item in inputs]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for result in results:
-            if isinstance(result, list):
-                all_urls.extend(result)
-        
-        if all_urls:
-            self.logger.info(f"✓ Live browser complete: {len(all_urls)} JS files discovered\n")
-        
-        return all_urls
+        # Delegated to DiscoveryEngine (migrated)
+        return await self.discovery.discover_with_browser(inputs)
     
     async def _discover_all_domains_concurrent(self, inputs: List[str], use_subjs: bool, subjs_only: bool) -> List[str]:
         """
@@ -889,20 +835,23 @@ class ScanEngine:
         """
         all_urls = []
         strategies = []
-        
+
+        # Precompute scope domains once and pass to katana/subjs when appropriate
+        scope_domains = self._get_scope_domains() if not self.config.get('no_scope_filter', False) else None
+
         # Strategy 1: Katana (if enabled)
         if self.katana_fetcher.enabled and self.katana_fetcher.katana_path:
-            strategies.append(self._strategy_katana(inputs))
+            strategies.append(self.discovery.discover_with_katana(inputs, scope_domains))
         elif self.katana_fetcher.enabled and not self.katana_fetcher.katana_path:
             self.logger.warning("⚠️  Katana enabled but not installed. Install with: go install github.com/projectdiscovery/katana/cmd/katana@latest\n")
-        
+
         # Strategy 2: SubJS (if enabled)
         if use_subjs:
-            strategies.append(self._strategy_subjs(inputs))
-        
+            strategies.append(self.discovery.discover_with_subjs(inputs, scope_domains))
+
         # Strategy 3: Live Browser (if not disabled)
         if not subjs_only and not self.config.get('skip_live', False):
-            strategies.append(self._strategy_live_browser(inputs))
+            strategies.append(self.discovery.discover_with_browser(inputs))
         
         # Execute all strategies in parallel
         if strategies:
@@ -949,232 +898,8 @@ class ScanEngine:
             - minified_path: Path to minified file
             - content: File content
         """
-        downloaded_files = []
-        semaphore = asyncio.Semaphore(self.config.get('threads', 50))
-        total_urls = len(urls)
-        completed = 0
-        failed_breakdown = {
-            'invalid_url': 0,
-            'out_of_scope': 0,
-            'fetch_failed': 0,
-            'filtered': 0,
-            'duplicate': 0
-        }
-        lock = asyncio.Lock()  # For thread-safe counter updates
-        
-        async def download_one(url: str) -> Optional[dict]:
-            nonlocal completed
-            async with semaphore:
-                try:
-                    # 🔍 DIAGNOSTIC: Log every URL being processed in verbose mode
-                    verbose_mode = self.config.get('verbose', False)
-                    if verbose_mode:
-                        self.logger.info(f"📥 Download: {url[:80]}")
-                    
-                    # Validate URL
-                    if not self._is_valid_js_url(url):
-                        if verbose_mode:
-                            self.logger.info(f"❌ Invalid URL: {url[:80]}")
-                        else:
-                            self.logger.debug(f"Invalid URL: {url}")
-                        async with lock:
-                            failed_breakdown['invalid_url'] += 1
-                        return None
-                    
-                    if not self._is_target_domain(url):
-                        if verbose_mode:
-                            self.logger.info(f"❌ Out of scope: {url[:80]}")
-                        else:
-                            self.logger.debug(f"Out of scope: {url}")
-                        async with lock:
-                            failed_breakdown['out_of_scope'] += 1
-                        return None
-                    
-                    # Fetch content
-                    content = await self.fetcher.fetch_content(url)
-                    if not content:
-                        # Classify failure using fetcher's last_failure_reason to avoid "untracked failures"
-                        reason = getattr(self.fetcher, 'last_failure_reason', None)
-                        async with lock:
-                            if reason and str(reason).startswith('filtered'):
-                                # Noise-filtered URLs should not be treated as fetch failures
-                                failed_breakdown['filtered'] += 1
-                            else:
-                                failed_breakdown['fetch_failed'] += 1
-
-                        # Update engine-level network error counters where applicable
-                        if reason:
-                            # Map common fetcher reasons to engine stats
-                            if reason in ('timeout',):
-                                self.stats['network_errors']['timeouts'] += 1
-                                self.stats['failures']['timeout'] += 1
-                            elif reason in ('dns_errors', 'dns'):
-                                self.stats['network_errors']['dns_errors'] += 1
-                            elif reason in ('connection_refused',):
-                                self.stats['network_errors']['connection_refused'] += 1
-                            elif reason in ('ssl_errors',):
-                                self.stats['network_errors']['ssl_errors'] += 1
-                            elif reason in ('rate_limit', 'rate_limits'):
-                                self.stats['network_errors']['rate_limits'] += 1
-                            elif reason in ('not_found',) or str(reason).startswith('http_') or reason in ('http_errors','non_retryable_error'):
-                                self.stats['network_errors']['http_errors'] += 1
-                                self.stats['failures']['http_error'] += 1
-
-                        # Verbose log for quick triage
-                        if verbose_mode:
-                            self.logger.info(f"❌ Fetch failed ({reason}) {url[:80]}")
-
-                        return None
-                    
-                    # Calculate hash
-                    from ..utils.hashing import calculate_hash
-                    file_hash = await calculate_hash(content)
-                    
-                    # Check if already scanned (UNLESS force flag is set)
-                    force_rescan = self.config.get('force_rescan', False)
-                    if not force_rescan:
-                        if not self.state.mark_as_scanned_if_new(file_hash, url):
-                            self.logger.debug(f"Duplicate (already scanned): {url}")
-                            self.stats['failures']['duplicates'] += 1
-                            async with lock:
-                                failed_breakdown['duplicate'] += 1
-                            return None
-                    else:
-                        # Force mode: still mark as scanned but don't skip
-                        self.state.mark_as_scanned_if_new(file_hash, url)
-                    
-                    # NEW: Save to unique_js/{md5}.js for content-based deduplication
-                    hash_filename = f"{file_hash}.js"
-                    file_path = Path(self.paths['unique_js']) / hash_filename
-                    
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(content)
-                    
-                    # Detect if file is minified (for metadata only)
-                    is_minified = self._is_minified(content)
-                    
-                    # Update progress AND Save manifest (THREAD-SAFE)
-                    async with lock:
-                        # Save hash -> URL mapping for notifications
-                        self._save_file_manifest(url, file_hash, hash_filename, is_minified)
-                        
-                        self.stats['total_files'] += 1
-                        completed += 1
-                        success_count = len(downloaded_files) + 1  # +1 for current
-                        
-                        # Show detailed progress every 50 files or at completion
-                        if completed % 50 == 0 or completed == total_urls:
-                            total_skipped = sum(failed_breakdown.values())
-                            extra = f"{success_count} saved, {total_skipped} skipped"
-                            if total_skipped > 0 and failed_breakdown['duplicate'] > total_skipped * 0.9:
-                                extra += " (mostly cached)"
-                            self._log_progress("Download Files", completed, total_urls, extra)
-                        else:
-                            self._log_progress("Download Files", completed, total_urls, f"{success_count} saved")
-                    
-                    return {
-                        'url': url,
-                        'hash': file_hash,
-                        'filename': hash_filename,
-                        'file_path': str(file_path),
-                        'is_minified': is_minified,
-                        'content': content
-                    }
-                
-                except Exception as e:
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"❌ Download failed for {url[:100]}: {str(e)}")
-                    self.logger.debug("Full download error traceback:", exc_info=True)
-                    return None
-        
-        # Wrapper to append results to shared list (TaskGroup doesn't return results)
-        async def task_wrapper(url: str):
-            try:
-                result = await download_one(url)
-                if result:
-                    downloaded_files.append(result)
-            except Exception as e:
-                # Catch any uncaught exceptions to prevent TaskGroup failure
-                self.logger.error(f"Task wrapper exception for {url}: {e}")
-        
-        # Check shutdown before downloading
-        if self.shutdown_requested:
-            self.logger.warning("⚠️  Download interrupted - shutting down")
-            return []
-        
-        # Download all files using TaskGroup (structured concurrency)
-        try:
-            async with asyncio.TaskGroup() as tg:
-                for url in urls:
-                    tg.create_task(task_wrapper(url))
-        except* Exception as eg:
-            # TaskGroup raises ExceptionGroup if tasks fail critically
-            # Since download_one handles its own errors, this catches system errors
-            self.logger.error(f"Critical batch download error: {eg}")
-        
-        # Check shutdown after downloads complete
-        if self.shutdown_requested:
-            self.logger.warning("⚠️  Download processing interrupted - shutting down")
-            return downloaded_files
-        
-        # Show clean summary
-        total_filtered = sum(failed_breakdown.values())
-        self.logger.info(f"\n{'='*60}")
-        self.logger.info(f"✅ Downloaded {len(downloaded_files)} files (skipped {total_filtered})")
-        
-        # Always show breakdown if many files were skipped
-        if total_filtered > 0:
-            self.logger.info(f"   📊 Breakdown:")
-            if failed_breakdown['invalid_url'] > 0:
-                self.logger.info(f"      • Invalid URLs: {failed_breakdown['invalid_url']}")
-            if failed_breakdown['out_of_scope'] > 0:
-                self.logger.info(f"      • Out of scope: {failed_breakdown['out_of_scope']}")
-            if failed_breakdown['fetch_failed'] > 0:
-                self.logger.info(f"      • Fetch failed: {failed_breakdown['fetch_failed']}")
-            if failed_breakdown['duplicate'] > 0:
-                self.logger.info(f"      • Duplicates (cached): {failed_breakdown['duplicate']}")
-        
-        # 🔍 DIAGNOSTIC: Show fetcher error stats to diagnose failures
-        if hasattr(self.fetcher, 'error_stats') and failed_breakdown['fetch_failed'] > 0:
-            error_stats = self.fetcher.error_stats
-            total_errors = sum(error_stats.values())
-            
-            self.logger.info(f"\n   🔍 Fetch Failure Analysis:")
-            
-            # Show all error categories (even if 0, for transparency)
-            if error_stats['http_errors'] > 0:
-                self.logger.info(f"      • HTTP errors (403/404/etc): {error_stats['http_errors']}")
-                
-                # Show HTTP status code breakdown
-                if hasattr(self.fetcher, 'http_status_breakdown') and self.fetcher.http_status_breakdown:
-                    status_summary = ", ".join([f"{code}: {count}" for code, count in sorted(self.fetcher.http_status_breakdown.items())])
-                    self.logger.info(f"        └─ Status codes: {status_summary}")
-            
-            if error_stats['timeouts'] > 0:
-                self.logger.info(f"      • Timeouts: {error_stats['timeouts']}")
-            if error_stats['rate_limits'] > 0:
-                self.logger.info(f"      • Rate limited: {error_stats['rate_limits']}")
-            if error_stats['dns_errors'] > 0:
-                self.logger.info(f"      • DNS errors: {error_stats['dns_errors']}")
-            if error_stats['ssl_errors'] > 0:
-                self.logger.info(f"      • SSL errors: {error_stats['ssl_errors']}")
-            if error_stats['connection_refused'] > 0:
-                self.logger.info(f"      • Connection refused: {error_stats['connection_refused']}")
-            
-            # Show unaccounted failures (failures that didn't increment any error stat)
-            unaccounted = failed_breakdown['fetch_failed'] - total_errors
-            if unaccounted > 0:
-                self.logger.info(f"      • ⚠️  Untracked failures: {unaccounted}")
-                self.logger.info(f"        └─ These failed before HTTP request or weren't logged")
-            
-            # Show tip about verbose mode
-            verbose_mode = self.config.get('verbose', False)
-            if verbose_mode or unaccounted > 0:
-                self.logger.info(f"      💡 Run with --verbose to see each failure as it happens")
-        
-        self.logger.info(f"{'='*60}\n")
-        
-        return downloaded_files
+        # Delegated to DownloadEngine (migrated)
+        return await self.download.download_all(urls)
     
     async def _recover_source_maps(self, files: List[dict]):
         """
@@ -1191,8 +916,16 @@ class ScanEngine:
             async with semaphore:
                 try:
                     url = file_info['url']
-                    content = file_info['content']
-                    
+                    file_path = file_info.get('file_path') or file_info.get('minified_path')
+                    # Read content from disk on-demand to avoid holding it in memory
+                    content = ""
+                    if file_path:
+                        try:
+                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as _f:
+                                content = _f.read()
+                        except Exception:
+                            content = ""
+
                     # Attempt to recover source map
                     sources = await self.source_map_recoverer.recover_from_file(url, content)
                     
@@ -1219,95 +952,8 @@ class ScanEngine:
             self.logger.info(f"✅ Recovered sources from {recovered_count} files")
     
     async def _process_all_files_parallel(self, files: List[dict]):
-        """
-        PHASE 4: Process all files in parallel using TaskGroup (AST analysis on minified files)
-        
-        Args:
-            files: List of file info dictionaries from _download_all_files()
-        """
-        semaphore = asyncio.Semaphore(self.config.get('threads', 50))
-        processed_count = 0
-        total_files = len(files)
-        progress_lock = asyncio.Lock()
-        
-        async def process_one(file_info: dict):
-            nonlocal processed_count
-            async with semaphore:
-                try:
-                    content = file_info['content']
-                    url = file_info['url']
-                    
-                    # OPTIMIZATION: Skip vendor libraries by hash before expensive AST analysis
-                    should_skip, reason = self.fetcher.noise_filter.should_skip_content(content, url)
-                    if should_skip:
-                        self.logger.debug(f"⏭️  Skipping AST analysis for vendor lib: {url} ({reason})")
-                        async with progress_lock:
-                            processed_count += 1
-                        return
-                    
-                    # Run AST analysis on MINIFIED content (faster!)
-                    await self.ast_analyzer.analyze(content, url)
-                    
-                    # PHASE 5: Predict webpack/vite chunks for SPA intelligence
-                    if self.config.get('spa_intelligence', {}).get('enabled', True):
-                        try:
-                            predicted_chunks = self.ast_analyzer.predict_chunks(content, url)
-                            if predicted_chunks:
-                                # Queue predicted chunks for download (will be deduplicated by state manager)
-                                for chunk_url in predicted_chunks:
-                                    # Add to discovered URLs (will be fetched in next iteration if not already)
-                                    if not self.state.is_processed(chunk_url):
-                                        self.logger.debug(f"🧩 Queued chunk: {chunk_url}")
-                                        # Note: In a real implementation, you'd add these to a queue
-                                        # For now, just log them as they'll be picked up in next scan
-                        except Exception as e:
-                            self.logger.debug(f"Chunk prediction failed for {url}: {e}")
-                    
-                    # Update progress counter and log periodically
-                    async with progress_lock:
-                        processed_count += 1
-                        # Log every 30 files to show progress without spam
-                        if processed_count % 30 == 0 or processed_count == total_files:
-                            percent = (processed_count / total_files * 100) if total_files > 0 else 0
-                            self.logger.info(f"⚙️  Extracting: {processed_count}/{total_files} files ({percent:.1f}%)")
-                    
-                except Exception as e:
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"❌ Processing failed {file_info['url']}: {str(e)}")
-                    self.logger.debug("Full processing error traceback:", exc_info=True)
-        
-        # Check shutdown before extraction
-        if self.shutdown_requested:
-            self.logger.warning("⚠️  Extraction interrupted - shutting down")
-            return
-        
-        # Process all files using TaskGroup (structured concurrency)
-        try:
-            async with asyncio.TaskGroup() as tg:
-                for f in files:
-                    tg.create_task(process_one(f))
-        except* Exception as eg:
-            # TaskGroup raises ExceptionGroup if tasks fail critically
-            # Since process_one handles its own errors, this catches system errors
-            self.logger.error(f"Critical batch processing error: {eg}")
-        
-        # Check shutdown before saving extracts
-        if self.shutdown_requested:
-            self.logger.warning("⚠️  Skipping extract save - shutting down")
-            return
-        
-        # Save organized extracts (domain-specific + legacy format)
-        await self.ast_analyzer.save_organized_extracts()
-        
-        # Get extracts with source tracking
-        extracts_with_sources = self.ast_analyzer.get_extracts_with_sources()
-        self.stats['extracts_detailed'] = extracts_with_sources
-        
-        # Get domain summary for reporting
-        domain_summary = self.ast_analyzer.get_domain_summary()
-        self.stats['domain_summary'] = domain_summary
-        
-        self.logger.info(f"✅ Processed {len(files)} files")
+        # Delegated to AnalysisEngine (migrated)
+        return await self.analysis.process_files(files)
     
     async def _unminify_all_files(self, files: List[dict]):
         """
@@ -1316,57 +962,8 @@ class ScanEngine:
         Args:
             files: List of file info dictionaries from _download_all_files()
         """
-        timeout_count = 0  # Track timeouts
-        max_timeout_logs = 3  # Only log first 3 timeouts
-        semaphore = asyncio.Semaphore(self.config.get('threads', 50))
-        
-        async def unminify_one(file_info: dict):
-            async with semaphore:
-                try:
-                    # Skip if already unminified
-                    if not file_info.get('is_minified', True):
-                        return
-                    
-                    content = file_info['content']
-                    minified_path = file_info.get('minified_path')
-                    filename = file_info['filename']
-                    
-                    # Skip if no minified path (shouldn't happen)
-                    if not minified_path:
-                        return
-                    
-                    # Process (beautify)
-                    processed = await self.processor.process(content, minified_path)
-                    
-                    # Save unminified version
-                    unminified_path = Path(self.paths['files_unminified']) / filename
-                    with open(unminified_path, 'w', encoding='utf-8') as f:
-                        f.write(processed)
-                    
-                except asyncio.TimeoutError:
-                    nonlocal timeout_count
-                    timeout_count += 1
-                    if timeout_count <= max_timeout_logs:
-                        self.logger.warning(f"Beautification timed out after 30s, using original content")
-                    elif timeout_count == max_timeout_logs + 1:
-                        self.logger.warning(f"... suppressing further timeout warnings ...")
-                except Exception as e:
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"❌ Unminify failed {file_info['url']}: {str(e)}")
-                    self.logger.debug("Full beautification error traceback:", exc_info=True)
-        
-        # Check shutdown before beautification
-        if self.shutdown_requested:
-            self.logger.warning("⚠️  Beautification interrupted - shutting down")
-            return
-        
-        tasks = [unminify_one(f) for f in files]
-        await asyncio.gather(*tasks, return_exceptions=True)
-        
-        self.logger.info(f"✅ Beautified {len(files)} files")
-        
-        if timeout_count > 0:
-            self.logger.info(f"ℹ️  {timeout_count} files timed out during beautification (using original)")
+        # Delegated to AnalysisEngine (migrated)
+        return await self.analysis.unminify_all_files(files)
     
     async def _run_semgrep_analysis(self, directory_path: str):
         """
@@ -1375,31 +972,8 @@ class ScanEngine:
         Args:
             directory_path: Path to directory containing deduplicated JS files (unique_js/)
         """
-        # Validate Semgrep is available
-        if not self.semgrep_analyzer.validate():
-            self.logger.warning("⚠️  Semgrep validation failed, skipping static analysis")
-            return
-        
-        self.logger.info("🔍 Running Semgrep static analysis...")
-        self.logger.info(f"📂 Target: {directory_path}")
-        
-        # Run Semgrep scan
-        findings = await self.semgrep_analyzer.scan_directory(directory_path)
-        
-        # Update stats
-        self.stats['semgrep_findings'] = len(findings)
-        
-        # Save findings to file
-        if findings:
-            findings_path = Path(self.paths['base']) / 'findings' / 'semgrep.json'
-            self.semgrep_analyzer.save_findings(findings, str(findings_path))
-            
-            self.logger.info(f"✅ Semgrep analysis complete: {len(findings)} findings")
-            self.logger.info(f"💾 Results saved to: {findings_path}")
-        else:
-            self.logger.info("✅ Semgrep analysis complete: No findings")
-        
-        self.logger.info("")
+        # Delegated to AnalysisEngine (migrated)
+        return await self.analysis.run_semgrep(directory_path)
     
     async def _cleanup_minified_files(self):
         """
@@ -2375,29 +1949,5 @@ class ScanEngine:
         Returns:
             List of URLs that returned 200 OK
         """
-        validated_urls = []
-        semaphore = asyncio.Semaphore(20)  # Limit concurrent HEAD requests
-        
-        async def validate_one(url: str) -> Optional[str]:
-            async with semaphore:
-                try:
-                    exists, status_code = await self.fetcher.validate_url_exists(url)
-                    if exists:
-                        return url
-                    else:
-                        self.logger.debug(f"HEAD validation failed: {url} (status {status_code})")
-                        return None
-                except Exception as e:
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"HEAD request error for {url}: {str(e)}")
-                    self.logger.debug("Full HEAD validation traceback:", exc_info=True)
-                    return None
-        
-        tasks = [validate_one(url) for url in urls]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for result in results:
-            if isinstance(result, str):
-                validated_urls.append(result)
-        
-        return validated_urls
+        # Delegated to DownloadEngine (migrated)
+        return await self.download.validate_urls_with_head(urls)

@@ -9,6 +9,7 @@ import random
 from curl_cffi.requests import AsyncSession
 from playwright.async_api import async_playwright, Browser, BrowserContext
 from typing import List, Optional, Tuple
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 import re
 from ..analysis.filtering import NoiseFilter
@@ -1247,3 +1248,82 @@ class ActiveFetcher:
                 await page.close()
             if context:
                 await context.close()
+
+    async def fetch_and_write(self, url: str, out_path: str) -> bool:
+        """
+        Stream a remote resource directly to disk to avoid holding content in memory.
+
+        Returns True on success, False on failure.
+        """
+        if not self.session_pool:
+            raise RuntimeError("Fetcher not initialized! Call initialize() first.")
+
+        # Preflight check
+        should_download, reason, preflight_content_length = await self._preflight_check(url)
+        if not should_download:
+            self.logger.debug(f"⏭️  Preflight rejected: {url} - {reason}")
+            self.last_failure_reason = f'preflight_{reason}'
+            return False
+
+        session = self._get_session()
+
+        # Basic headers
+        parsed = urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        headers = {
+            'User-Agent': self._get_random_user_agent(),
+            'Accept': 'application/javascript, */*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache',
+        }
+        if self.target_domain:
+            headers['Referer'] = self.target_domain
+        else:
+            headers['Referer'] = origin
+
+        try:
+            response = await asyncio.wait_for(
+                session.get(url, headers=headers, cookies=self.valid_cookies if self.valid_cookies else None, allow_redirects=True, max_redirects=5),
+                timeout=self.download_timeout
+            )
+        except asyncio.TimeoutError:
+            self.last_failure_reason = 'timeout'
+            return False
+        except Exception as e:
+            self.last_failure_reason = 'network_error'
+            return False
+
+        # Handle non-200 statuses
+        if response.status_code != 200:
+            self.last_failure_reason = f'http_{response.status_code}'
+            return False
+
+        # Stream to disk
+        try:
+            # Open file in binary mode and write chunks
+            with open(out_path, 'wb') as wf:
+                if hasattr(response, 'content') and hasattr(response.content, 'iter_chunked'):
+                    async for chunk in response.content.iter_chunked(8192):
+                        if not chunk:
+                            continue
+                        wf.write(chunk)
+                else:
+                    # Fallback
+                    wf.write(response.content or b'')
+
+            # Basic size check
+            if preflight_content_length:
+                try:
+                    expected = int(preflight_content_length)
+                    actual = Path(out_path).stat().st_size
+                    if actual < expected - 100:
+                        self.last_failure_reason = 'incomplete'
+                        return False
+                except Exception:
+                    pass
+
+            return True
+        except Exception as e:
+            self.last_failure_reason = 'write_error'
+            return False

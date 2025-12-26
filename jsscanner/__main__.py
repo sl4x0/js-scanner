@@ -7,6 +7,7 @@ import sys
 import yaml
 from pathlib import Path
 from .cli import parse_args, validate_config
+from .utils.config_validator import ConfigValidator
 from .core.engine import ScanEngine
 from .utils.log import log_banner
 
@@ -117,6 +118,12 @@ async def main():
         config['verbose'] = True
     
     # Validate config
+    # Run structured config validation (additional to CLI-level checks)
+    is_valid_cfg, cfg_errors = ConfigValidator.validate_all(config)
+    if not is_valid_cfg:
+        print(ConfigValidator.format_errors(cfg_errors))
+        sys.exit(1)
+
     if not validate_config(config):
         sys.exit(1)
     

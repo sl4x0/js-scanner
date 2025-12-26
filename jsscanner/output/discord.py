@@ -39,6 +39,10 @@ class Discord:
         self.logger = logger
         self._messages_dropped = 0
         self._sent_secrets = set()  # Track sent secrets to prevent duplicates
+        # Dynamic rate limiting state
+        self.rate_limited_until = 0.0  # epoch time until which sending is paused
+        self.temporary_rate_limit = None  # optional reduced rate_limit after 429
+        self.temporary_rate_limit_expires = 0.0
     
     async def start(self):
         """Starts the notification worker"""
@@ -197,8 +201,16 @@ class Discord:
         while self.message_times and current_time - self.message_times[0] > 60:
             self.message_times.popleft()
         
-        # Check if we're under the rate limit
-        return len(self.message_times) < self.rate_limit
+        # Respect explicit Discord-imposed rate limit window
+        if getattr(self, 'rate_limited_until', 0) and time.time() < self.rate_limited_until:
+            return False
+
+        # Use temporary reduced rate limit if active
+        effective_limit = self.rate_limit
+        if self.temporary_rate_limit and time.time() < self.temporary_rate_limit_expires:
+            effective_limit = self.temporary_rate_limit
+
+        return len(self.message_times) < effective_limit
     
     async def _send_webhook(self, session: AsyncSession, embed: Dict[str, Any]):
         """
@@ -218,6 +230,17 @@ class Discord:
                 
                 if retry_count < 3:  # Max 3 retries per message
                     retry_after = int(response.headers.get('Retry-After', 5))
+                    # Honor server-specified Retry-After window
+                    self.rate_limited_until = time.time() + retry_after
+                    # Apply a conservative temporary rate limit for the next minute
+                    try:
+                        self.temporary_rate_limit = max(1, int(self.rate_limit / 2))
+                    except Exception:
+                        self.temporary_rate_limit = max(1, self.rate_limit // 2)
+                    self.temporary_rate_limit_expires = time.time() + max(60, retry_after)
+
+                    if self.logger:
+                        self.logger.warning(f"⚠️  Discord responded 429: backing off for {retry_after}s, temporary rate_limit={self.temporary_rate_limit} until {self.temporary_rate_limit_expires}")
                     self.message_retry_counts[embed_id] = retry_count + 1
                     
                     if self.logger:
