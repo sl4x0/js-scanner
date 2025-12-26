@@ -6,6 +6,8 @@
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)
 
+<p align="left"><img src="docs/logo.svg" alt="logo" width="140"/></p>
+
 A compact, automation-friendly JavaScript reconnaissance tool for bug bounty hunters. Fast discovery, disk-streamed downloads, AST/source-map analysis, and optional Semgrep/TruffleHog integrations.
 
 Key points:
