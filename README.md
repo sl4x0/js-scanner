@@ -1,12 +1,12 @@
-# ⚡ JS Scanner
+
+<p align="left"><img src="docs/logo.svg" alt="logo" width="140"/></p>
+
 
 ![CI](https://github.com/sl4x0/js-scanner/workflows/CI/badge.svg)
 ![Release](https://img.shields.io/github/v/tag/sl4x0/js-scanner?label=release)
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)
-
-<p align="left"><img src="docs/logo.svg" alt="logo" width="140"/></p>
 
 A compact, automation-friendly JavaScript reconnaissance tool for bug bounty hunters. Fast discovery, disk-streamed downloads, AST/source-map analysis, and optional Semgrep/TruffleHog integrations.
 
@@ -59,4 +59,5 @@ If you'd like, I can (a) add a CI badge and small logo, or (b) expand Quick Star
 Found a bug? Have an idea? Open an issue or PR!
 
 **Made with ⚡ for bug bounty hunters**
+
 
