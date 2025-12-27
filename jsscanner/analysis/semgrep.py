@@ -7,6 +7,7 @@ import json
 import asyncio
 import sys
 import shutil
+import os
 from pathlib import Path
 from typing import Optional, List, Dict
 
@@ -30,11 +31,15 @@ class SemgrepAnalyzer:
         # Extract semgrep config with defaults
         semgrep_config = config.get('semgrep', {})
         self.enabled = semgrep_config.get('enabled', False)
-        self.timeout = semgrep_config.get('timeout', 120)  # 2 minutes default (was 600s)
-        self.max_target_bytes = semgrep_config.get('max_target_bytes', 2000000)  # 2MB per file (was 5MB)
-        self.jobs = semgrep_config.get('jobs', 8)  # Parallel jobs (increase)
+        self.timeout = semgrep_config.get('timeout', 120)  # 2 minutes default (per-chunk)
+        self.max_target_bytes = semgrep_config.get('max_target_bytes', 2000000)  # 2MB per file
+        # Use configured jobs or sensible default based on CPU count
+        default_jobs = max(1, min(8, (os.cpu_count() or 2)))
+        self.jobs = semgrep_config.get('jobs', default_jobs)
         self.ruleset = semgrep_config.get('ruleset', semgrep_config.get('config', 'p/javascript'))
         self.max_files = semgrep_config.get('max_files', 100)
+        # Number of files to process per semgrep subprocess to avoid huge commands/timeouts
+        self.chunk_size = semgrep_config.get('chunk_size', 100)
         
         # Semgrep binary detection
         self.semgrep_path = self._find_semgrep_binary(config)
@@ -192,8 +197,16 @@ class SemgrepAnalyzer:
             self.logger.info("ℹ️  No files to scan after filtering")
             return []
 
-        # Build Semgrep command with SPEED optimizations
-        cmd = [
+        # Run Semgrep in chunks to avoid huge command lines and long single-process timeouts
+        all_findings = []
+        files_to_scan = filtered_files[: self.max_files] if self.max_files and self.max_files > 0 else filtered_files
+        total_files = len(files_to_scan)
+        if total_files == 0:
+            self.logger.info("ℹ️  No files to scan after filtering")
+            return []
+
+        # Base command
+        base_cmd = [
             self.semgrep_path,
             'scan',
             '--config', self.ruleset,
@@ -207,60 +220,78 @@ class SemgrepAnalyzer:
             '--optimizations=all',
         ]
 
-        # Add file paths directly (faster than scanning directory)
-        for f in filtered_files[: self.max_files]:
-            cmd.append(str(f))
-        
-        self.logger.debug(f"Running: {' '.join(cmd)}")
-        
-        try:
-            # Run Semgrep with timeout
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            # Wait for completion with timeout
+        # Chunk and run
+        for i in range(0, total_files, self.chunk_size):
+            chunk = files_to_scan[i : i + self.chunk_size]
+            batch_num = (i // self.chunk_size) + 1
+            batch_total = (total_files + self.chunk_size - 1) // self.chunk_size
+            self.logger.info(f"🔍 Scanning batch {batch_num}/{batch_total} ({len(chunk)} files)...")
+
+            cmd = list(base_cmd) + [str(f) for f in chunk]
+            self.logger.debug(f"Running: {' '.join(cmd[:10])} ... + {len(cmd)-10} more args")
+
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=self.timeout + 60  # Extra buffer for process cleanup
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
                 )
-            except asyncio.TimeoutError:
-                self.logger.warning(f"⚠️  Semgrep scan timed out after {self.timeout}s")
-                process.kill()
-                await process.wait()
-                return []
-            
-            # Parse JSON output
-            if process.returncode == 0:
-                output_json = json.loads(stdout.decode('utf-8'))
-                findings = output_json.get('results', [])
-                self.findings_count = len(findings)
-                
-                self.logger.info(f"✅ Semgrep scan complete: {self.findings_count} findings")
-                
-                # Log stderr if there are warnings (but don't fail)
-                if stderr:
-                    stderr_text = stderr.decode('utf-8').strip()
+
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(),
+                        timeout=self.timeout + 30
+                    )
+                except asyncio.TimeoutError:
+                    self.logger.warning(f"⚠️  Semgrep batch {batch_num}/{batch_total} timed out after {self.timeout}s")
+                    try:
+                        process.kill()
+                    except Exception:
+                        pass
+                    await process.wait()
+                    # Continue to next batch instead of failing entire scan
+                    continue
+
+                # Attempt to parse stdout even if returncode != 0 (semgrep may print results alongside warnings)
+                try:
+                    output_text = stdout.decode('utf-8') if stdout else ''
+                    if not output_text:
+                        # Nothing to parse
+                        stderr_text = stderr.decode('utf-8') if stderr else ''
+                        if stderr_text:
+                            self.logger.debug(f"Semgrep stderr (batch {batch_num}): {stderr_text}")
+                        continue
+
+                    output_json = json.loads(output_text)
+                    batch_findings = output_json.get('results', [])
+                    if batch_findings:
+                        all_findings.extend(batch_findings)
+                        self.logger.info(f"✓ Batch {batch_num}/{batch_total} complete: {len(batch_findings)} findings")
+                    else:
+                        self.logger.info(f"✓ Batch {batch_num}/{batch_total} complete: 0 findings")
+
+                    # Log any stderr content for diagnostics
+                    if stderr:
+                        stderr_text = stderr.decode('utf-8').strip()
+                        if stderr_text:
+                            self.logger.debug(f"Semgrep warnings (batch {batch_num}):\n{stderr_text}")
+
+                except json.JSONDecodeError as e:
+                    stderr_text = stderr.decode('utf-8') if stderr else ''
+                    self.logger.error(f"❌ Failed to parse Semgrep JSON output for batch {batch_num}: {e}")
                     if stderr_text:
-                        self.logger.debug(f"Semgrep warnings:\n{stderr_text}")
-                
-                return findings
-            else:
-                error_msg = stderr.decode('utf-8') if stderr else 'Unknown error'
-                self.logger.error(f"❌ Semgrep scan failed (exit {process.returncode}):")
-                self.logger.error(error_msg)
-                return []
-                
-        except json.JSONDecodeError as e:
-            self.logger.error(f"❌ Failed to parse Semgrep JSON output: {e}")
-            return []
-        except Exception as e:
-            self.logger.error(f"❌ Semgrep scan error: {e}")
-            self.logger.debug("Full error traceback:", exc_info=True)
-            return []
+                        self.logger.debug(f"Semgrep stderr (batch {batch_num}):\n{stderr_text}")
+                    continue
+
+            except Exception as e:
+                self.logger.error(f"❌ Semgrep batch {batch_num} failed: {e}")
+                self.logger.debug("Full error traceback:", exc_info=True)
+                continue
+
+        # Finalize
+        self.findings_count = len(all_findings)
+        self.logger.info(f"✅ Semgrep scan complete: {self.findings_count} findings (aggregated from { (total_files + self.chunk_size -1)//self.chunk_size } batches)")
+        return all_findings
     
     def save_findings(self, findings: List[Dict], output_path: Optional[str] = None):
         """

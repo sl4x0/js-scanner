@@ -7,7 +7,7 @@
 # Global timeout for HTTP requests (per URL)
 timeout: 15 # Connection timeout in seconds (reduced for fail-fast behavior)
 verify_ssl: false # Keep false for bug bounty (expired certs often host dev/staging)
-max_file_size: 5242880  # 5 MB max to keep scans fast for bug bounty
+max_file_size: 5242880 # 5 MB max to keep scans fast for bug bounty
 max_file_size_mb_download: 5.0
 
 # --- HYBRID DISCOVERY (The Funnel) ---
@@ -184,15 +184,15 @@ secrets:
   buffer_size: 10 # Flush every N secrets to disk
   streaming_enabled: true # Always enabled (no config needed)
 
-
 # Semgrep Static Analysis (v4.2 NEW)
 # Requires: pip install semgrep && semgrep login
 # Purpose: Fast security pattern detection in downloaded JS files
 semgrep:
-  enabled: true  # Set to true after installing and logging in to Semgrep
-  timeout: 120  # Maximum scan time in seconds (2 minutes default)
-  max_target_bytes: 2000000  # Max file size to scan (2MB)
-  jobs: 8  # Parallel jobs for faster scanning
-  ruleset: 'p/security-audit'
+  enabled: true # Set to true after installing and logging in to Semgrep
+  timeout: 120 # Maximum scan time in seconds (2 minutes default)
+  max_target_bytes: 2000000 # Max file size to scan (2MB)
+  jobs: 8 # Parallel jobs for faster scanning
+  chunk_size: 100 # Number of files per semgrep subprocess to avoid timeouts/arglist limits
+  ruleset: "p/security-audit"
   max_files: 100
-  binary_path: ""  # Optional: explicit path to semgrep binary (leave empty for auto-detect)
+  binary_path: "" # Optional: explicit path to semgrep binary (leave empty for auto-detect)

@@ -277,6 +277,11 @@ python -m jsscanner --help
 | Flag | Description |
 |------|-------------|
 | `--semgrep` | Run Semgrep SAST analysis |
+
+**Semgrep notes**
+- `semgrep.chunk_size` (config.yaml): number of files processed per Semgrep subprocess. Default `100`. Increase to `200-500` on larger machines to improve throughput; decrease on low-RAM VPS.
+- `semgrep.timeout` is applied per-chunk (default `120s`). If many batches still time out, raise this value or reduce `chunk_size`.
+- Recommended run for large lists: `python -m jsscanner -t example.com --subjs-only --semgrep`
 | `--secrets` | Run TruffleHog secret detection |
 | `--source-maps` | Attempt source map recovery |
 | `--no-vendor` | Skip vendor/library files |
