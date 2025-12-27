@@ -74,6 +74,7 @@ python -m jsscanner -t example -u https://example.com --subjs
 ```
 
 **Output:** `results/example/` containing:
+
 - `all_js_files.txt` – Discovered JavaScript URLs
 - `downloaded/` – Downloaded files (organized by domain)
 - `endpoints.txt` – Extracted API endpoints
@@ -154,31 +155,39 @@ python -m jsscanner -t target \
 
 ```yaml
 # Performance tuning
-threads: 10                    # Concurrent workers
-timeout_seconds: 20            # HTTP request timeout
-retries: 3                     # Failed request retries
+threads: 10 # Concurrent workers
+timeout_seconds: 20 # HTTP request timeout
+retries: 3 # Failed request retries
 
 # Discovery strategies (enable/disable)
 katana_enabled: true
 subjs_enabled: true
-live_browser_enabled: false    # Resource-intensive
+live_browser_enabled: false # Resource-intensive
 
 # Analysis modules
-semgrep_enabled: true          # SAST scanning
-trufflehog_enabled: true       # Secret detection
-source_map_enabled: true       # Recover original code
+semgrep_enabled: true # SAST scanning
+trufflehog_enabled: true # Secret detection
+source_map_enabled: true # Recover original code
 
 # Filtering
-skip_vendor_files: true        # Ignore jQuery, React, etc.
-cdn_patterns:                  # Skip CDNs
+skip_vendor_files: true # Ignore jQuery, React, etc.
+cdn_patterns: # Skip CDNs
   - "cdn.jsdelivr.net"
   - "unpkg.com"
 
 # Notifications
 discord_webhook: "https://discord.com/api/webhooks/..."
-discord_rate_limit: 2          # Messages per second
+discord_rate_limit: 2 # Messages per second
 ```
+
 ---
+
+### New configuration options
+
+The scanner adds a few new runtime knobs useful for low-RAM VPS deployments and unstable SPAs:
+
+- `download.chunk_size` (int): Number of URLs processed per batch during downloads. Lower to reduce memory/task churn (default: 250).
+- `playwright.enable_interactions` (bool): Disable in-page smart interactions (scroll/hover/tabs) if a site is unstable or causes frequent browser crashes (default: true).
 
 ## 🎓 Usage Examples
 
@@ -229,12 +238,12 @@ python -m jsscanner -t example --resume
 
 ## 📈 Performance Benchmarks
 
-| Metric | Legacy Tool | JS Scanner | Improvement |
-|--------|-------------|------------|-------------|
-| **SubJS-only scan** | 5 min | 2.25s | **130x faster** |
-| **Memory usage (1000 files)** | 500MB | 5MB | **100x reduction** |
-| **Concurrent downloads** | 5 | 50+ | **10x throughput** |
-| **Deduplication** | None | Bloom filter | **60% fewer downloads** |
+| Metric                        | Legacy Tool | JS Scanner   | Improvement             |
+| ----------------------------- | ----------- | ------------ | ----------------------- |
+| **SubJS-only scan**           | 5 min       | 2.25s        | **130x faster**         |
+| **Memory usage (1000 files)** | 500MB       | 5MB          | **100x reduction**      |
+| **Concurrent downloads**      | 5           | 50+          | **10x throughput**      |
+| **Deduplication**             | None        | Bloom filter | **60% fewer downloads** |
 
 ### Tested Environments
 
@@ -265,42 +274,43 @@ python -m jsscanner --help
 
 ### Discovery Options
 
-| Flag | Description |
-|------|-------------|
-| `--katana` | Enable Katana crawling |
-| `--subjs` | Enable SubJS passive discovery |
+| Flag             | Description                          |
+| ---------------- | ------------------------------------ |
+| `--katana`       | Enable Katana crawling               |
+| `--subjs`        | Enable SubJS passive discovery       |
 | `--live-browser` | Enable Playwright browser automation |
-| `--subjs-only` | Fast mode: SubJS only (2-3s) |
+| `--subjs-only`   | Fast mode: SubJS only (2-3s)         |
 
 ### Analysis Options
 
-| Flag | Description |
-|------|-------------|
+| Flag        | Description               |
+| ----------- | ------------------------- |
 | `--semgrep` | Run Semgrep SAST analysis |
 
 **Semgrep notes**
+
 - `semgrep.chunk_size` (config.yaml): number of files processed per Semgrep subprocess. Default `100`. Increase to `200-500` on larger machines to improve throughput; decrease on low-RAM VPS.
 - `semgrep.timeout` is applied per-chunk (default `120s`). If many batches still time out, raise this value or reduce `chunk_size`.
 - Recommended run for large lists: `python -m jsscanner -t example.com --subjs-only --semgrep`
-| `--secrets` | Run TruffleHog secret detection |
-| `--source-maps` | Attempt source map recovery |
-| `--no-vendor` | Skip vendor/library files |
+  | `--secrets` | Run TruffleHog secret detection |
+  | `--source-maps` | Attempt source map recovery |
+  | `--no-vendor` | Skip vendor/library files |
 
 ### Authentication Options
 
-| Flag | Description |
-|------|-------------|
-| `--cookie "key=val"` | Set cookie header |
-| `--header "Key: Value"` | Add custom HTTP header |
-| `--auth-token <token>` | Set Authorization Bearer token |
+| Flag                    | Description                    |
+| ----------------------- | ------------------------------ |
+| `--cookie "key=val"`    | Set cookie header              |
+| `--header "Key: Value"` | Add custom HTTP header         |
+| `--auth-token <token>`  | Set Authorization Bearer token |
 
 ### Performance Tuning
 
-| Flag | Description |
-|------|-------------|
-| `--threads <n>` | Override config threads (default: 10) |
+| Flag            | Description                              |
+| --------------- | ---------------------------------------- |
+| `--threads <n>` | Override config threads (default: 10)    |
 | `--timeout <n>` | Request timeout in seconds (default: 20) |
-| `--retries <n>` | Failed request retries (default: 3) |
+| `--retries <n>` | Failed request retries (default: 3)      |
 
 ---
 

@@ -50,6 +50,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2025-12-27 - "Reliability & Concurrency Fixes"
+
+### Fixed
+
+- **Reduced lock contention in download engine** ([jsscanner/core/subengines.py])
+
+  - Download tasks now aggregate per-task results locally and apply updates once per batch to avoid heavy lock churn under high concurrency.
+  - `download.chunk_size` added to `config.yaml` to allow tuning batch sizes for different RAM footprints.
+
+- **Hardened Playwright cleanup** ([jsscanner/strategies/active.py])
+
+  - Wrapped `browser.close()` and `playwright.stop()` in bounded timeouts to prevent shutdown hangs when browser processes become unresponsive.
+
+- **Stabilized in-page interactions** ([jsscanner/strategies/active.py])
+  - Added `playwright.enable_interactions` to disable heavy DOM interactions when needed.
+  - Per-interaction timeouts ensure long-running `page.evaluate()` calls do not hang the page context.
+
+### Added
+
+- Unit test for `DownloadEngine.download_all` verifying basic download and manifest behavior.
+
 ## [4.1.0] - 2025-12-23 - "Performance & Reliability"
 
 ### 🚀 Major Performance Improvements

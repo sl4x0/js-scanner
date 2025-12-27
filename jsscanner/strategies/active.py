@@ -43,7 +43,17 @@ class BrowserManager:
                 if self.browser:
                     if self.logger:
                         self.logger.debug(f"Restarting browser (pages: {self.page_count})")
-                    await self.browser.close()
+                    try:
+                        await asyncio.wait_for(self.browser.close(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        if self.logger:
+                            self.logger.warning("⚠️  Browser.close() timed out during restart")
+                    except Exception as e:
+                        if self.logger:
+                            self.logger.debug(f"Browser.close() error during restart: {e}")
+                    finally:
+                        # Ensure reference cleared so a fresh browser is launched
+                        self.browser = None
                     self.page_count = 0
                     await asyncio.sleep(1)  # Wait for cleanup (Issue #5)
 
@@ -125,7 +135,13 @@ class BrowserManager:
         """Close browser - suppress TargetClosedError during shutdown"""
         if self.browser:
             try:
-                await self.browser.close()
+                try:
+                    await asyncio.wait_for(self.browser.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    if self.logger:
+                        self.logger.warning("⚠️  Browser.close() timed out during shutdown")
+                finally:
+                    self.browser = None
             except Exception as e:
                 # Suppress "Target closed" errors during forced shutdown (Ctrl+C)
                 if 'Target' not in str(e) and 'closed' not in str(e).lower():
@@ -428,6 +444,11 @@ class ActiveFetcher:
     async def _smart_interactions(self, page) -> None:
         """Trigger lazy loaders through smart interactions"""
         try:
+            # Respect config toggle to disable interactions on unstable SPAs
+            if not self.config.get('playwright', {}).get('enable_interactions', True):
+                self.logger.debug("Playwright interactions disabled by config")
+                return
+
             # Check if page is closed before starting
             if page.is_closed():
                 self.logger.debug("⚠️  Page already closed, skipping interactions")
@@ -436,7 +457,8 @@ class ActiveFetcher:
             # 1. Progressive scroll
             self.logger.debug("🖱️  Progressive scrolling to trigger lazy content...")
             try:
-                await page.evaluate("""
+                # Use bounded timeout for evaluate to avoid hangs
+                await asyncio.wait_for(page.evaluate("""
                     async () => {
                         const distance = 100;
                         const delay = 100;
@@ -448,7 +470,9 @@ class ActiveFetcher:
                         }
                         window.scrollTo(0, 0); // Back to top
                     }
-                """)
+                """), timeout=2.0)
+            except asyncio.TimeoutError:
+                self.logger.debug("⚠️  Scroll interaction timed out, continuing...")
             except Exception as e:
                 # Gracefully handle page closure during scroll
                 if any(msg in str(e) for msg in ["Target closed", "browser has been closed", "Page.evaluate"]):
@@ -459,14 +483,14 @@ class ActiveFetcher:
             # 2. Hover on interactive elements
             self.logger.debug("🖱️  Hovering on interactive elements...")
             try:
-                await page.evaluate("""
+                await asyncio.wait_for(page.evaluate("""
                     () => {
                         const selectors = [
                             '[data-tooltip]',
                             '[data-popover]',
                             '[aria-haspopup]',
                             '.dropdown-toggle',
-                            '[role=\"button\"]',
+                            '[role="button"]',
                             '[data-toggle]',
                             '.has-dropdown'
                         ];
@@ -482,7 +506,9 @@ class ActiveFetcher:
                             }
                         });
                     }
-                """)
+                """), timeout=2.0)
+            except asyncio.TimeoutError:
+                self.logger.debug("⚠️  Hover interaction timed out, continuing...")
             except Exception as e:
                 # Gracefully handle page closure during hover
                 if any(msg in str(e) for msg in ["Target closed", "browser has been closed", "Page.evaluate"]):
@@ -493,9 +519,9 @@ class ActiveFetcher:
             # 3. Trigger tab switches
             self.logger.debug("🖱️  Activating tabs...")
             try:
-                await page.evaluate("""
+                await asyncio.wait_for(page.evaluate("""
                     () => {
-                        document.querySelectorAll('[role=\"tab\"]').forEach((tab, i) => {
+                        document.querySelectorAll('[role="tab"]').forEach((tab, i) => {
                             try {
                                 setTimeout(() => {
                                     tab.dispatchEvent(new MouseEvent('click', {bubbles: true}));
@@ -505,7 +531,9 @@ class ActiveFetcher:
                             }
                         });
                     }
-                """)
+                """), timeout=2.0)
+            except asyncio.TimeoutError:
+                self.logger.debug("⚠️  Tab-activation interaction timed out, continuing...")
             except Exception as e:
                 # Gracefully handle page closure during tab activation
                 if any(msg in str(e) for msg in ["Target closed", "browser has been closed", "Page.evaluate"]):
@@ -560,7 +588,10 @@ class ActiveFetcher:
             # Then close Playwright with proper waiting
             if self.browser_manager:
                 try:
-                    await self.browser_manager.close()
+                    try:
+                        await asyncio.wait_for(self.browser_manager.close(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        self.logger.warning("⚠️  BrowserManager.close() timed out during cleanup")
                     self.logger.info("Browser manager closed successfully")
                 except Exception as e:
                     # Traceback Pattern: Clean console + forensic log
@@ -569,7 +600,11 @@ class ActiveFetcher:
             
             if self.playwright:
                 try:
-                    await self.playwright.stop()
+                    try:
+                        await asyncio.wait_for(self.playwright.stop(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        self.logger.warning("⚠️  Playwright.stop() timed out during cleanup")
+
                     # Give playwright time to terminate processes
                     await asyncio.sleep(0.5)
                     self.logger.info("Playwright stopped successfully")

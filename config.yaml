@@ -36,6 +36,7 @@ playwright:
   max_concurrent: 1 # Limit browsers on VPS to avoid OOM
   restart_after: 50 # Restart frequently to prevent Chromium memory leaks
   page_timeout: 30000 # 30s timeout for slow sites (geico.com, service-now.com)
+  enable_interactions: true # Toggle smart DOM interactions (set false to disable)
 
 # Performance Optimizations
 interaction_delay: 0.3 # Ultra-fast interactions - reduced from 0.5s
@@ -72,6 +73,10 @@ batch_processing:
   # Phase 4: CPU Bound Processing
   process_threads: 100 # Matches increased threads setting
   cleanup_minified: false
+
+# Download tuning
+download:
+  chunk_size: 250 # Number of URLs processed per batch (reduce for low-RAM VPS)
 
 # Session Management (curl_cffi HTTP Client)
 # Fixes "curl: (18) end of response with X bytes missing" errors

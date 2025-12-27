@@ -131,31 +131,36 @@ class DownloadEngine:
         }
         lock = asyncio.Lock()
 
-        async def download_one(url: str) -> Optional[dict]:
-            nonlocal completed
+        async def download_one(url: str) -> dict:
+            """Download a single URL and return a structured outcome dict.
+
+            Returns a dict with keys:
+              - status: 'success' or 'failed'
+              - result: (on success) the file metadata
+              - manifest: (on success) manifest entry to persist later
+              - failed_breakdown: dict of per-type failure counters (on failure)
+              - engine_counters: dict of dotted counter keys to increment globally
+            """
             async with semaphore:
                 try:
                     verbose_mode = engine.config.get('verbose', False)
                     if verbose_mode:
                         engine.logger.info(f"📥 Download: {url[:80]}")
 
+                    # Quick URL validation
                     if not engine._is_valid_js_url(url):
                         if verbose_mode:
                             engine.logger.info(f"❌ Invalid URL: {url[:80]}")
                         else:
                             engine.logger.debug(f"Invalid URL: {url}")
-                        async with lock:
-                            failed_breakdown['invalid_url'] += 1
-                        return None
+                        return {'status': 'failed', 'failed_breakdown': {'invalid_url': 1}, 'engine_counters': {}}
 
                     if not engine._is_target_domain(url):
                         if verbose_mode:
                             engine.logger.info(f"❌ Out of scope: {url[:80]}")
                         else:
                             engine.logger.debug(f"Out of scope: {url}")
-                        async with lock:
-                            failed_breakdown['out_of_scope'] += 1
-                        return None
+                        return {'status': 'failed', 'failed_breakdown': {'out_of_scope': 1}, 'engine_counters': {}}
 
                     from uuid import uuid4
                     from ..utils.hashing import calculate_file_hash
@@ -166,32 +171,29 @@ class DownloadEngine:
                     success = await engine.fetcher.fetch_and_write(url, str(tmp_path))
                     if not success:
                         reason = getattr(engine.fetcher, 'last_failure_reason', None)
-                        async with lock:
-                            if reason and str(reason).startswith('filtered'):
-                                failed_breakdown['filtered'] += 1
-                            else:
-                                failed_breakdown['fetch_failed'] += 1
-
+                        # classify into filtered vs fetch_failed
+                        fb = 'filtered' if reason and str(reason).startswith('filtered') else 'fetch_failed'
+                        engine_counters = {}
                         if reason:
                             if reason in ('timeout',):
-                                engine.stats['network_errors']['timeouts'] += 1
-                                engine.stats['failures']['timeout'] += 1
+                                engine_counters['network_errors.timeouts'] = 1
+                                engine_counters['failures.timeout'] = engine_counters.get('failures.timeout', 0) + 1
                             elif reason in ('dns_errors', 'dns'):
-                                engine.stats['network_errors']['dns_errors'] += 1
+                                engine_counters['network_errors.dns_errors'] = 1
                             elif reason in ('connection_refused',):
-                                engine.stats['network_errors']['connection_refused'] += 1
+                                engine_counters['network_errors.connection_refused'] = 1
                             elif reason in ('ssl_errors',):
-                                engine.stats['network_errors']['ssl_errors'] += 1
+                                engine_counters['network_errors.ssl_errors'] = 1
                             elif reason in ('rate_limit', 'rate_limits'):
-                                engine.stats['network_errors']['rate_limits'] += 1
+                                engine_counters['network_errors.rate_limits'] = 1
                             elif reason in ('not_found',) or str(reason).startswith('http_') or reason in ('http_errors','non_retryable_error'):
-                                engine.stats['network_errors']['http_errors'] += 1
-                                engine.stats['failures']['http_error'] += 1
+                                engine_counters['network_errors.http_errors'] = 1
+                                engine_counters['failures.http_error'] = 1
 
                         if verbose_mode:
                             engine.logger.info(f"❌ Fetch failed ({reason}) {url[:80]}")
 
-                        return None
+                        return {'status': 'failed', 'failed_breakdown': {fb: 1}, 'engine_counters': engine_counters}
 
                     file_hash = await calculate_file_hash(str(tmp_path))
 
@@ -199,14 +201,12 @@ class DownloadEngine:
                     if not force_rescan:
                         if not engine.state.mark_as_scanned_if_new(file_hash, url):
                             engine.logger.debug(f"Duplicate (already scanned): {url}")
-                            engine.stats['failures']['duplicates'] += 1
-                            async with lock:
-                                failed_breakdown['duplicate'] += 1
+                            # Remove temporary file
                             try:
                                 tmp_path.unlink(missing_ok=True)
                             except Exception:
                                 pass
-                            return None
+                            return {'status': 'failed', 'failed_breakdown': {'duplicate': 1}, 'engine_counters': {'failures.duplicates': 1}}
                     else:
                         engine.state.mark_as_scanned_if_new(file_hash, url)
 
@@ -231,23 +231,8 @@ class DownloadEngine:
 
                     is_minified = engine._is_minified(sample)
 
-                    async with lock:
-                        engine._save_file_manifest(url, file_hash, hash_filename, is_minified)
-
-                        engine.stats['total_files'] += 1
-                        completed += 1
-                        success_count = len(downloaded_files) + 1
-
-                        if completed % 50 == 0 or completed == total_urls:
-                            total_skipped = sum(failed_breakdown.values())
-                            extra = f"{success_count} saved, {total_skipped} skipped"
-                            if total_skipped > 0 and failed_breakdown['duplicate'] > total_skipped * 0.9:
-                                extra += " (mostly cached)"
-                            engine._log_progress("Download Files", completed, total_urls, extra)
-                        else:
-                            engine._log_progress("Download Files", completed, total_urls, f"{success_count} saved")
-
-                    return {
+                    # Prepare outcome for batch processing (do not mutate global counters here)
+                    result = {
                         'url': url,
                         'hash': file_hash,
                         'filename': hash_filename,
@@ -256,38 +241,116 @@ class DownloadEngine:
                         'is_minified': is_minified
                     }
 
+                    manifest = {
+                        'url': url,
+                        'file_hash': file_hash,
+                        'hash_filename': hash_filename,
+                        'is_minified': is_minified
+                    }
+
+                    engine_counters = {'total_files': 1}
+
+                    return {'status': 'success', 'result': result, 'manifest': manifest, 'engine_counters': engine_counters}
+
                 except Exception as e:
                     engine.logger.error(f"❌ Download failed for {url[:100]}: {str(e)}")
                     engine.logger.debug("Full download error traceback:", exc_info=True)
-                    return None
+                    return {'status': 'failed', 'failed_breakdown': {'fetch_failed': 1}, 'engine_counters': {}}
 
-        async def task_wrapper(url: str):
-            try:
-                result = await download_one(url)
-                if result:
-                    downloaded_files.append(result)
-            except Exception as e:
-                engine.logger.error(f"Task wrapper exception for {url}: {e}")
+        # Note: per-chunk task wrapper is created inline to collect batch_results
 
         if engine.shutdown_requested:
             engine.logger.warning("⚠️  Download interrupted - shutting down")
             return []
 
         # Refactored batch processing to prevent OOM by scheduling tasks in chunks
-        chunk_size = 1000  # Keep memory footprint stable
+        chunk_size = engine.config.get('download', {}).get('chunk_size', 1000)  # Keep memory footprint stable (configurable)
         total_chunks = (len(urls) + chunk_size - 1) // chunk_size
 
         for i in range(0, len(urls), chunk_size):
             chunk = urls[i : i + chunk_size]
             engine.logger.info(f"Processing batch {i//chunk_size + 1}/{total_chunks} ({len(chunk)} files)...")
             try:
+                # Collect per-batch results to avoid lock contention during high concurrency
+                batch_results = []
+
+                async def task_wrapper_collect(url: str):
+                    try:
+                        res = await download_one(url)
+                        # Append a tuple/dict describing outcome for batch processing
+                        batch_results.append({'url': url, 'outcome': res})
+                    except Exception as e:
+                        engine.logger.error(f"Task wrapper exception for {url}: {e}")
+
                 async with asyncio.TaskGroup() as tg:
                     for url in chunk:
-                        tg.create_task(task_wrapper(url))
+                        tg.create_task(task_wrapper_collect(url))
 
                 # Optional: Force GC between massive batches to keep RSS stable
                 import gc
                 gc.collect()
+
+                # Batch-update global stats and manifests in one synchronized block
+                async with lock:
+                    # Iterate results and apply updates once per batch
+                    for item in batch_results:
+                        outcome = item.get('outcome')
+                        if not outcome:
+                            # outcome None means download_one already logged and set last_failure_reason
+                            # We conservatively count this as a fetch failure
+                            failed_breakdown['fetch_failed'] += 1
+                            continue
+
+                        status = outcome.get('status')
+                        if status == 'failed':
+                            # Merge failure breakdown counters
+                            for k, v in outcome.get('failed_breakdown', {}).items():
+                                failed_breakdown[k] = failed_breakdown.get(k, 0) + v
+
+                            # Merge engine stats counters (dotted keys)
+                            for dk, dv in outcome.get('engine_counters', {}).items():
+                                # dotted key like 'network_errors.timeouts' or 'failures.timeout' or 'total_files'
+                                if '.' in dk:
+                                    top, sub = dk.split('.', 1)
+                                    engine.stats.setdefault(top, {})
+                                    engine.stats[top][sub] = engine.stats[top].get(sub, 0) + dv
+                                else:
+                                    engine.stats[dk] = engine.stats.get(dk, 0) + dv
+
+                        elif status == 'success':
+                            # Persist manifest and update global counters
+                            manifest = outcome.get('manifest') or {}
+                            if manifest:
+                                try:
+                                    engine._save_file_manifest(manifest['url'], manifest['file_hash'], manifest['hash_filename'], manifest['is_minified'])
+                                except Exception:
+                                    engine.logger.debug("Failed to save manifest entry for %s" % manifest.get('url'))
+
+                            # Append to downloaded_files list
+                            downloaded_files.append(outcome.get('result'))
+
+                            # Merge engine counters
+                            for dk, dv in outcome.get('engine_counters', {}).items():
+                                if '.' in dk:
+                                    top, sub = dk.split('.', 1)
+                                    engine.stats.setdefault(top, {})
+                                    engine.stats[top][sub] = engine.stats[top].get(sub, 0) + dv
+                                else:
+                                    engine.stats[dk] = engine.stats.get(dk, 0) + dv
+
+                            # Update completed count
+                            completed += 1
+
+                    # Log progress after batch aggregation
+                    success_count = len(downloaded_files)
+                    if completed % 50 == 0 or completed == total_urls:
+                        total_skipped = sum(failed_breakdown.values())
+                        extra = f"{success_count} saved, {total_skipped} skipped"
+                        if total_skipped > 0 and failed_breakdown.get('duplicate', 0) > total_skipped * 0.9:
+                            extra += " (mostly cached)"
+                        engine._log_progress("Download Files", completed, total_urls, extra)
+                    else:
+                        engine._log_progress("Download Files", completed, total_urls, f"{success_count} saved")
 
             except* Exception as eg:
                 engine.logger.error(f"Batch processing error: {eg}")
