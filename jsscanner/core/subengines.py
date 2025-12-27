@@ -273,12 +273,24 @@ class DownloadEngine:
             engine.logger.warning("⚠️  Download interrupted - shutting down")
             return []
 
-        try:
-            async with asyncio.TaskGroup() as tg:
-                for url in urls:
-                    tg.create_task(task_wrapper(url))
-        except* Exception as eg:
-            engine.logger.error(f"Critical batch download error: {eg}")
+        # Refactored batch processing to prevent OOM by scheduling tasks in chunks
+        chunk_size = 1000  # Keep memory footprint stable
+        total_chunks = (len(urls) + chunk_size - 1) // chunk_size
+
+        for i in range(0, len(urls), chunk_size):
+            chunk = urls[i : i + chunk_size]
+            engine.logger.info(f"Processing batch {i//chunk_size + 1}/{total_chunks} ({len(chunk)} files)...")
+            try:
+                async with asyncio.TaskGroup() as tg:
+                    for url in chunk:
+                        tg.create_task(task_wrapper(url))
+
+                # Optional: Force GC between massive batches to keep RSS stable
+                import gc
+                gc.collect()
+
+            except* Exception as eg:
+                engine.logger.error(f"Batch processing error: {eg}")
 
         if engine.shutdown_requested:
             engine.logger.warning("⚠️  Download processing interrupted - shutting down")

@@ -33,7 +33,7 @@ subjs:
 # Deep scan for lazy-loaded code. RAM intensive.
 playwright:
   headless: true
-  max_concurrent: 8 # Increased - you have RAM headroom (11.7GB available)
+  max_concurrent: 1 # Limit browsers on VPS to avoid OOM
   restart_after: 50 # Restart frequently to prevent Chromium memory leaks
   page_timeout: 30000 # 30s timeout for slow sites (geico.com, service-now.com)
 
@@ -64,7 +64,7 @@ code_splitting:
 # Threading (Global)
 # CRITICAL: 'threads' controls ACTUAL download concurrency (not 'download_threads')
 # With uvloop, you can handle significantly more I/O concurrency.
-threads: 100 # Aggressive - your CPU load is <1.0, use it!
+threads: 15 # Reduced defaults for VPS stability
 
 # Batch Processing (The heavy lifting)
 batch_processing:
@@ -76,9 +76,9 @@ batch_processing:
 # Session Management (curl_cffi HTTP Client)
 # Fixes "curl: (18) end of response with X bytes missing" errors
 session_management:
-  pool_size: 3 # Number of concurrent sessions (3-5 optimal)
+  pool_size: 2 # Number of concurrent sessions (reduced for VPS)
   rotate_after: 100 # Rotate sessions every N downloads to prevent staleness
-  download_timeout: 30 # 30s default download timeout (reduced from 300)
+  download_timeout: 20 # Unified download timeout tuned for VPS
 
 # --- SECRET SCANNING ---
 
@@ -113,7 +113,7 @@ checkpoint:
   auto_cleanup: true
 
 retry:
-  http_requests: 3 # Minimum required by code validation. 3 is balanced.
+  http_requests: 2 # Reduced retries for fail-fast on flaky networks
   backoff_base: 0.5
   jitter: true
 
@@ -137,7 +137,7 @@ user_agents:
 # --- TIMEOUTS ---
 timeouts:
   http_request: 15 # Connection timeout (increased for slow networks like nba.com)
-  download_timeout: 300 # Large file download timeout (overrides http_request for downloads)
+  download_timeout: 20 # Large file download timeout (shorter to fail fast on bad connections)
   playwright_page: 30000 # Match playwright.page_timeout (increased to 30s)
   trufflehog: 300
 

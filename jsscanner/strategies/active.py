@@ -205,14 +205,15 @@ class ActiveFetcher:
         session_config = config.get('session_management', {})
         self.session_pool_size = session_config.get('pool_size', 3)
         self.rotate_after = session_config.get('rotate_after', 150)
-        self.download_timeout = config.get('timeouts', {}).get('download_timeout', 300)
+        # Honor configured download timeout; default to 20s for VPS-friendly behavior
+        self.download_timeout = config.get('timeouts', {}).get('download_timeout', 20)
         
-        # Enforce minimum retry count (minimum 3 retries for reliability)
+        # Ensure retry config exists; allow user to set low retry counts (fail-fast)
         if 'retry' not in self.config:
             self.config['retry'] = {}
-        if self.config['retry'].get('http_requests', 0) < 3:
-            self.logger.warning("⚠️  Enforcing minimum retry count: http_requests = 3")
-            self.config['retry']['http_requests'] = 3
+        if self.config['retry'].get('http_requests', 0) < 1:
+            self.logger.warning("⚠️  Enforcing minimum retry count: http_requests = 1")
+            self.config['retry']['http_requests'] = 1
     
     def _get_random_user_agent(self) -> str:
         """Get a random user agent to avoid WAF fingerprinting"""
@@ -994,8 +995,8 @@ class ActiveFetcher:
         # 🍪 Use curl_cffi with inherited cookies from Playwright (Cloudflare bypass)
         # Apply download_timeout for large file downloads - progressive based on preflight
         # PERFORMANCE: Follow redirects automatically (301/302/308) to avoid treating them as errors
-        # Determine progressive timeout
-        download_timeout = self.config.get('timeouts', {}).get('download_timeout', 30)
+        # Determine progressive timeout (prioritize configured `self.download_timeout`)
+        download_timeout = self.download_timeout if self.download_timeout is not None else self.config.get('timeouts', {}).get('download_timeout', 20)
         if preflight_content_length:
             try:
                 size_mb = int(preflight_content_length) / (1024 * 1024)
@@ -1023,7 +1024,7 @@ class ActiveFetcher:
                 timeout=download_timeout
             )
         except asyncio.TimeoutError:
-            raise asyncio.TimeoutError(f"Download timeout after {self.download_timeout}s: {url}")
+            raise asyncio.TimeoutError(f"Download timeout after {download_timeout}s: {url}")
         
         try:
                 # ========== PHASE 3: Strategic Error Detection (Vulnerability Hinting) ==========
