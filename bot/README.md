@@ -42,7 +42,7 @@ https://discord.com/api/oauth2/authorize?client_id=1451543287382016121&permissio
 ## Usage
 
 ```
-/scan python3 -m jsscanner -t target --subjs-only -u https://example.com
+/scan python3 -m jsscanner -t target --subjs --no-live -u https://example.com
 /screen-status
 /screen-list
 ```

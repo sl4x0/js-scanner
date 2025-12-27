@@ -279,7 +279,6 @@ python -m jsscanner --help
 | `--katana`       | Enable Katana crawling               |
 | `--subjs`        | Enable SubJS passive discovery       |
 | `--live-browser` | Enable Playwright browser automation |
-| `--subjs-only`   | Fast mode: SubJS only (2-3s)         |
 
 ### Analysis Options
 
@@ -291,7 +290,7 @@ python -m jsscanner --help
 
 - `semgrep.chunk_size` (config.yaml): number of files processed per Semgrep subprocess. Default `100`. Increase to `200-500` on larger machines to improve throughput; decrease on low-RAM VPS.
 - `semgrep.timeout` is applied per-chunk (default `120s`). If many batches still time out, raise this value or reduce `chunk_size`.
-- Recommended run for large lists: `python -m jsscanner -t example.com --subjs-only --semgrep`
+- Recommended run for large lists: `python -m jsscanner -t example.com --subjs --no-live --semgrep`
   | `--secrets` | Run TruffleHog secret detection |
   | `--source-maps` | Attempt source map recovery |
   | `--no-vendor` | Skip vendor/library files |
@@ -347,7 +346,7 @@ results/
 
 ```bash
 # Phase 1: Fast discovery (2-5 seconds)
-python -m jsscanner -t recon -u https://target.com --subjs-only
+python -m jsscanner -t recon -u https://target.com --subjs --no-live
 
 # Phase 2: Deep dive on interesting findings
 python -m jsscanner -t deep \

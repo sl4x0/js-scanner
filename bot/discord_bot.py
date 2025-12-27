@@ -49,7 +49,7 @@ async def on_ready():
 
 @client.tree.command(name="scan", description="Execute a JS-Scanner command in the 'discord' screen session")
 @app_commands.describe(
-    full_command="The full command (e.g., python3 -m jsscanner -t target.com --subjs-only -u https://example.com)"
+    full_command="The full command (e.g., python3 -m jsscanner -t target.com --subjs --no-live -u https://example.com)"
 )
 async def scan(interaction: discord.Interaction, full_command: str):
     """Execute a full JS-Scanner command in a detached screen session"""
@@ -270,7 +270,7 @@ async def help_command(interaction: discord.Interaction):
         value=(
             "Execute a JS-Scanner command in screen session.\n"
             "**Example:**\n"
-            "```\n/scan python3 -m jsscanner -t example.com --subjs-only -u https://example.com\n```"
+            "```\n/scan python3 -m jsscanner -t example.com --subjs --no-live -u https://example.com\n```"
         ),
         inline=False
     )

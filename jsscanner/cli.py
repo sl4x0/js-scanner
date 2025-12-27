@@ -23,7 +23,7 @@ Examples:
   python -m jsscanner -t example.com --subjs
   
   # Fast scan: SubJS only (no browser)
-  python -m jsscanner -t example.com --subjs-only
+    python -m jsscanner -t example.com --subjs --no-live
   
   # Scan from file with SubJS
   python -m jsscanner -t example.com -i subdomains.txt --subjs
@@ -44,17 +44,14 @@ Discovery Methods:
     - Combines with live browser scanning
     - Fast and comprehensive
   
-  --subjs-only:
-    - Uses only SubJS (no browser)
-    - Fastest mode
-    - Best for: Quick scans, many domains
+    (Use `--subjs --no-live` to run SubJS-only)
   
   --no-scope-filter:
     - Include CDN and third-party JS files
     - Use with --subjs for complete coverage
 
 Performance Tips:
-  - Use --subjs-only for fastest scans
+    - Use --subjs --no-live for fastest scans
   - Use --subjs for best coverage
   - Use --threads to control concurrency (default: 50)
         """
@@ -91,11 +88,7 @@ Performance Tips:
         help='Use SubJS for additional URL discovery (requires SubJS installed)'
     )
     
-    parser.add_argument(
-        '--subjs-only',
-        action='store_true',
-        help='Use only SubJS discovery (skip live browser scan, faster)'
-    )
+    # Note: --subjs-only has been removed. Use `--subjs --no-live` instead to achieve SubJS-only behavior.
     
     parser.add_argument(
         '--katana',
@@ -198,11 +191,7 @@ Performance Tips:
     args = parser.parse_args()
     
     # Validate conflicting flags
-    if args.subjs_only and args.subjs:
-        parser.error(
-            "Error: Cannot use both --subjs and --subjs-only together.\n"
-            "Use --subjs-only for SubJS only, or --subjs to combine with live scanning."
-        )
+    # No longer support a dedicated --subjs-only flag; combine --subjs with --no-live for that behavior
     
     if args.katana and args.no_katana:
         parser.error(
@@ -210,11 +199,7 @@ Performance Tips:
             "Use one flag to override config.yaml setting."
         )
     
-    if args.no_live and not args.subjs and not args.subjs_only:
-        parser.error(
-            "Error: --no-live requires either --subjs or --subjs-only.\n"
-            "Cannot disable all scanning methods."
-        )
+    # Allow --no-live to be used freely (for processing input files or URLs without live discovery)
     
     # Check if user accidentally used file path with -t flag
     if args.target and (args.target.startswith('/') or args.target.startswith('./') or args.target.startswith('~')):

@@ -128,12 +128,12 @@ async def main():
         sys.exit(1)
     
     # Apply CLI overrides for SubJS
-    if args.subjs or args.subjs_only:
+    if args.subjs:
         config.setdefault('subjs', {})['enabled'] = True
-    
-    if args.subjs_only:
+
+    # If user explicitly disables live scanning, reflect that in config
+    if args.no_live:
         config['skip_live'] = True
-        config.setdefault('katana', {})['enabled'] = False  # Disable Katana in SubJS-only mode
     
     # Apply CLI overrides for Katana
     if args.katana:
@@ -158,19 +158,10 @@ async def main():
     # === NEW: Determine Input List ===
     targets_to_scan = []
     
-    # SubJS: Respect config file setting unless explicitly overridden by CLI
-    if args.subjs or args.subjs_only:
-        # Explicit CLI flag - enable SubJS
-        use_subjs = True
-        subjs_only = args.subjs_only
-    elif args.no_live:
-        # --no-live implies SubJS only mode
-        use_subjs = True
-        subjs_only = True
-    else:
-        # No explicit CLI flag - use config file setting (defaults to true)
-        use_subjs = config.get('subjs', {}).get('enabled', True)
-        subjs_only = False
+    # SubJS: Determine use_subjs and subjs_only based on flags and config
+    use_subjs = args.subjs or config.get('subjs', {}).get('enabled', True)
+    # SubJS-only behavior is expressed via --subjs combined with --no-live
+    subjs_only = bool(args.subjs and args.no_live)
     
     if args.input:
         # Read from input file

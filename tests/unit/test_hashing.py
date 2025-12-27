@@ -28,6 +28,6 @@ def test_calculate_file_hash(tmp_path):
     # calculate_file_hash is async - run in event loop
     import asyncio
 
-    got = asyncio.get_event_loop().run_until_complete(calculate_file_hash(str(p)))
+    got = asyncio.run(calculate_file_hash(str(p)))
     expected = hashlib.md5(content).hexdigest()
     assert got == expected
