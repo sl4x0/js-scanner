@@ -201,3 +201,7 @@ semgrep:
   ruleset: "p/security-audit"
   max_files: 100
   binary_path: "" # Optional: explicit path to semgrep binary (leave empty for auto-detect)
+  # How long to wait for `semgrep --version` during validation (seconds)
+  version_timeout: 30
+  # Number of retries for the semgrep version check (helps on slow first-run startup)
+  version_check_retries: 2

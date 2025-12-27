@@ -3,6 +3,7 @@ Semgrep Analyzer Module
 Integrates Semgrep for static analysis of JavaScript files to identify security patterns
 """
 import subprocess
+import time
 import json
 import asyncio
 import sys
@@ -32,6 +33,10 @@ class SemgrepAnalyzer:
         semgrep_config = config.get('semgrep', {})
         self.enabled = semgrep_config.get('enabled', False)
         self.timeout = semgrep_config.get('timeout', 120)  # 2 minutes default (per-chunk)
+        # Timeout for the semgrep --version validation (seconds)
+        self.version_timeout = semgrep_config.get('version_timeout', 15)
+        # Number of retries for the semgrep --version check
+        self.version_retries = semgrep_config.get('version_check_retries', 2)
         self.max_target_bytes = semgrep_config.get('max_target_bytes', 2000000)  # 2MB per file
         # Use configured jobs or sensible default based on CPU count
         default_jobs = max(1, min(8, (os.cpu_count() or 2)))
@@ -49,6 +54,17 @@ class SemgrepAnalyzer:
         
         # Findings counter
         self.findings_count = 0
+        # Log startup diagnostics: resolved binary path and quick version check
+        try:
+            resolved = shutil.which(self.semgrep_path)
+            if resolved:
+                ver = self._get_semgrep_version()
+                self.logger.debug(f"Semgrep startup: path={resolved}, version={ver}")
+            else:
+                self.logger.debug(f"Semgrep startup: binary not found for '{self.semgrep_path}' in PATH")
+        except Exception:
+            # Avoid crashing during initialization; validate() will handle availability
+            self.logger.debug("Semgrep startup: diagnostics failed", exc_info=True)
     
     def _find_semgrep_binary(self, config: dict) -> str:
         """
@@ -91,38 +107,51 @@ class SemgrepAnalyzer:
             return False
         
         # Check if binary exists
-        if not shutil.which(self.semgrep_path):
+        found_path = shutil.which(self.semgrep_path)
+        if not found_path:
             self.logger.warning("⚠️  Semgrep not found. Static analysis will be SKIPPED.")
             self.logger.warning("   Install: pip install semgrep")
             self.logger.warning("   Or set semgrep.binary_path in config.yaml")
             self.semgrep_available = False
             return False
+        else:
+            # Log the resolved binary path for diagnostics
+            self.logger.debug(f"Semgrep binary resolved to: {found_path}")
         
         # Verify version (ensure it's working)
-        try:
-            result = subprocess.run(
-                [self.semgrep_path, '--version'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                version = result.stdout.strip()
-                self.logger.debug(f"✓ Semgrep found: {version}")
-                self.semgrep_available = True
-                return True
-            else:
-                self.logger.warning(f"⚠️  Semgrep binary exists but failed to run: {result.stderr}")
+        # Run a slightly more patient version check with retries because the
+        # semgrep CLI can be slow to start on some systems (pipx, first-run venvs,
+        # constrained VPS). Use configurable timeout and a small retry/backoff.
+        for attempt in range(1, max(1, self.version_retries) + 1):
+            try:
+                result = subprocess.run(
+                    [self.semgrep_path, '--version'],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.version_timeout
+                )
+                if result.returncode == 0:
+                    version = result.stdout.strip()
+                    self.logger.debug(f"✓ Semgrep found: {version}")
+                    self.semgrep_available = True
+                    return True
+                else:
+                    self.logger.warning(f"⚠️  Semgrep binary exists but failed to run: {result.stderr}")
+                    self.semgrep_available = False
+                    return False
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"⚠️  Semgrep version check timed out (attempt {attempt}/{self.version_retries}) after {self.version_timeout}s")
+                if attempt < self.version_retries:
+                    # small exponential backoff
+                    backoff = 1 * attempt
+                    time.sleep(backoff)
+                    continue
                 self.semgrep_available = False
                 return False
-        except subprocess.TimeoutExpired:
-            self.logger.warning("⚠️  Semgrep version check timed out")
-            self.semgrep_available = False
-            return False
-        except Exception as e:
-            self.logger.warning(f"⚠️  Semgrep validation failed: {e}")
-            self.semgrep_available = False
-            return False
+            except Exception as e:
+                self.logger.warning(f"⚠️  Semgrep validation failed: {e}")
+                self.semgrep_available = False
+                return False
     
     async def scan_directory(self, directory_path: str) -> List[Dict]:
         """
@@ -339,7 +368,7 @@ class SemgrepAnalyzer:
                 [self.semgrep_path, '--version'],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=self.version_timeout
             )
             if result.returncode == 0:
                 return result.stdout.strip()
