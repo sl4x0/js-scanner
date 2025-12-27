@@ -172,7 +172,15 @@ class DownloadEngine:
                     if not success:
                         reason = getattr(engine.fetcher, 'last_failure_reason', None)
                         # classify into filtered vs fetch_failed
-                        fb = 'filtered' if reason and str(reason).startswith('filtered') else 'fetch_failed'
+                        fb = 'fetch_failed'
+                        if reason:
+                            r = str(reason)
+                            # Soft rejections: treat as filtered (quality filters)
+                            if r.startswith(('filtered', 'too_', 'html_', 'preflight_', 'invalid_content_type', 'incomplete', 'too_short')):
+                                fb = 'filtered'
+                            else:
+                                fb = 'fetch_failed'
+
                         engine_counters = {}
                         if reason:
                             if reason in ('timeout',):
@@ -293,6 +301,9 @@ class DownloadEngine:
                 # Batch-update global stats and manifests in one synchronized block
                 async with lock:
                     # Iterate results and apply updates once per batch
+                    # Collect per-batch failure samples for diagnostics
+                    batch_failure_samples = {}
+
                     for item in batch_results:
                         outcome = item.get('outcome')
                         if not outcome:
@@ -306,6 +317,12 @@ class DownloadEngine:
                             # Merge failure breakdown counters
                             for k, v in outcome.get('failed_breakdown', {}).items():
                                 failed_breakdown[k] = failed_breakdown.get(k, 0) + v
+
+                            # Collect sample URLs for this failure type (up to 3 per type)
+                            for k in outcome.get('failed_breakdown', {}).keys():
+                                samples = batch_failure_samples.setdefault(k, [])
+                                if len(samples) < 3:
+                                    samples.append(item.get('url'))
 
                             # Merge engine stats counters (dotted keys)
                             for dk, dv in outcome.get('engine_counters', {}).items():
@@ -341,13 +358,31 @@ class DownloadEngine:
                             # Update completed count
                             completed += 1
 
-                    # Log progress after batch aggregation
+                    # Log progress after batch aggregation with per-batch diagnostics
                     success_count = len(downloaded_files)
+                    total_skipped = sum(failed_breakdown.values())
+                    extra = f"{success_count} saved, {total_skipped} skipped"
+
+                    # Always include a clear skip breakdown when there are skipped files
+                    if total_skipped > 0:
+                        f_filtered = failed_breakdown.get('filtered', 0)
+                        f_failed = failed_breakdown.get('fetch_failed', 0)
+                        f_dup = failed_breakdown.get('duplicate', 0)
+                        f_scope = failed_breakdown.get('out_of_scope', 0)
+                        f_invalid = failed_breakdown.get('invalid_url', 0)
+                        skip_summary = f"(Skip: {f_filtered} Filtered, {f_failed} Failed, {f_dup} Dups, {f_scope} OutOfScope, {f_invalid} Invalid)"
+                        extra += f" {skip_summary}"
+
+                    # Build diagnostic lines for batch failures (show up to 3 sample URLs per failure type)
+                    diag_lines = []
+                    for k, samples in batch_failure_samples.items():
+                        diag_lines.append(f"{k}: {len(samples)} samples e.g. {samples[:3]}")
+
+                    if diag_lines:
+                        extra += " | " + "; ".join(diag_lines)
+
+                    # Log progress
                     if completed % 50 == 0 or completed == total_urls:
-                        total_skipped = sum(failed_breakdown.values())
-                        extra = f"{success_count} saved, {total_skipped} skipped"
-                        if total_skipped > 0 and failed_breakdown.get('duplicate', 0) > total_skipped * 0.9:
-                            extra += " (mostly cached)"
                         engine._log_progress("Download Files", completed, total_urls, extra)
                     else:
                         engine._log_progress("Download Files", completed, total_urls, f"{success_count} saved")
@@ -371,6 +406,8 @@ class DownloadEngine:
                 engine.logger.info(f"      • Out of scope: {failed_breakdown['out_of_scope']}")
             if failed_breakdown['fetch_failed'] > 0:
                 engine.logger.info(f"      • Fetch failed: {failed_breakdown['fetch_failed']}")
+            if failed_breakdown.get('filtered', 0) > 0:
+                engine.logger.info(f"      • Filtered (size/content/noise): {failed_breakdown.get('filtered', 0)}")
             if failed_breakdown['duplicate'] > 0:
                 engine.logger.info(f"      • Duplicates (cached): {failed_breakdown['duplicate']}")
 
