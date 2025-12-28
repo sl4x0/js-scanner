@@ -329,7 +329,8 @@ class ActiveFetcher:
             session = AsyncSession(
                 impersonate="chrome120",  # Mimics Chrome 120 TLS fingerprint
                 timeout=timeout_val,
-                verify=self.ssl_verify
+                verify=self.ssl_verify,
+                http_version="1.1"  # Force HTTP/1.1 for maximum speed (HTTP/2 has protocol overhead)
             )
             self.session_pool.append(session)
         
@@ -378,7 +379,7 @@ class ActiveFetcher:
             async def _do_head():
                 return await asyncio.wait_for(
                     session.head(url, allow_redirects=True),
-                    timeout=5.0
+                    timeout=3.0  # Reduced from 5.0 for faster preflight when enabled
                 )
 
             try:
@@ -453,7 +454,8 @@ class ActiveFetcher:
             new_session = AsyncSession(
                 impersonate="chrome120",
                 timeout=timeout_val,
-                verify=self.ssl_verify
+                verify=self.ssl_verify,
+                http_version="1.1"  # Force HTTP/1.1 for maximum speed
             )
             
             self.session_pool[session_index] = new_session
@@ -1319,12 +1321,17 @@ class ActiveFetcher:
         if not self.session_pool:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
 
-        # Preflight check
-        should_download, reason, preflight_content_length = await self._preflight_check(url)
-        if not should_download:
-            self.logger.debug(f"⏭️  Preflight rejected: {url} - {reason}")
-            self.last_failure_reason = f'preflight_{reason}'
-            return False
+        # Skip preflight check for maximum speed if configured
+        skip_preflight = self.config.get('download', {}).get('skip_preflight', False)
+        preflight_content_length = None
+
+        if not skip_preflight:
+            # Preflight check
+            should_download, reason, preflight_content_length = await self._preflight_check(url)
+            if not should_download:
+                self.logger.debug(f"⏭️  Preflight rejected: {url} - {reason}")
+                self.last_failure_reason = f'preflight_{reason}'
+                return False
 
         session = self._get_session()
 

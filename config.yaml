@@ -60,12 +60,12 @@ code_splitting:
   extract_chunk_map: true
   probe_common_locales: ["en", "es", "fr", "de"]
 
-# --- PERFORMANCE TUNING (uvloop Optimized) ---
+# --- PERFORMANCE TUNING (High-Performance VPS Optimized) ---
 
 # Threading (Global)
-# CRITICAL: 'threads' controls ACTUAL download concurrency (not 'download_threads')
-# With uvloop, you can handle significantly more I/O concurrency.
-threads: 15 # Reduced defaults for VPS stability
+# CRITICAL: 'threads' controls ACTUAL download concurrency
+# High-performance VPS: Maximize concurrency for speed
+threads: 200 # Increased from 15 for maximum throughput on high-bandwidth VPS
 
 # Batch Processing (The heavy lifting)
 batch_processing:
@@ -74,23 +74,24 @@ batch_processing:
   process_threads: 100 # Matches increased threads setting
   cleanup_minified: false
 
-# Download tuning
+# Download tuning - AGGRESSIVE OPTIMIZATION for 5-minute target
 download:
-  chunk_size: 250 # Number of URLs processed per batch (reduce for low-RAM VPS)
+  chunk_size: 1000 # Increased from 250 - larger batches reduce overhead on fast VPS
+  skip_preflight: true # Skip HEAD requests for maximum speed - trust the URLs are valid
 
-# Session Management (curl_cffi HTTP Client)
-# Fixes "curl: (18) end of response with X bytes missing" errors
+# Session Management (curl_cffi HTTP Client) - MAXIMUM SPEED CONFIG
+# Optimized for high-bandwidth VPS with excellent connectivity
 session_management:
-  pool_size: 2 # Number of concurrent sessions (reduced for VPS)
-  rotate_after: 100 # Rotate sessions every N downloads to prevent staleness
-  download_timeout: 20 # Unified download timeout tuned for VPS
+  pool_size: 20 # Increased from 2 - more concurrent connections for speed
+  rotate_after: 500 # Increased from 100 - keep connections alive longer
+  download_timeout: 8 # Reduced from 20 - aggressive timeout for speed
 
 # --- SECRET SCANNING ---
 
 trufflehog_path: "" # Auto-detect
 trufflehog_timeout: 300
 # CPU Bottleneck Warning: TruffleHog is heavy.
-trufflehog_max_concurrent: 8 # Increased - your CPU is idle, use it!
+trufflehog_max_concurrent: 50 # Increased for high-performance VPS - maximize CPU utilization
 
 # --- ALERTING ---
 
