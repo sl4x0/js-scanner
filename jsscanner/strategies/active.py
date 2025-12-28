@@ -154,16 +154,18 @@ class ActiveFetcher:
     Fetches JavaScript files from various sources
     """
 
-    def __init__(self, config: dict, logger) -> None:
+    def __init__(self, config: dict, logger, state=None) -> None:
         """
         Initialize fetcher
 
         Args:
             config: Configuration dictionary
             logger: Logger instance
+            state: State manager instance (optional)
         """
         self.config = config
         self.logger = logger
+        self.state = state
         self.playwright = None
         self.browser_manager = None
         self.last_failure_reason = None
@@ -355,17 +357,40 @@ class ActiveFetcher:
         Fast pre-flight HEAD request to reject large or invalid files quickly.
         Returns (should_download, reason, content_length_or_none)
         """
+        # Check if domain is known problematic
+        if self.state and self.state.problematic_domains_enabled:
+            domain = urlparse(url).netloc
+            if self.state.is_problematic_domain(domain):
+                self.logger.debug(f"⏭️  Skipping known problematic domain: {domain}")
+                return False, 'problematic_domain', None
+
         try:
             session = self._get_session()
 
-            # HEAD request with short timeout to fail fast
-            try:
-                resp = await asyncio.wait_for(
+            # HEAD request with retry on timeout
+            @retry_async(
+                max_attempts=2,
+                backoff_base=0.1,
+                backoff_multiplier=1.5,
+                retry_on=(asyncio.TimeoutError,),
+                operation_name=f"head_check({url[:50]}...)"
+            )
+            async def _do_head():
+                return await asyncio.wait_for(
                     session.head(url, allow_redirects=True),
                     timeout=5.0
                 )
+
+            try:
+                resp = await _do_head()
             except asyncio.TimeoutError:
-                return False, 'head_timeout', None
+                # After retries, allow download with full timeout as fallback
+                self.logger.debug(f"HEAD timeout after retries, allowing GET fallback: {url[:80]}")
+                # Mark domain as potentially problematic for future
+                if self.state:
+                    domain = urlparse(url).netloc
+                    self.state.mark_domain_problematic(domain)
+                return True, 'head_timeout_fallback', None
 
             # Check HTTP status
             status = getattr(resp, 'status_code', None)

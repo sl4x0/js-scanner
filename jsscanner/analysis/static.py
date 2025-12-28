@@ -179,6 +179,11 @@ class StaticAnalyzer:
             # Parse content in executor to avoid blocking event loop (CPU-bound)
             loop = asyncio.get_event_loop()
             tree = await loop.run_in_executor(None, self._parse_content, content)
+            
+            # Handle case where parsing was skipped (e.g. file too small)
+            if not tree:
+                return
+
             root_node = tree.root_node
             
             # Extract various elements (run in executor since they traverse large ASTs)
@@ -319,7 +324,7 @@ class StaticAnalyzer:
         # Skip empty or nearly empty files
         if len(content) < 10:  # Less than 10 bytes
             self.logger.debug(f"Skipping AST parsing for file <10 bytes (too small)")
-            raise ValueError("File too small for meaningful AST parsing")
+            return None
         
         tree = self.parser.parse(bytes(content, 'utf8'))
         

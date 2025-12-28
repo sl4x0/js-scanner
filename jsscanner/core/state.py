@@ -47,6 +47,7 @@ class State:
         self.state_file = db_path / 'state.json'
         self.checkpoint_file = db_path / 'checkpoint.json'
         self.bloom_path = db_path / 'state.bloom'
+        self.problematic_domains_path = db_path / 'problematic_domains.bloom'
         
         # In-memory state cache for incremental scanning
         self.state = self._load_state()
@@ -57,6 +58,13 @@ class State:
         # Bloom filter for O(1) hash lookups (optional, requires pybloom_live)
         self.bloom_filter = self._load_bloom_filter()
         self.bloom_enabled = self.bloom_filter is not None
+        
+        # Bloom filter for problematic domains (domains that timeout repeatedly)
+        self.problematic_domains_filter = self._load_problematic_domains_filter()
+        self.problematic_domains_enabled = self.problematic_domains_filter is not None
+        
+        # Counter for batching problematic domains saves (save every 10 adds)
+        self.problematic_domains_save_counter = 0
         
         # Thread lock for Bloom filter operations (thread safety)
         import threading
@@ -85,6 +93,27 @@ class State:
             # Failed to load bloom filter - continue without it
             return None
     
+    def _load_problematic_domains_filter(self):
+        """
+        Load problematic domains Bloom filter from disk or create new one
+        
+        Returns:
+            Bloom filter instance or None if pybloom_live not available
+        """
+        try:
+            from pybloom_live import ScalableBloomFilter
+            
+            if self.problematic_domains_path.exists():
+                with open(self.problematic_domains_path, 'rb') as f:
+                    return ScalableBloomFilter.fromfile(f)
+            else:
+                # Create new bloom filter with reasonable defaults for domains
+                return ScalableBloomFilter(initial_capacity=1000, error_rate=0.01)
+        except ImportError:
+            return None
+        except Exception as e:
+            return None
+    
     def _save_bloom_filter(self):
         """Save Bloom filter to disk"""
         if self.bloom_filter:
@@ -92,6 +121,16 @@ class State:
                 self.bloom_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(self.bloom_path, 'wb') as f:
                     self.bloom_filter.tofile(f)
+            except Exception:
+                pass  # Silent failure - not critical
+    
+    def _save_problematic_domains_filter(self):
+        """Save problematic domains Bloom filter to disk"""
+        if self.problematic_domains_filter:
+            try:
+                self.problematic_domains_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.problematic_domains_path, 'wb') as f:
+                    self.problematic_domains_filter.tofile(f)
             except Exception:
                 pass  # Silent failure - not critical
     
@@ -160,6 +199,36 @@ class State:
                 return file_hash in scanned_hashes
             finally:
                 self._unlock_file(f)
+    
+    def is_problematic_domain(self, domain: str) -> bool:
+        """
+        Check if domain is marked as problematic (repeated timeouts)
+        
+        Args:
+            domain: Domain name
+            
+        Returns:
+            True if domain is problematic, False otherwise
+        """
+        if self.problematic_domains_enabled:
+            with self._bloom_lock:
+                return domain in self.problematic_domains_filter
+        return False
+    
+    def mark_domain_problematic(self, domain: str):
+        """
+        Mark domain as problematic (add to bloom filter)
+        
+        Args:
+            domain: Domain name to mark
+        """
+        if self.problematic_domains_enabled:
+            with self._bloom_lock:
+                self.problematic_domains_filter.add(domain)
+            # Batch saves to reduce IO lag (save every 10 additions)
+            self.problematic_domains_save_counter += 1
+            if self.problematic_domains_save_counter % 10 == 0:
+                self._save_problematic_domains_filter()
     
     def mark_as_scanned(self, file_hash: str, url: str = None):
         """

@@ -762,7 +762,7 @@ class ScanEngine:
         from ..strategies.fast import FastFetcher
         from ..analysis.semgrep import SemgrepAnalyzer
         
-        self.fetcher = ActiveFetcher(self.config, self.logger)
+        self.fetcher = ActiveFetcher(self.config, self.logger, self.state)
         skip_beautify = self.config.get('skip_beautification', False)
         self.processor = Processor(self.logger, skip_beautification=skip_beautify, config=self.config)
         self.secret_scanner = SecretScanner(

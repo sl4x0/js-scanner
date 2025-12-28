@@ -34,9 +34,9 @@ class SemgrepAnalyzer:
         self.enabled = semgrep_config.get('enabled', False)
         self.timeout = semgrep_config.get('timeout', 120)  # 2 minutes default (per-chunk)
         # Timeout for the semgrep --version validation (seconds)
-        self.version_timeout = semgrep_config.get('version_timeout', 15)
+        self.version_timeout = semgrep_config.get('version_timeout', 30)
         # Number of retries for the semgrep --version check
-        self.version_retries = semgrep_config.get('version_check_retries', 2)
+        self.version_retries = semgrep_config.get('version_check_retries', 3)
         self.max_target_bytes = semgrep_config.get('max_target_bytes', 2000000)  # 2MB per file
         # Use configured jobs or sensible default based on CPU count
         default_jobs = max(1, min(8, (os.cpu_count() or 2)))

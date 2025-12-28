@@ -6,6 +6,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.2.2] - 2025-12-28 - "Critical Error Fixes"
+
+### 🐛 Bug Fixes
+
+#### AST Analysis Stability
+
+- **Fixed AST parsing errors for small files** ([static.py](jsscanner/analysis/static.py))
+  - Changed `_parse_content` to return `None` gracefully for files < 10 bytes instead of raising ValueError
+  - Updated `analyze` method to handle `None` return value silently
+  - Eliminates ERROR log spam for tiny/minified files
+
+#### Beautification Crash Prevention
+
+- **Added specific exception handling for jsbeautifier packer errors** ([processor.py](jsscanner/analysis/processor.py))
+  - Added `except (IndexError, AttributeError)` block to catch internal packer library errors
+  - Logs warning and falls back to original content instead of crashing
+  - Prevents crashes on malformed packed JavaScript (common in vendor files)
+
+#### Semgrep Validation Reliability
+
+- **Increased Semgrep version check timeout and retries** ([semgrep.py](jsscanner/analysis/semgrep.py))
+  - Increased default `version_timeout` from 15s to 30s for VPS cold-start scenarios
+  - Increased default `version_check_retries` from 2 to 3 attempts
+  - Prevents premature skipping of static analysis due to slow binary initialization
+
+### 🔧 Technical Changes
+
+- Improved error handling across analysis pipeline
+- Better resilience for malformed JavaScript content
+- Enhanced timeout handling for constrained environments
+
+---
+
+## [4.2.1] - 2025-12-28 - "Timeout Optimization & Resilience"
+
+### 🚀 Performance Improvements
+
+#### Timeout Handling & Domain Blacklisting
+
+- **Added problematic domains bloom filter** ([state.py](jsscanner/core/state.py))
+
+  - Tracks domains with repeated HEAD request timeouts
+  - O(1) lookup to skip known problematic domains immediately
+  - Reduces wasted time on unreliable sites
+
+- **Enhanced HEAD request retry logic** ([active.py](jsscanner/strategies/active.py))
+
+  - Fast retry with 2 attempts and 0.1s backoff base for timeouts
+  - Fallback to full GET download if HEAD fails after retries
+  - Maintains fail-fast behavior while improving success rate
+
+- **Optimized sourcemap fetching** ([sourcemap.py](jsscanner/analysis/sourcemap.py))
+  - Reduced retry attempts from 2 to 1 for optional resources
+  - Faster graceful skipping of unavailable source maps
+
+### 🔧 Technical Changes
+
+- Modified `ActiveFetcher` to accept state manager for domain tracking
+- Updated engine initialization to pass state to fetcher
+- Maintained aggressive 5s HEAD timeout with smart fallback mechanism
+
+---
+
 ## [4.2.0] - 2025-12-25 - "Semgrep Static Analysis"
 
 ### ✨ New Features

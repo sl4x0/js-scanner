@@ -171,6 +171,9 @@ class Processor:
         except (ValueError, TypeError) as e:
             self.logger.warning(f"Failed to beautify (invalid content): {e}")
             return content
+        except (IndexError, AttributeError) as e:
+            self.logger.warning(f"Beautification failed due to internal packer error (likely malformed packed code): {e}")
+            return content
         except Exception as e:
             self.logger.error(f"Unexpected error during beautification: {e}", exc_info=True)
             return content

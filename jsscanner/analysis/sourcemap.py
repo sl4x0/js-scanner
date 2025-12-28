@@ -122,8 +122,8 @@ class SourceMapRecoverer:
         # Get retry config
         retry_config = self.config.get('retry', {})
         max_attempts = retry_config.get('http_requests', 3)
-        # Use lighter retry for source maps (optional resources)
-        max_attempts = min(max_attempts, 2)
+        # Use lighter retry for source maps (optional resources) - reduce to 1 for speed
+        max_attempts = min(max_attempts, 1)
         backoff_base = retry_config.get('backoff_base', 0.5)
         
         # Define retry wrapper
