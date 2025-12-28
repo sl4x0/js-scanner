@@ -32,7 +32,7 @@ class SemgrepAnalyzer:
         # Extract semgrep config with defaults
         semgrep_config = config.get('semgrep', {})
         self.enabled = semgrep_config.get('enabled', False)
-        self.timeout = semgrep_config.get('timeout', 120)  # 2 minutes default (per-chunk)
+        self.timeout = semgrep_config.get('timeout', 300)  # 5 minutes default (per-chunk) - increased for VPS reliability
         # Timeout for the semgrep --version validation (seconds)
         self.version_timeout = semgrep_config.get('version_timeout', 30)
         # Number of retries for the semgrep --version check
@@ -272,7 +272,8 @@ class SemgrepAnalyzer:
                         timeout=self.timeout + 30
                     )
                 except asyncio.TimeoutError:
-                    self.logger.warning(f"⚠️  Semgrep batch {batch_num}/{batch_total} timed out after {self.timeout}s")
+                    actual_timeout = self.timeout + 30
+                    self.logger.warning(f"⚠️  Semgrep batch {batch_num}/{batch_total} timed out after {actual_timeout}s")
                     try:
                         process.kill()
                     except Exception:

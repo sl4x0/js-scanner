@@ -1314,9 +1314,9 @@ class ActiveFetcher:
 
     async def fetch_and_write(self, url: str, out_path: str) -> bool:
         """
-        Stream a remote resource directly to disk to avoid holding content in memory.
-
-        Returns True on success, False on failure.
+        Stream a remote resource directly to disk with retry logic for transient failures.
+        
+        Returns True on success, False on failure (after all retries exhausted).
         """
         if not self.session_pool:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
@@ -1333,6 +1333,62 @@ class ActiveFetcher:
                 self.last_failure_reason = f'preflight_{reason}'
                 return False
 
+        # Get retry config from global config
+        retry_config = self.config.get('retry', {})
+        max_attempts = retry_config.get('http_requests', 3)
+        backoff_base = retry_config.get('backoff_base', 0.3)
+        
+        # Define retry exceptions (network-related only)
+        retry_exceptions = (
+            asyncio.TimeoutError,
+            ConnectionError,
+            TimeoutError,
+            OSError,
+        )
+        
+        # Wrap the actual fetch logic with retry decorator
+        @retry_async(
+            max_attempts=max_attempts,
+            backoff_base=backoff_base,
+            retry_on=retry_exceptions,
+            operation_name=f"download({url[:50]}...)"
+        )
+        async def _do_fetch_and_write():
+            return await self._fetch_and_write_impl(url, out_path, preflight_content_length)
+        
+        try:
+            return await _do_fetch_and_write()
+        except asyncio.TimeoutError:
+            # All retries exhausted due to timeout
+            self.last_failure_reason = 'timeout'
+            self.error_stats['timeouts'] += 1
+            return False
+        except (ConnectionError, OSError) as e:
+            # All retries exhausted due to network error
+            self.last_failure_reason = 'network_error'
+            
+            # Classify the specific network error
+            error_str = str(e)
+            if 'Name or service not known' in error_str or 'getaddrinfo failed' in error_str:
+                self.error_stats['dns_errors'] += 1
+            elif 'Connection refused' in error_str:
+                self.error_stats['connection_refused'] += 1
+            elif 'SSL' in error_str or 'certificate' in error_str.lower():
+                self.error_stats['ssl_errors'] += 1
+            else:
+                self.error_stats['timeouts'] += 1  # Generic network failure
+            return False
+        except Exception as e:
+            # Non-retryable error
+            self.last_failure_reason = 'non_retryable_error'
+            self.error_stats['http_errors'] += 1
+            return False
+    
+    async def _fetch_and_write_impl(self, url: str, out_path: str, preflight_content_length: Optional[int]) -> bool:
+        """
+        Internal implementation of fetch_and_write (separated for retry logic).
+        This method may raise exceptions that trigger retries.
+        """
         session = self._get_session()
 
         # Basic headers
@@ -1350,21 +1406,32 @@ class ActiveFetcher:
         else:
             headers['Referer'] = origin
 
+        # VPS OPTIMIZATION: Use aggressive timeout for high bandwidth environments
+        # Default to 20s, but allow config override
+        download_timeout = self.download_timeout if self.download_timeout is not None else 20
+        
         try:
             response = await asyncio.wait_for(
                 session.get(url, headers=headers, cookies=self.valid_cookies if self.valid_cookies else None, allow_redirects=True, max_redirects=5),
-                timeout=self.download_timeout
+                timeout=download_timeout
             )
         except asyncio.TimeoutError:
-            self.last_failure_reason = 'timeout'
-            return False
-        except Exception as e:
-            self.last_failure_reason = 'network_error'
-            return False
+            # Re-raise to trigger retry
+            raise asyncio.TimeoutError(f"Download timeout after {download_timeout}s: {url}")
 
-        # Handle non-200 statuses
+        # Handle non-200 statuses (non-retryable)
         if response.status_code != 200:
             self.last_failure_reason = f'http_{response.status_code}'
+            # Track HTTP errors
+            self.http_status_breakdown[response.status_code] = self.http_status_breakdown.get(response.status_code, 0) + 1
+            if response.status_code >= 500:
+                self.error_stats['http_errors'] += 1
+            elif response.status_code in [401, 403]:
+                self.error_stats['http_errors'] += 1
+            elif response.status_code in [429, 503]:
+                self.error_stats['rate_limits'] += 1
+            else:
+                self.error_stats['http_errors'] += 1
             return False
 
         # Stream to disk
@@ -1387,11 +1454,18 @@ class ActiveFetcher:
                     actual = Path(out_path).stat().st_size
                     if actual < expected - 100:
                         self.last_failure_reason = 'incomplete'
-                        return False
+                        # Re-raise to trigger retry
+                        raise OSError(f"Incomplete download: expected {expected} bytes, got {actual} bytes")
+                except OSError:
+                    raise  # Re-raise incomplete download error for retry
                 except Exception:
                     pass
 
             return True
+        except OSError:
+            # Re-raise to trigger retry (incomplete download or write error)
+            raise
         except Exception as e:
             self.last_failure_reason = 'write_error'
+            # Non-retryable write error
             return False
