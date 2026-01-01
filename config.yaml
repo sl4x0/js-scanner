@@ -33,10 +33,10 @@ subjs:
 # Deep scan for lazy-loaded code. RAM intensive.
 playwright:
   headless: true
-  max_concurrent: 1 # Limit browsers on VPS to avoid OOM
+  max_concurrent: 5 # ✅ FIX 3: Increased from 1 to 5 for parallel browser pool
   restart_after: 50 # Restart frequently to prevent Chromium memory leaks
-  page_timeout: 30000 # 30s timeout for slow sites (geico.com, service-now.com)
-  enable_interactions: true # Toggle smart DOM interactions (set false to disable)
+  page_timeout: 45000 # ✅ FIX 3: Increased from 30s to 45s for slow sites
+  enable_interactions: false # ✅ FIX 3: DISABLED for speed - only downloading JS, no UI testing
 
 # Performance Optimizations
 interaction_delay: 0.3 # Ultra-fast interactions - reduced from 0.5s
@@ -47,8 +47,8 @@ interaction_delay: 0.3 # Ultra-fast interactions - reduced from 0.5s
 # [CRITICAL] Analysis of found JS to find *more* JS (imports, requires)
 recursion:
   enabled: true
-  max_depth: 2 # Depth 2 is safe. Depth 3+ can cause infinite loops/exponential explosions.
-  validate_with_head: true # Check file exists (HEAD request) before downloading. Saves bandwidth.
+  max_depth: 1 # ✅ FIX 3: Reduced from 2 to 1 - faster scans, less overhead
+  validate_with_head: false # ✅ FIX 3: DISABLED - eliminates 25-75min validation overhead!
 
 # 5. AST & EXTRACTION
 ast:
@@ -64,8 +64,8 @@ code_splitting:
 
 # Threading (Global)
 # CRITICAL: 'threads' controls ACTUAL download concurrency
-# VPS-OPTIMIZED: Reduced from 200 to prevent local resource saturation and timeout queue buildup
-threads: 15 # Reduced from 200 - VPS can't handle 200 concurrent connections
+# ✅ FIX 1B: EMERGENCY REDUCTION for VPS stability (was 15, now 10)
+threads: 10 # Reduced to prevent network queue saturation and timeout cascades
 
 # Batch Processing (The heavy lifting)
 batch_processing:
@@ -76,15 +76,16 @@ batch_processing:
 
 # Download tuning - VPS-OPTIMIZED for stability over raw speed
 download:
-  chunk_size: 200 # Reduced from 1000 - smaller batches prevent memory pressure on VPS
+  chunk_size: 50 # ✅ FIX 1B: Reduced from 200 to 50 - prevent memory spikes
   skip_preflight: true # Skip HEAD requests for maximum speed - trust the URLs are valid
+  max_concurrent_per_domain: 3 # ✅ FIX 1B: NEW - prevent rate limiting per domain
 
 # Session Management (curl_cffi HTTP Client) - MAXIMUM SPEED CONFIG
 # Optimized for high-bandwidth VPS with excellent connectivity
 session_management:
-  pool_size: 20 # Increased from 2 - more concurrent connections for speed
+  pool_size: 5 # ✅ FIX 1B: Reduced from 20 to 5 - fewer concurrent connections
   rotate_after: 500 # Increased from 100 - keep connections alive longer
-  download_timeout: 60 # ✅ FIX: Increased from 30s to 60s - handle slow CDNs and large files
+  download_timeout: 120 # ✅ FIX 1B: Increased from 60s to 120s - handle slow domains
 
 # --- SECRET SCANNING ---
 
@@ -119,8 +120,9 @@ checkpoint:
   auto_cleanup: true
 
 retry:
-  http_requests: 2 # Reduced retries for fail-fast on flaky networks
-  backoff_base: 0.5
+  http_requests: 3 # ✅ FIX 3: Increased from 2 to 3 retries for better resilience
+  backoff_base: 1.0 # ✅ FIX 3: Increased from 0.5s to 1.0s - give servers more time
+  backoff_multiplier: 3.0 # ✅ NEW: Exponential backoff multiplier for aggressive scaling
   jitter: true
 
 # --- BYPASS & EVASION ---
@@ -141,11 +143,21 @@ user_agents:
   - "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0"
 
 # --- TIMEOUTS ---
+# ✅ FIX 3: Optimized timeout configuration for VPS and slow domains
 timeouts:
-  http_request: 15 # Connection timeout (increased for slow networks like nba.com)
-  download_timeout: 20 # Large file download timeout (shorter to fail fast on bad connections)
-  playwright_page: 30000 # Match playwright.page_timeout (increased to 30s)
+  http_request: 30 # ✅ INCREASED from 15s to 30s - connection timeout for slow CDNs
+  download_timeout: 90 # ✅ INCREASED from 20s to 90s - handle large bundles
+  playwright_page: 45000 # ✅ INCREASED from 30s to 45s - slow SPA navigation
   trufflehog: 300
+
+# ✅ FIX 3: Domain-specific timeout overrides (NEW SECTION)
+# Domains that consistently timeout get special treatment
+domain_timeouts:
+  getsentry.net: 180 # 3x base timeout (always slow)
+  collegeboard.org: 180
+  watsons.com.cn: 180
+  watsonsvip.com.cn: 180
+  # Add more domains as discovered during scans
 
 beautification:
   timeout_small: 120
@@ -164,7 +176,7 @@ bundle_unpacker:
   temp_dir: "temp/unpacked"
 
 minimal_storage: false
-max_concurrent_domains: 5 # Reduced from 25 - prevent domain-level parallelism overload on VPS
+max_concurrent_domains: 3 # ✅ FIX 3: Reduced from 5 to 3 - prevent domain parallelism overload
 
 # ========================================
 # v4.1 Performance Improvements (NEW)

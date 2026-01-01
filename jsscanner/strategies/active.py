@@ -6,9 +6,10 @@ import asyncio
 import time
 import socket
 import random
+from collections import defaultdict
 from curl_cffi.requests import AsyncSession
 from playwright.async_api import async_playwright, Browser, BrowserContext
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 import re
@@ -19,6 +20,144 @@ from ..utils.net import retry_async, RETRY_CONFIG_HTTP
 class IncompleteDownloadError(Exception):
     """Raised when a download completes but Content-Length doesn't match received bytes"""
     pass
+
+
+# ✅ FIX 2B: Token Bucket Rate Limiter per Domain
+class DomainRateLimiter:
+    """
+    Token bucket rate limiter per domain to prevent hitting rate limits.
+    Spaces out requests to same domain to avoid WAF/CDN blocks.
+    """
+    
+    def __init__(self, requests_per_second: float = 5.0):
+        self.domain_buckets: Dict[str, Dict] = {}
+        self.rate = requests_per_second
+        self.lock = asyncio.Lock()
+    
+    async def acquire(self, domain: str):
+        """Acquire permission to make a request to this domain"""
+        async with self.lock:
+            if domain not in self.domain_buckets:
+                self.domain_buckets[domain] = {
+                    'tokens': self.rate,
+                    'last_update': time.time()
+                }
+            
+            bucket = self.domain_buckets[domain]
+            now = time.time()
+            
+            # Refill tokens based on elapsed time
+            elapsed = now - bucket['last_update']
+            bucket['tokens'] = min(self.rate, bucket['tokens'] + elapsed * self.rate)
+            bucket['last_update'] = now
+            
+            if bucket['tokens'] < 1:
+                # Need to wait for tokens to refill
+                wait_time = (1 - bucket['tokens']) / self.rate
+                await asyncio.sleep(wait_time)
+                bucket['tokens'] = 0
+            else:
+                bucket['tokens'] -= 1
+
+
+# ✅ FIX 2A: Per-Domain Connection Manager
+class DomainConnectionManager:
+    """
+    Manages separate connection pools and concurrency limits per domain.
+    Prevents one slow domain from blocking others.
+    """
+    
+    def __init__(self, max_per_domain: int = 3, ssl_verify: bool = False):
+        self.domain_sessions: Dict[str, AsyncSession] = {}
+        self.domain_semaphores: Dict[str, asyncio.Semaphore] = {}
+        self.max_per_domain = max_per_domain
+        self.ssl_verify = ssl_verify
+        self.lock = asyncio.Lock()
+    
+    async def get_session(self, url: str) -> Tuple[AsyncSession, asyncio.Semaphore]:
+        """Get session and semaphore for this domain"""
+        domain = urlparse(url).netloc
+        
+        async with self.lock:
+            if domain not in self.domain_sessions:
+                # Create new session for this domain
+                self.domain_sessions[domain] = AsyncSession(
+                    impersonate="chrome120",
+                    timeout=None,  # Use per-request timeouts
+                    verify=self.ssl_verify,
+                    http_version="1.1"
+                )
+                self.domain_semaphores[domain] = asyncio.Semaphore(self.max_per_domain)
+        
+        return self.domain_sessions[domain], self.domain_semaphores[domain]
+    
+    async def close_all(self):
+        """Close all domain sessions"""
+        async with self.lock:
+            for session in self.domain_sessions.values():
+                try:
+                    await asyncio.wait_for(session.close(), timeout=2.0)
+                except Exception:
+                    pass
+            self.domain_sessions.clear()
+            self.domain_semaphores.clear()
+
+
+# ✅ FIX 4: Domain Performance Tracker (Adaptive Learning)
+class DomainPerformanceTracker:
+    """
+    Tracks success rate and latency per domain.
+    Adaptively decides whether to use browser or HTTP based on historical performance.
+    """
+    
+    def __init__(self, min_samples: int = 5, failure_threshold: float = 0.5):
+        self.domain_stats: Dict[str, Dict] = {}
+        self.min_samples = min_samples
+        self.failure_threshold = failure_threshold
+        self.lock = asyncio.Lock()
+    
+    async def record(self, domain: str, success: bool, latency: float):
+        """Record a request result for this domain"""
+        async with self.lock:
+            if domain not in self.domain_stats:
+                self.domain_stats[domain] = {
+                    'success': 0,
+                    'failures': 0,
+                    'latencies': []
+                }
+            
+            stats = self.domain_stats[domain]
+            if success:
+                stats['success'] += 1
+                stats['latencies'].append(latency)
+                # Keep only last 100 latencies
+                if len(stats['latencies']) > 100:
+                    stats['latencies'] = stats['latencies'][-100:]
+            else:
+                stats['failures'] += 1
+    
+    def should_use_browser(self, domain: str) -> bool:
+        """
+        Adaptive decision: use browser if HTTP failure rate > threshold.
+        Returns True if browser should be used from the start.
+        """
+        stats = self.domain_stats.get(domain)
+        if not stats:
+            return False  # No data yet, try HTTP first
+        
+        total = stats['success'] + stats['failures']
+        if total < self.min_samples:
+            return False  # Not enough data yet
+        
+        failure_rate = stats['failures'] / total
+        return failure_rate > self.failure_threshold
+    
+    def get_avg_latency(self, domain: str) -> Optional[float]:
+        """Get average latency for this domain"""
+        stats = self.domain_stats.get(domain)
+        if not stats or not stats['latencies']:
+            return None
+        return sum(stats['latencies']) / len(stats['latencies'])
 
 
 class BrowserManager:
@@ -232,6 +371,17 @@ class ActiveFetcher:
         if self.config['retry'].get('http_requests', 0) < 1:
             self.logger.warning("⚠️  Enforcing minimum retry count: http_requests = 1")
             self.config['retry']['http_requests'] = 1
+        
+        # ✅ FIX 2A/2B/4: Initialize advanced performance features
+        max_per_domain = config.get('download', {}).get('max_concurrent_per_domain', 3)
+        self.domain_connection_manager = DomainConnectionManager(
+            max_per_domain=max_per_domain,
+            ssl_verify=self.ssl_verify
+        )
+        self.domain_rate_limiter = DomainRateLimiter(requests_per_second=5.0)
+        self.domain_perf_tracker = DomainPerformanceTracker(min_samples=5, failure_threshold=0.5)
+        
+        self.logger.info(f"✅ Advanced features initialized: per-domain limits={max_per_domain}, rate_limiter=5rps")
     
     def _get_random_user_agent(self) -> str:
         """Get a random user agent to avoid WAF fingerprinting"""
@@ -331,7 +481,7 @@ class ActiveFetcher:
         for i in range(self.session_pool_size):
             session = AsyncSession(
                 impersonate="chrome120",  # Mimics Chrome 120 TLS fingerprint
-                timeout=int(timeout_val),
+                timeout=None,  # ✅ FIX 1A: Disable session timeout, use per-request timeouts
                 verify=self.ssl_verify,
                 http_version="1.1"  # Force HTTP/1.1 for maximum speed (HTTP/2 has protocol overhead)
             )
@@ -460,7 +610,7 @@ class ActiveFetcher:
             # Create new session with same config
             new_session = AsyncSession(
                 impersonate="chrome120",
-                timeout=int(timeout_val),
+                timeout=None,  # ✅ FIX 1A: Disable session timeout, use per-request timeouts
                 verify=self.ssl_verify,
                 http_version="1.1"  # Force HTTP/1.1 for maximum speed
             )
@@ -599,6 +749,14 @@ class ActiveFetcher:
     async def cleanup(self) -> None:
         """Cleanup HTTP session pool and Playwright resources - thread-safe with lock"""
         async with self._browser_lock:
+            # ✅ Close domain connection manager first
+            if hasattr(self, 'domain_connection_manager'):
+                try:
+                    await self.domain_connection_manager.close_all()
+                    self.logger.info("Domain connection manager closed successfully")
+                except Exception as e:
+                    self.logger.debug(f"Domain connection manager cleanup error: {str(e)}")
+            
             # Close all sessions in the pool
             if self.session_pool:
                 for i, session in enumerate(self.session_pool):
@@ -964,6 +1122,29 @@ class ActiveFetcher:
 
         self.last_failure_reason = None
         
+        # ✅ FIX 1D: Known-slow domain bypass - skip HTTP entirely for domains that always fail
+        KNOWN_SLOW_DOMAINS = {'getsentry.net', 'collegeboard.org', 'watsons.com.cn', 'watsonsvip.com.cn'}
+        
+        # Extract domain from URL
+        from urllib.parse import urlparse
+        try:
+            domain = urlparse(url).netloc
+        except Exception:
+            domain = ''
+        
+        # Check if domain is known to always timeout on HTTP
+        if any(slow_domain in domain for slow_domain in KNOWN_SLOW_DOMAINS):
+            if self.browser_manager:
+                self.logger.info(f"🛡️  Known-slow domain detected: {domain} - using browser directly (skip HTTP)")
+                browser_content = await self.fetch_with_playwright(url)
+                if browser_content:
+                    return browser_content
+                else:
+                    self.logger.warning(f"❌ Browser download also failed for known-slow domain: {url[:60]}...")
+                    return None
+            else:
+                self.logger.warning(f"⚠️  Known-slow domain {domain} but browser not available - will attempt HTTP")
+        
         # Get retry config from global config
         retry_config = self.config.get('retry', {})
         max_attempts = retry_config.get('http_requests', 3)
@@ -982,19 +1163,40 @@ class ActiveFetcher:
         # Get base timeout from config
         base_timeout = self.download_timeout if self.download_timeout is not None else self.config.get('session_management', {}).get('download_timeout', 45)
         
+        # ✅ FIX 1C: Domain-specific timeout multipliers for known-slow domains
+        timeout_multipliers = {
+            'getsentry.net': 3.0,
+            'collegeboard.org': 3.0,
+            'watsons.com': 3.0,
+            'watsonsvip.com': 3.0,
+            # Add more as discovered
+        }
+        
+        # Extract domain from URL
+        from urllib.parse import urlparse
+        try:
+            domain = urlparse(url).netloc
+        except Exception:
+            domain = ''
+        
+        # Find domain-specific multiplier
+        domain_multiplier = next(
+            (mult for pattern, mult in timeout_multipliers.items() if pattern in domain),
+            1.5  # Default multiplier for unknown domains
+        )
+        
         # MANUAL RETRY LOOP with PROGRESSIVE TIMEOUT (boss's recommended approach)
         last_exception = None
         for attempt in range(max_attempts):
             try:
-                # CRITICAL: Increase timeout by 50% on each retry
-                # This solves the VPS saturation problem where requests queue locally
-                current_timeout = base_timeout * (1 + (0.5 * attempt))
+                # ✅ FIX 1C: AGGRESSIVE timeout scaling - exponential for slow domains
+                current_timeout = base_timeout * (domain_multiplier ** attempt)
                 
                 if attempt > 0:
                     # Log retry with new timeout
                     self.logger.warning(
                         f"⚠ Retry {attempt + 1}/{max_attempts} for {url[:50]}... "
-                        f"(timeout increased to {current_timeout:.1f}s)"
+                        f"(timeout increased to {current_timeout:.1f}s, multiplier: {domain_multiplier}x)"
                     )
                 
                 # Try to fetch with progressive timeout
