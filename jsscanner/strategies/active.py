@@ -627,8 +627,17 @@ class ActiveFetcher:
             
             if self.playwright:
                 try:
+                    # ✅ FIX: Check if we're in a valid event loop before async operations
                     try:
-                        await asyncio.wait_for(self.playwright.stop(), timeout=5.0)
+                        loop = asyncio.get_running_loop()
+                        if loop.is_running() and not loop.is_closed():
+                            await asyncio.wait_for(self.playwright.stop(), timeout=5.0)
+                        else:
+                            # Loop is closing, suppress playwright stop
+                            self.logger.debug("Event loop closing - skipping playwright.stop()")
+                    except RuntimeError as e:
+                        # No running loop or loop closed
+                        self.logger.debug(f"Playwright cleanup skipped (no event loop): {str(e)[:50]}")
                     except asyncio.TimeoutError:
                         self.logger.warning("⚠️  Playwright.stop() timed out during cleanup")
 
@@ -636,9 +645,13 @@ class ActiveFetcher:
                     await asyncio.sleep(0.5)
                     self.logger.info("Playwright stopped successfully")
                 except Exception as e:
-                    # Traceback Pattern: Clean console + forensic log
-                    self.logger.error(f"❌ Playwright cleanup error: {str(e)}")
-                    self.logger.debug("Full playwright cleanup traceback:", exc_info=True)
+                    # ✅ Suppress "different loop" errors during shutdown
+                    if 'attached to a different loop' in str(e):
+                        self.logger.debug(f"Suppressed playwright loop error during shutdown: {str(e)[:100]}")
+                    else:
+                        # Traceback Pattern: Clean console + forensic log
+                        self.logger.error(f"❌ Playwright cleanup error: {str(e)[:100]}")
+                        self.logger.debug("Full playwright cleanup traceback:", exc_info=True)
     
     async def fetch_live(self, target: str) -> List[str]:
         """Fetch JavaScript URLs from live site using Playwright with smart retries"""
@@ -1022,7 +1035,9 @@ class ActiveFetcher:
                 self.error_stats['http_errors'] += 1
                 return None
         
-        # All retry attempts exhausted - categorize the final error
+        # All retry attempts exhausted - TRY BROWSER FALLBACK for WAF bypass
+        should_fallback_browser = False
+        
         if isinstance(last_exception, asyncio.TimeoutError):
             if verbose_mode:
                 self.logger.warning(f"❌ [TIMEOUT] {url[:80]}")
@@ -1030,7 +1045,8 @@ class ActiveFetcher:
                 self.logger.debug(f"❌ [TIMEOUT] {url}")
             self.last_failure_reason = 'timeout'
             self.error_stats['timeouts'] += 1
-            return None
+            should_fallback_browser = True  # ✅ Browser can bypass slow/blocking servers
+            
         elif isinstance(last_exception, (ConnectionError, OSError)):
             if verbose_mode:
                 self.logger.warning(f"❌ [NETWORK ERROR] {url[:80]}: {str(last_exception)[:50]}")
@@ -1044,10 +1060,24 @@ class ActiveFetcher:
                 self.error_stats['dns_errors'] += 1
             elif 'Connection refused' in error_str:
                 self.error_stats['connection_refused'] += 1
+                should_fallback_browser = True  # ✅ VPS IP might be blocked - try browser
             elif 'SSL' in error_str or 'certificate' in error_str.lower():
                 self.error_stats['ssl_errors'] += 1
             else:
                 self.error_stats['timeouts'] += 1  # Generic network failure
+                
+        # 🛡️ BROWSER FALLBACK: If curl failed with WAF/timeout/connection errors, try Playwright
+        if should_fallback_browser and self.browser_manager:
+            try:
+                self.logger.info(f"🛡️  FALLBACK: Attempting browser download for {url[:60]}...")
+                browser_content = await self.fetch_with_playwright(url)
+                if browser_content:
+                    self.logger.info(f"✅ Browser fallback SUCCESS: {url[:60]}...")
+                    return browser_content
+                else:
+                    self.logger.warning(f"❌ Browser fallback also failed: {url[:60]}...")
+            except Exception as e:
+                self.logger.debug(f"Browser fallback exception: {str(e)[:100]}")
             return None
         else:
             # Unknown retry exception
@@ -1370,31 +1400,62 @@ class ActiveFetcher:
             return (False, 0)
     
     async def fetch_with_playwright(self, url: str) -> Optional[str]:
-        """Fetches content using Playwright"""
+        """🛡️ Browser Fallback: Fetches content using Playwright to bypass WAF/IP blocks"""
         context = None
         page = None
 
         try:
             await self.browser_manager._ensure_browser()
-            context = await self.browser_manager.browser.new_context()
-            page = await context.new_page()
-            page.set_default_timeout(self.page_timeout)
+            
+            # Use semaphore to prevent too many concurrent browsers
+            async with self.browser_manager.semaphore:
+                context = await self.browser_manager.browser.new_context(
+                    ignore_https_errors=True,
+                    user_agent=self._get_random_user_agent()
+                )
+                page = await context.new_page()
+                page.set_default_timeout(45000)  # 45s timeout for browser
 
-            await page.goto(url, wait_until='networkidle')
-            content = await page.content()
+                # Navigate with faster wait strategy for JS files
+                response = await page.goto(url, wait_until='commit', timeout=45000)
+                
+                # Check HTTP status
+                if response and response.status >= 400:
+                    self.logger.warning(f"❌ Browser got HTTP {response.status}: {url[:60]}...")
+                    return None
+                
+                # For JS files, get raw source (not rendered HTML)
+                # Try to get the response body directly if it's a script
+                content = await page.content()
+                
+                # If content looks like HTML wrapper, extract text content
+                if '<html' in content.lower() or '<body' in content.lower():
+                    try:
+                        # Try to get raw text (for view-source style)
+                        text_content = await page.evaluate("document.body.innerText || document.documentElement.innerText")
+                        if text_content and len(text_content) > len(content) * 0.1:  # If we got meaningful text
+                            content = text_content
+                    except:
+                        pass  # Keep HTML content as fallback
 
-            return content
+                return content
 
         except Exception as e:
             # Traceback Pattern: Clean console + forensic log
-            self.logger.error(f"❌ Playwright error {url}: {str(e)}")
+            self.logger.error(f"❌ Playwright error {url[:60]}...: {str(e)[:100]}")
             self.logger.debug("Full Playwright fetch traceback:", exc_info=True)
             return None
         finally:
             if page:
-                await page.close()
+                try:
+                    await page.close()
+                except:
+                    pass
             if context:
-                await context.close()
+                try:
+                    await context.close()
+                except:
+                    pass
 
     async def fetch_and_write(self, url: str, out_path: str) -> bool:
         """
@@ -1440,15 +1501,47 @@ class ActiveFetcher:
                 timeout=self.download_timeout
             )
         except asyncio.TimeoutError:
+            # ✅ FIX: Add logging and stats tracking
+            self.logger.warning(f"❌ [TIMEOUT] {url[:80]}")
+            self.error_stats['timeouts'] += 1
             self.last_failure_reason = 'timeout'
             return False
         except Exception as e:
-            self.last_failure_reason = 'network_error'
+            # ✅ FIX: Classify error properly and log with details
+            error_str = str(e)
+            self.logger.error(f"❌ [NETWORK ERROR] {url[:80]}: {error_str[:100]}")
+            self.logger.debug(f"Full fetch_and_write error traceback for {url}:", exc_info=True)
+            
+            # Classify the error to match download_one classification logic
+            if 'Name or service not known' in error_str or 'getaddrinfo failed' in error_str:
+                self.last_failure_reason = 'dns_errors'
+                self.error_stats['dns_errors'] += 1
+            elif 'Connection refused' in error_str:
+                self.last_failure_reason = 'connection_refused'
+                self.error_stats['connection_refused'] += 1
+            elif 'SSL' in error_str or 'certificate' in error_str.lower():
+                self.last_failure_reason = 'ssl_errors'
+                self.error_stats['ssl_errors'] += 1
+            else:
+                self.last_failure_reason = 'network_error'
+                self.error_stats['http_errors'] += 1  # Generic network error
+            
             return False
 
         # Handle non-200 statuses
         if response.status_code != 200:
-            self.last_failure_reason = f'http_{response.status_code}'
+            # ✅ FIX: Track HTTP errors properly
+            self.logger.warning(f"❌ HTTP {response.status_code}: {url[:80]}")
+            self.error_stats['http_errors'] += 1
+            self.http_status_breakdown[response.status_code] = self.http_status_breakdown.get(response.status_code, 0) + 1
+            
+            # Track rate limiting separately
+            if response.status_code in (429, 503):
+                self.error_stats['rate_limits'] += 1
+                self.last_failure_reason = 'rate_limits'
+            else:
+                self.last_failure_reason = f'http_{response.status_code}'
+            
             return False
 
         # Stream to disk
@@ -1477,5 +1570,43 @@ class ActiveFetcher:
 
             return True
         except Exception as e:
+            # ✅ FIX: Log write errors
+            self.logger.error(f"❌ [WRITE ERROR] Failed to write {url[:80]} to {out_path}: {str(e)[:100]}")
+            self.logger.debug(f"Full write error traceback for {url}:", exc_info=True)
             self.last_failure_reason = 'write_error'
             return False
+    
+    async def fetch_and_write_with_fallback(self, url: str, out_path: str) -> bool:
+        """🛡️ Hybrid Download: Try curl first, fallback to browser if WAF blocks"""
+        # 1. Try standard curl download
+        success = await self.fetch_and_write(url, out_path)
+        if success:
+            return True
+        
+        # 2. Check if failure warrants browser fallback
+        should_fallback = self.last_failure_reason in [
+            'timeout', 'network_error', 'connection_refused',
+            'http_403', 'http_401', 'rate_limits'
+        ]
+        
+        if not should_fallback or not self.browser_manager:
+            return False
+        
+        # 3. Try browser fallback
+        self.logger.info(f"🛡️ DOWNLOAD FALLBACK: Using browser for {url[:60]}...")
+        try:
+            content = await self.fetch_with_playwright(url)
+            if content:
+                # Write browser content to disk
+                try:
+                    with open(out_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    self.logger.info(f"✅ Browser download SUCCESS: {url[:60]}...")
+                    return True
+                except Exception as e:
+                    self.logger.error(f"❌ Failed to write browser content: {str(e)[:100]}")
+                    return False
+        except Exception as e:
+            self.logger.debug(f"Browser download fallback failed: {str(e)[:100]}")
+        
+        return False

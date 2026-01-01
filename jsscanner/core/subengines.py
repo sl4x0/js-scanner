@@ -168,7 +168,8 @@ class DownloadEngine:
                     tmp_filename = f"tmp_{uuid4().hex}.tmp"
                     tmp_path = Path(engine.paths['unique_js']) / tmp_filename
 
-                    success = await engine.fetcher.fetch_and_write(url, str(tmp_path))
+                    # 🛡️ Use hybrid download with browser fallback for WAF bypass
+                    success = await engine.fetcher.fetch_and_write_with_fallback(url, str(tmp_path))
                     if not success:
                         reason = getattr(engine.fetcher, 'last_failure_reason', None)
                         # classify into filtered vs fetch_failed

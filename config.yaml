@@ -84,7 +84,7 @@ download:
 session_management:
   pool_size: 20 # Increased from 2 - more concurrent connections for speed
   rotate_after: 500 # Increased from 100 - keep connections alive longer
-  download_timeout: 30 # Increased from 8s to 30s - handle slow domains like getsentry.net
+  download_timeout: 60 # ✅ FIX: Increased from 30s to 60s - handle slow CDNs and large files
 
 # --- SECRET SCANNING ---
 
