@@ -11,11 +11,13 @@
 ### Root Causes Identified:
 
 1. **VPS IP Blocking** - Your VPS IP is flagged by WAF/Cloudflare
+
    - ❌ Local browser works (clean home IP)
    - ❌ VPS curl_cffi fails (blocked/throttled IP)
    - Evidence: `[CONNECTION REFUSED]`, `[TIMEOUT]` in logs
 
 2. **No Browser Fallback** - Tool only uses `curl_cffi` for downloads
+
    - ❌ If curl fails, download fails permanently
    - ❌ No retry with Playwright when WAF blocks
 
@@ -30,6 +32,7 @@
 ### 1. 🛡️ Hybrid Download Engine with Browser Fallback
 
 **Files Modified:**
+
 - `jsscanner/strategies/active.py`
 - `jsscanner/core/subengines.py`
 
@@ -81,23 +84,23 @@ async def fetch_and_write_with_fallback(self, url: str, out_path: str) -> bool:
     success = await self.fetch_and_write(url, out_path)
     if success:
         return True
-    
+
     # 2. Check if failure warrants browser fallback
     should_fallback = self.last_failure_reason in [
         'timeout', 'network_error', 'connection_refused',
         'http_403', 'http_401', 'rate_limits'
     ]
-    
+
     if not should_fallback or not self.browser_manager:
         return False
-    
+
     # 3. Try browser fallback
     content = await self.fetch_with_playwright(url)
     if content:
         with open(out_path, 'w', encoding='utf-8') as f:
             f.write(content)
         return True
-    
+
     return False
 ```
 
@@ -106,23 +109,23 @@ async def fetch_and_write_with_fallback(self, url: str, out_path: str) -> bool:
 ```python
 async def fetch_with_playwright(self, url: str) -> Optional[str]:
     """🛡️ Browser Fallback: Fetches content using Playwright to bypass WAF/IP blocks"""
-    
+
     # Use faster 'commit' wait instead of 'networkidle'
     response = await page.goto(url, wait_until='commit', timeout=45000)
-    
+
     # Check HTTP status
     if response and response.status >= 400:
         return None
-    
+
     # Get raw source (not rendered HTML)
     content = await page.content()
-    
+
     # If HTML wrapper, extract text content
     if '<html' in content.lower() or '<body' in content.lower():
         text_content = await page.evaluate("document.body.innerText")
         if text_content:
             content = text_content
-    
+
     return content
 ```
 
@@ -141,6 +144,7 @@ success = await engine.fetcher.fetch_and_write_with_fallback(url, str(tmp_path))
 **File:** `jsscanner/strategies/active.py`
 
 **Problem:**
+
 ```python
 # OLD CODE - Crashes during shutdown
 if self.playwright:
@@ -148,6 +152,7 @@ if self.playwright:
 ```
 
 **Solution:**
+
 ```python
 # NEW CODE - Safe loop detection
 if self.playwright:
@@ -168,6 +173,7 @@ if self.playwright:
 ```
 
 **Benefits:**
+
 - ✅ No more "attached to a different loop" crashes
 - ✅ Graceful shutdown even if event loop is closing
 - ✅ Clean error logs without spurious exceptions
@@ -177,22 +183,24 @@ if self.playwright:
 ## 📊 Expected Impact
 
 ### Before Hybrid Engine:
+
 ```
 📊 Download Files: 0/293 (0.0%) - 0 saved, 293 skipped
    • Out of scope: 17
    • Fetch failed: 276
-   
+
 🔍 Fetch Failure Analysis:
    • Timeouts: 50
    • ⚠️ Untracked failures: 226
 ```
 
 ### After Hybrid Engine:
+
 ```
 📊 Download Files: 150/293 (51.2%) - 150 saved, 143 skipped
    • Out of scope: 17
    • Fetch failed: 126 (50% recovered via browser fallback!)
-   
+
 🔍 Fetch Failure Analysis:
    • Timeouts: 25 (50% recovered via browser)
    • DNS errors: 12
@@ -211,6 +219,7 @@ if self.playwright:
 ### On Your VPS (SSH: sl4x0@38.242.146.132)
 
 **Step 1: Upload Changes**
+
 ```bash
 # From your local machine
 git add -A
@@ -223,17 +232,20 @@ git pull origin main
 ```
 
 **Step 2: Run Automated Test Script**
+
 ```bash
 chmod +x test_and_deploy.sh
 ./test_and_deploy.sh
 ```
 
 This will run:
+
 1. ✓ Quick validation test (single URL)
 2. ✓ Batch test (mixed URLs including WAF scenarios)
 3. ✓ Full scan on your Sentry target
 
 **Step 3: Manual Quick Test**
+
 ```bash
 # Test with URL that typically triggers WAF
 python3 -m jsscanner -t test -i <(echo "https://www.sentry.io") --force --verbose
@@ -244,6 +256,7 @@ python3 -m jsscanner -t test -i <(echo "https://www.sentry.io") --force --verbos
 ```
 
 **Step 4: Full Production Test**
+
 ```bash
 python3 -m jsscanner -t sentry -i /home/sl4x0/my_recon/sentry/subdomains/all_alive.txt --force
 
@@ -258,18 +271,21 @@ tail -f logs/scan.log | grep -E "(FALLBACK|Browser)"
 ### Success Indicators:
 
 1. **Browser Fallback Triggered:**
+
    ```
    🛡️ FALLBACK: Attempting browser download for https://example.com/app.js...
    ✅ Browser fallback SUCCESS: https://example.com/app.js...
    ```
 
 2. **Files Actually Downloaded:**
+
    ```bash
    ls -lh results/sentry/artifacts/source_code/
    # Should show .js files!
    ```
 
 3. **Error Summary Shows Real Numbers:**
+
    ```
    ⚠️ ERROR SUMMARY
    🔴 Connection Refused: 12 (down from 32 - browser bypassed!)
@@ -286,12 +302,14 @@ tail -f logs/scan.log | grep -E "(FALLBACK|Browser)"
 ### Failure Indicators:
 
 1. **No Fallbacks Triggered:**
+
    ```bash
    grep -c "FALLBACK" logs/scan.log
    # If this is 0, something is wrong
    ```
 
 2. **Still 0 Downloads:**
+
    ```
    📊 Download Files: 0/293 (0.0%)
    ```
@@ -306,7 +324,9 @@ tail -f logs/scan.log | grep -E "(FALLBACK|Browser)"
 ## 🐛 Troubleshooting
 
 ### Issue: "Browser launch failed"
+
 **Solution:**
+
 ```bash
 # Reinstall Playwright browsers
 pip3 install --upgrade playwright
@@ -317,12 +337,15 @@ ls ~/.cache/ms-playwright/
 ```
 
 ### Issue: "All browser fallbacks also failed"
+
 **Possible Causes:**
+
 - VPS IP is completely blacklisted (try from different VPS)
 - Playwright not configured for headless mode
 - Site uses advanced bot detection
 
 **Debug:**
+
 ```bash
 # Test Playwright directly
 python3 -c "
@@ -337,7 +360,9 @@ with sync_playwright() as p:
 ```
 
 ### Issue: Still getting loop errors
+
 **Check:**
+
 ```bash
 # Look for the specific error
 tail -50 logs/errors.log | grep "different loop"
@@ -351,12 +376,12 @@ grep -A 5 "attached to a different loop" jsscanner/strategies/active.py
 
 ## 📝 Files Modified
 
-| File | Lines Changed | Purpose |
-|------|---------------|---------|
-| `jsscanner/strategies/active.py` | ~150 lines | Browser fallback logic, loop fix |
-| `jsscanner/core/subengines.py` | 1 line | Use fallback method |
-| `config.yaml` | 1 line | Increase timeout 30→60s |
-| `test_and_deploy.sh` | NEW | Automated testing script |
+| File                             | Lines Changed | Purpose                          |
+| -------------------------------- | ------------- | -------------------------------- |
+| `jsscanner/strategies/active.py` | ~150 lines    | Browser fallback logic, loop fix |
+| `jsscanner/core/subengines.py`   | 1 line        | Use fallback method              |
+| `config.yaml`                    | 1 line        | Increase timeout 30→60s          |
+| `test_and_deploy.sh`             | NEW           | Automated testing script         |
 
 ---
 
@@ -379,28 +404,32 @@ grep -A 5 "attached to a different loop" jsscanner/strategies/active.py
 **Message:**
 
 > ✅ **Hybrid Download Engine Implemented**
-> 
+>
 > **Problem Solved:**
+>
 > 1. ✅ VPS IP blocking → Browser fallback now bypasses WAF
 > 2. ✅ Loop corruption → Safe cleanup prevents crashes
 > 3. ✅ Silent failures → Full error tracking with fallback stats
-> 
+>
 > **New Capabilities:**
+>
 > - Automatic browser fallback for 403/timeout/connection refused
 > - Progressive timeout strategy (60s base, increases on retry)
 > - WAF bypass using headless Chrome
 > - Clean shutdown without loop errors
-> 
+>
 > **Expected Results:**
+>
 > - Download success rate: 0% → 50%+
 > - Browser fallback will recover ~50% of WAF-blocked requests
 > - No more "untracked failures"
-> 
+>
 > **Ready for Testing:**
+>
 > - Automated test script created (`test_and_deploy.sh`)
 > - Safe to deploy to production VPS
 > - All changes committed and ready to push
-> 
+>
 > **Next Step:** Deploy to VPS and run test script to validate
 
 ---

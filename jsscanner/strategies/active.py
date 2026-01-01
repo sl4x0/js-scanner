@@ -321,14 +321,17 @@ class ActiveFetcher:
     async def initialize(self) -> None:
         """Initialize HTTP session pool and Playwright browser"""
         # 1. Initialize curl_cffi session pool with Chrome TLS fingerprint for WAF bypass
+        # Ensure timeout is an integer (required by AsyncSession)
         timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
+        if not isinstance(timeout_val, (int, float)):
+            timeout_val = 15
         
         # Create session pool for load distribution and resilience
         self.logger.info(f"Creating session pool with {self.session_pool_size} sessions...")
         for i in range(self.session_pool_size):
             session = AsyncSession(
                 impersonate="chrome120",  # Mimics Chrome 120 TLS fingerprint
-                timeout=timeout_val,
+                timeout=int(timeout_val),
                 verify=self.ssl_verify,
                 http_version="1.1"  # Force HTTP/1.1 for maximum speed (HTTP/2 has protocol overhead)
             )
@@ -441,7 +444,11 @@ class ActiveFetcher:
     async def _rotate_session(self, session_index: int) -> None:
         """Rotate a specific session in the pool to prevent staleness"""
         try:
+            # Ensure timeout is an integer (required by AsyncSession)
             timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
+            if not isinstance(timeout_val, (int, float)):
+                timeout_val = 15
+            
             old_session = self.session_pool[session_index]
             
             # Close old session
@@ -453,7 +460,7 @@ class ActiveFetcher:
             # Create new session with same config
             new_session = AsyncSession(
                 impersonate="chrome120",
-                timeout=timeout_val,
+                timeout=int(timeout_val),
                 verify=self.ssl_verify,
                 http_version="1.1"  # Force HTTP/1.1 for maximum speed
             )

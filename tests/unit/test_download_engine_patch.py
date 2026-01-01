@@ -32,6 +32,10 @@ class FakeFetcher:
         except Exception:
             self.last_failure_reason = 'write_error'
             return False
+    
+    async def fetch_and_write_with_fallback(self, url, out_path):
+        """Hybrid download method - for tests just use standard fetch"""
+        return await self.fetch_and_write(url, out_path)
 
 
 class DummyEngine:
