@@ -223,8 +223,8 @@ class ActiveFetcher:
         session_config = config.get('session_management', {})
         self.session_pool_size = session_config.get('pool_size', 3)
         self.rotate_after = session_config.get('rotate_after', 150)
-        # Honor configured download timeout; default to 20s for VPS-friendly behavior
-        self.download_timeout = config.get('timeouts', {}).get('download_timeout', 20)
+        # Honor configured download timeout; default to 30s for stability with slow domains
+        self.download_timeout = config.get('session_management', {}).get('download_timeout', 30)
         
         # Ensure retry config exists; allow user to set low retry counts (fail-fast)
         if 'retry' not in self.config:
@@ -371,15 +371,15 @@ class ActiveFetcher:
             # HEAD request with retry on timeout
             @retry_async(
                 max_attempts=2,
-                backoff_base=0.1,
-                backoff_multiplier=1.5,
+                backoff_base=0.3,  # Increased from 0.1s to give slow servers more time
+                backoff_multiplier=2.0,  # Increased from 1.5 for better backoff
                 retry_on=(asyncio.TimeoutError,),
                 operation_name=f"head_check({url[:50]}...)"
             )
             async def _do_head():
                 return await asyncio.wait_for(
                     session.head(url, allow_redirects=True),
-                    timeout=3.0  # Reduced from 5.0 for faster preflight when enabled
+                    timeout=5.0  # Increased from 3.0s to handle slow domains
                 )
 
             try:
@@ -910,7 +910,13 @@ class ActiveFetcher:
     
     async def fetch_content(self, url: str, retry_count: int = 0) -> Optional[str]:
         """
-        Fetches the content of a JavaScript file with automatic retry on transient failures.
+        Fetches the content of a JavaScript file with PROGRESSIVE TIMEOUT on retries.
+        
+        CRITICAL FIX: Each retry attempt gets progressively longer timeout to handle
+        VPS resource saturation. Base timeout increases by 50% per attempt:
+        - Attempt 1: base_timeout (e.g., 45s)
+        - Attempt 2: base_timeout * 1.5 (e.g., 67.5s)
+        - Attempt 3: base_timeout * 2.0 (e.g., 90s)
         
         Retries on:
         - Network timeouts (asyncio.TimeoutError)
@@ -941,7 +947,8 @@ class ActiveFetcher:
         # Get retry config from global config
         retry_config = self.config.get('retry', {})
         max_attempts = retry_config.get('http_requests', 3)
-        backoff_base = retry_config.get('backoff_base', 1.0)
+        backoff_base = retry_config.get('backoff_base', 2.0)
+        jitter_enabled = retry_config.get('jitter', True)
         
         # Define retry exceptions (network-related only)
         retry_exceptions = (
@@ -952,20 +959,71 @@ class ActiveFetcher:
             IncompleteDownloadError,  # Retry on incomplete downloads
         )
         
-        # Wrap the actual fetch logic with retry decorator
-        @retry_async(
-            max_attempts=max_attempts,
-            backoff_base=backoff_base,
-            retry_on=retry_exceptions,
-            operation_name=f"fetch({url[:50]}...)"
-        )
-        async def _do_fetch():
-            return await self._fetch_content_impl(url)
+        # Get base timeout from config
+        base_timeout = self.download_timeout if self.download_timeout is not None else self.config.get('session_management', {}).get('download_timeout', 45)
         
-        try:
-            return await _do_fetch()
-        except asyncio.TimeoutError:
-            # All retries exhausted due to timeout
+        # MANUAL RETRY LOOP with PROGRESSIVE TIMEOUT (boss's recommended approach)
+        last_exception = None
+        for attempt in range(max_attempts):
+            try:
+                # CRITICAL: Increase timeout by 50% on each retry
+                # This solves the VPS saturation problem where requests queue locally
+                current_timeout = base_timeout * (1 + (0.5 * attempt))
+                
+                if attempt > 0:
+                    # Log retry with new timeout
+                    self.logger.warning(
+                        f"⚠ Retry {attempt + 1}/{max_attempts} for {url[:50]}... "
+                        f"(timeout increased to {current_timeout:.1f}s)"
+                    )
+                
+                # Try to fetch with progressive timeout
+                result = await self._fetch_content_impl(url, timeout_override=current_timeout)
+                
+                # Success!
+                if attempt > 0:
+                    self.logger.info(f"✓ {url[:50]}... succeeded on attempt {attempt + 1}/{max_attempts}")
+                
+                return result
+                
+            except retry_exceptions as e:
+                last_exception = e
+                
+                # Check if we have more attempts left
+                if attempt < max_attempts - 1:
+                    # Calculate backoff delay with optional jitter
+                    delay = backoff_base * (2.0 ** attempt)
+                    if jitter_enabled:
+                        import random
+                        jitter_amount = delay * 0.2
+                        delay += random.uniform(-jitter_amount, jitter_amount)
+                    
+                    delay = max(0.1, delay)  # Minimum 100ms
+                    
+                    self.logger.warning(
+                        f"⚠ {url[:50]}... failed (attempt {attempt + 1}/{max_attempts}): {str(e)[:100]} "
+                        f"- retrying in {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    # Final attempt failed
+                    self.logger.error(
+                        f"✗ {url[:50]}... failed after {max_attempts} attempts: {str(e)[:200]}"
+                    )
+            
+            except Exception as e:
+                # Non-retryable error - fail immediately
+                if verbose_mode:
+                    self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url[:80]}: {str(e)[:50]}")
+                else:
+                    self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url}: {str(e)}")
+                self.logger.debug("Full fetch error traceback:", exc_info=True)
+                self.last_failure_reason = 'non_retryable_error'
+                self.error_stats['http_errors'] += 1
+                return None
+        
+        # All retry attempts exhausted - categorize the final error
+        if isinstance(last_exception, asyncio.TimeoutError):
             if verbose_mode:
                 self.logger.warning(f"❌ [TIMEOUT] {url[:80]}")
             else:
@@ -973,40 +1031,39 @@ class ActiveFetcher:
             self.last_failure_reason = 'timeout'
             self.error_stats['timeouts'] += 1
             return None
-        except (ConnectionError, OSError) as e:
-            # All retries exhausted due to network error
+        elif isinstance(last_exception, (ConnectionError, OSError)):
             if verbose_mode:
-                self.logger.warning(f"❌ [NETWORK ERROR] {url[:80]}: {str(e)[:50]}")
+                self.logger.warning(f"❌ [NETWORK ERROR] {url[:80]}: {str(last_exception)[:50]}")
             else:
-                self.logger.debug(f"❌ [NETWORK ERROR] {url}: {str(e)}")
+                self.logger.debug(f"❌ [NETWORK ERROR] {url}: {str(last_exception)}")
             self.last_failure_reason = 'network_error'
             
             # Classify the specific network error
-            if 'Name or service not known' in str(e) or 'getaddrinfo failed' in str(e):
+            error_str = str(last_exception)
+            if 'Name or service not known' in error_str or 'getaddrinfo failed' in error_str:
                 self.error_stats['dns_errors'] += 1
-            elif 'Connection refused' in str(e):
+            elif 'Connection refused' in error_str:
                 self.error_stats['connection_refused'] += 1
-            elif 'SSL' in str(e) or 'certificate' in str(e).lower():
+            elif 'SSL' in error_str or 'certificate' in error_str.lower():
                 self.error_stats['ssl_errors'] += 1
             else:
                 self.error_stats['timeouts'] += 1  # Generic network failure
             return None
-        except Exception as e:
-            # Traceback Pattern: Clean console + forensic log
-            if verbose_mode:
-                self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url[:80]}: {str(e)[:50]}")
-            else:
-                self.logger.error(f"❌ [NON-RETRYABLE ERROR] {url}: {str(e)}")
-            self.logger.debug("Full fetch error traceback:", exc_info=True)
-            self.last_failure_reason = 'non_retryable_error'
-            self.error_stats['http_errors'] += 1  # Track as generic error
+        else:
+            # Unknown retry exception
+            self.last_failure_reason = 'unknown_retry_error'
+            self.error_stats['http_errors'] += 1
             return None
     
-    async def _fetch_content_impl(self, url: str) -> Optional[str]:
+    async def _fetch_content_impl(self, url: str, timeout_override: Optional[float] = None) -> Optional[str]:
         """
         Internal implementation of fetch_content (separated for retry logic).
         This method may raise exceptions that trigger retries.
         Uses the SHARED session to prevent connection exhaustion.
+        
+        Args:
+            url: URL to fetch
+            timeout_override: If provided, overrides calculated timeout (used for progressive timeouts)
         """
         if not self.session_pool:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
@@ -1057,22 +1114,49 @@ class ActiveFetcher:
         # 🍪 Use curl_cffi with inherited cookies from Playwright (Cloudflare bypass)
         # Apply download_timeout for large file downloads - progressive based on preflight
         # PERFORMANCE: Follow redirects automatically (301/302/308) to avoid treating them as errors
-        # Determine progressive timeout (prioritize configured `self.download_timeout`)
-        download_timeout = self.download_timeout if self.download_timeout is not None else self.config.get('timeouts', {}).get('download_timeout', 20)
-        if preflight_content_length:
+        
+        # PROGRESSIVE TIMEOUT LOGIC: Use override if provided (for retry attempts)
+        if timeout_override is not None:
+            download_timeout = timeout_override
+            self.logger.debug(f"Using override timeout: {download_timeout:.1f}s for {url[:80]}")
+        else:
+            # Determine progressive timeout (prioritize configured `self.download_timeout`)
+            download_timeout = self.download_timeout if self.download_timeout is not None else self.config.get('session_management', {}).get('download_timeout', 45)
+            
+            # Domain-specific timeout handling for known slow domains
+            slow_domains = ['getsentry.net', 'guildwars2.com', 'seagroup.com', 'garena.vn', 
+                           'garenanow.com', 'freefiremobile.com', 'watsonsestore.com.cn', 'watsons.com']
+            
             try:
-                size_mb = int(preflight_content_length) / (1024 * 1024)
+                parsed_url = urlparse(url)
+                domain = parsed_url.netloc.lower()
+                is_slow_domain = any(slow_dom in domain for slow_dom in slow_domains)
+                
+                if is_slow_domain:
+                    # Slow domains get 2x timeout multiplier
+                    download_timeout = download_timeout * 2
+                    self.logger.debug(f"Slow domain detected ({domain}): doubling timeout to {download_timeout}s")
             except Exception:
-                size_mb = 0
+                pass
+            
+            # Progressive timeout based on file size - more lenient for slow domains
+            if preflight_content_length:
+                try:
+                    size_mb = int(preflight_content_length) / (1024 * 1024)
+                except Exception:
+                    size_mb = 0
 
-            if size_mb < 0.5:
-                download_timeout = 15
-            elif size_mb < 2.0:
-                download_timeout = 45
+                if size_mb < 0.5:
+                    download_timeout = max(30, download_timeout)  # Small files: min 30s
+                elif size_mb < 2.0:
+                    download_timeout = max(60, download_timeout)  # Medium files: min 60s
+                else:
+                    download_timeout = max(120, download_timeout)  # Large files: min 120s
             else:
-                download_timeout = min(90, self.config.get('timeouts', {}).get('download_timeout', 90))
+                # No content-length header - use generous timeout for unknown sizes
+                download_timeout = max(45, download_timeout)
 
-        self.logger.debug(f"Download timeout: {download_timeout}s for {url}")
+            self.logger.debug(f"Download timeout: {download_timeout}s for {url}")
 
         try:
             response = await asyncio.wait_for(
@@ -1314,9 +1398,9 @@ class ActiveFetcher:
 
     async def fetch_and_write(self, url: str, out_path: str) -> bool:
         """
-        Stream a remote resource directly to disk with retry logic for transient failures.
-        
-        Returns True on success, False on failure (after all retries exhausted).
+        Stream a remote resource directly to disk to avoid holding content in memory.
+
+        Returns True on success, False on failure.
         """
         if not self.session_pool:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
@@ -1333,62 +1417,6 @@ class ActiveFetcher:
                 self.last_failure_reason = f'preflight_{reason}'
                 return False
 
-        # Get retry config from global config
-        retry_config = self.config.get('retry', {})
-        max_attempts = retry_config.get('http_requests', 3)
-        backoff_base = retry_config.get('backoff_base', 0.3)
-        
-        # Define retry exceptions (network-related only)
-        retry_exceptions = (
-            asyncio.TimeoutError,
-            ConnectionError,
-            TimeoutError,
-            OSError,
-        )
-        
-        # Wrap the actual fetch logic with retry decorator
-        @retry_async(
-            max_attempts=max_attempts,
-            backoff_base=backoff_base,
-            retry_on=retry_exceptions,
-            operation_name=f"download({url[:50]}...)"
-        )
-        async def _do_fetch_and_write():
-            return await self._fetch_and_write_impl(url, out_path, preflight_content_length)
-        
-        try:
-            return await _do_fetch_and_write()
-        except asyncio.TimeoutError:
-            # All retries exhausted due to timeout
-            self.last_failure_reason = 'timeout'
-            self.error_stats['timeouts'] += 1
-            return False
-        except (ConnectionError, OSError) as e:
-            # All retries exhausted due to network error
-            self.last_failure_reason = 'network_error'
-            
-            # Classify the specific network error
-            error_str = str(e)
-            if 'Name or service not known' in error_str or 'getaddrinfo failed' in error_str:
-                self.error_stats['dns_errors'] += 1
-            elif 'Connection refused' in error_str:
-                self.error_stats['connection_refused'] += 1
-            elif 'SSL' in error_str or 'certificate' in error_str.lower():
-                self.error_stats['ssl_errors'] += 1
-            else:
-                self.error_stats['timeouts'] += 1  # Generic network failure
-            return False
-        except Exception as e:
-            # Non-retryable error
-            self.last_failure_reason = 'non_retryable_error'
-            self.error_stats['http_errors'] += 1
-            return False
-    
-    async def _fetch_and_write_impl(self, url: str, out_path: str, preflight_content_length: Optional[int]) -> bool:
-        """
-        Internal implementation of fetch_and_write (separated for retry logic).
-        This method may raise exceptions that trigger retries.
-        """
         session = self._get_session()
 
         # Basic headers
@@ -1406,32 +1434,21 @@ class ActiveFetcher:
         else:
             headers['Referer'] = origin
 
-        # VPS OPTIMIZATION: Use aggressive timeout for high bandwidth environments
-        # Default to 20s, but allow config override
-        download_timeout = self.download_timeout if self.download_timeout is not None else 20
-        
         try:
             response = await asyncio.wait_for(
                 session.get(url, headers=headers, cookies=self.valid_cookies if self.valid_cookies else None, allow_redirects=True, max_redirects=5),
-                timeout=download_timeout
+                timeout=self.download_timeout
             )
         except asyncio.TimeoutError:
-            # Re-raise to trigger retry
-            raise asyncio.TimeoutError(f"Download timeout after {download_timeout}s: {url}")
+            self.last_failure_reason = 'timeout'
+            return False
+        except Exception as e:
+            self.last_failure_reason = 'network_error'
+            return False
 
-        # Handle non-200 statuses (non-retryable)
+        # Handle non-200 statuses
         if response.status_code != 200:
             self.last_failure_reason = f'http_{response.status_code}'
-            # Track HTTP errors
-            self.http_status_breakdown[response.status_code] = self.http_status_breakdown.get(response.status_code, 0) + 1
-            if response.status_code >= 500:
-                self.error_stats['http_errors'] += 1
-            elif response.status_code in [401, 403]:
-                self.error_stats['http_errors'] += 1
-            elif response.status_code in [429, 503]:
-                self.error_stats['rate_limits'] += 1
-            else:
-                self.error_stats['http_errors'] += 1
             return False
 
         # Stream to disk
@@ -1454,18 +1471,11 @@ class ActiveFetcher:
                     actual = Path(out_path).stat().st_size
                     if actual < expected - 100:
                         self.last_failure_reason = 'incomplete'
-                        # Re-raise to trigger retry
-                        raise OSError(f"Incomplete download: expected {expected} bytes, got {actual} bytes")
-                except OSError:
-                    raise  # Re-raise incomplete download error for retry
+                        return False
                 except Exception:
                     pass
 
             return True
-        except OSError:
-            # Re-raise to trigger retry (incomplete download or write error)
-            raise
         except Exception as e:
             self.last_failure_reason = 'write_error'
-            # Non-retryable write error
             return False

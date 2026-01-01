@@ -64,19 +64,19 @@ code_splitting:
 
 # Threading (Global)
 # CRITICAL: 'threads' controls ACTUAL download concurrency
-# High-performance VPS: Maximize concurrency for speed
-threads: 200 # Increased from 15 for maximum throughput on high-bandwidth VPS
+# VPS-OPTIMIZED: Reduced from 200 to prevent local resource saturation and timeout queue buildup
+threads: 15 # Reduced from 200 - VPS can't handle 200 concurrent connections
 
 # Batch Processing (The heavy lifting)
 batch_processing:
   enabled: true
   # Phase 4: CPU Bound Processing
-  process_threads: 100 # Matches increased threads setting
+  process_threads: 10 # Reduced from 100 to match VPS capacity
   cleanup_minified: false
 
-# Download tuning - AGGRESSIVE OPTIMIZATION for 5-minute target
+# Download tuning - VPS-OPTIMIZED for stability over raw speed
 download:
-  chunk_size: 1000 # Increased from 250 - larger batches reduce overhead on fast VPS
+  chunk_size: 200 # Reduced from 1000 - smaller batches prevent memory pressure on VPS
   skip_preflight: true # Skip HEAD requests for maximum speed - trust the URLs are valid
 
 # Session Management (curl_cffi HTTP Client) - MAXIMUM SPEED CONFIG
@@ -84,14 +84,14 @@ download:
 session_management:
   pool_size: 20 # Increased from 2 - more concurrent connections for speed
   rotate_after: 500 # Increased from 100 - keep connections alive longer
-  download_timeout: 8 # Reduced from 20 - aggressive timeout for speed
+  download_timeout: 30 # Increased from 8s to 30s - handle slow domains like getsentry.net
 
 # --- SECRET SCANNING ---
 
 trufflehog_path: "" # Auto-detect
 trufflehog_timeout: 300
 # CPU Bottleneck Warning: TruffleHog is heavy.
-trufflehog_max_concurrent: 50 # Increased for high-performance VPS - maximize CPU utilization
+trufflehog_max_concurrent: 10 # Reduced from 50 - VPS CPU limits
 
 # --- ALERTING ---
 
@@ -164,7 +164,7 @@ bundle_unpacker:
   temp_dir: "temp/unpacked"
 
 minimal_storage: false
-max_concurrent_domains: 25 # Run more targets in parallel - you have resources
+max_concurrent_domains: 5 # Reduced from 25 - prevent domain-level parallelism overload on VPS
 
 # ========================================
 # v4.1 Performance Improvements (NEW)
