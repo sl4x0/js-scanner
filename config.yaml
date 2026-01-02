@@ -64,8 +64,8 @@ code_splitting:
 
 # Threading (Global)
 # CRITICAL: 'threads' controls ACTUAL download concurrency
-# ✅ FIX 1B: EMERGENCY REDUCTION for VPS stability (was 15, now 10)
-threads: 10 # Reduced to prevent network queue saturation and timeout cascades
+# ✅ INCREASED: 40 threads (was 10) for better domain parallelization
+threads: 40
 
 # Batch Processing (The heavy lifting)
 batch_processing:
@@ -83,7 +83,7 @@ download:
 # Session Management (curl_cffi HTTP Client) - MAXIMUM SPEED CONFIG
 # Optimized for high-bandwidth VPS with excellent connectivity
 session_management:
-  pool_size: 5 # ✅ FIX 1B: Reduced from 20 to 5 - fewer concurrent connections
+  pool_size: 15 # ✅ INCREASED from 5 to 15 - better session distribution for 40 threads
   rotate_after: 500 # Increased from 100 - keep connections alive longer
   download_timeout: 120 # ✅ FIX 1B: Increased from 60s to 120s - handle slow domains
 

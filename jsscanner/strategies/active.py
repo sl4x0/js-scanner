@@ -81,11 +81,11 @@ class DomainConnectionManager:
         async with self.lock:
             if domain not in self.domain_sessions:
                 # Create new session for this domain
+                # ✅ HTTP/2 auto-negotiation for realistic Chrome 120 fingerprint
                 self.domain_sessions[domain] = AsyncSession(
                     impersonate="chrome120",
                     timeout=None,  # Use per-request timeouts
-                    verify=self.ssl_verify,
-                    http_version="1.1"
+                    verify=self.ssl_verify
                 )
                 self.domain_semaphores[domain] = asyncio.Semaphore(self.max_per_domain)
         
@@ -158,6 +158,76 @@ class DomainPerformanceTracker:
         if not stats or not stats['latencies']:
             return None
         return sum(stats['latencies']) / len(stats['latencies'])
+
+
+class DomainCircuitBreaker:
+    """
+    Circuit Breaker pattern to prevent wasting time on failing domains.
+    Blocks all requests to a domain after consecutive failures.
+    Auto-resets after cooldown period.
+    """
+    
+    def __init__(self, failure_threshold: int = 3, cooldown_seconds: int = 60, logger=None):
+        self.failure_threshold = failure_threshold
+        self.cooldown_seconds = cooldown_seconds
+        self.logger = logger
+        
+        # Track consecutive failures per domain
+        self.consecutive_failures: Dict[str, int] = {}
+        
+        # Track when domain was blocked
+        self.blocked_until: Dict[str, float] = {}
+        
+        self.lock = asyncio.Lock()
+    
+    async def is_blocked(self, domain: str) -> bool:
+        """Check if domain is currently blocked by circuit breaker"""
+        async with self.lock:
+            if domain not in self.blocked_until:
+                return False
+            
+            # Check if cooldown period has passed
+            blocked_until = self.blocked_until[domain]
+            current_time = time.time()
+            
+            if current_time >= blocked_until:
+                # Reset circuit breaker
+                del self.blocked_until[domain]
+                self.consecutive_failures[domain] = 0
+                if self.logger:
+                    self.logger.info(f"🔓 Circuit breaker RESET for domain: {domain}")
+                return False
+            
+            return True
+    
+    async def record_success(self, domain: str):
+        """Record successful request - resets failure counter"""
+        async with self.lock:
+            self.consecutive_failures[domain] = 0
+            if domain in self.blocked_until:
+                del self.blocked_until[domain]
+    
+    async def record_failure(self, domain: str, reason: str = "") -> bool:
+        """Record failed request - may trigger circuit breaker"""
+        async with self.lock:
+            self.consecutive_failures[domain] = self.consecutive_failures.get(domain, 0) + 1
+            
+            if self.consecutive_failures[domain] >= self.failure_threshold:
+                # Block the domain
+                self.blocked_until[domain] = time.time() + self.cooldown_seconds
+                if self.logger:
+                    self.logger.warning(
+                        f"🚫 Circuit breaker TRIGGERED for {domain} after {self.consecutive_failures[domain]} failures. "
+                        f"Blocked for {self.cooldown_seconds}s. Reason: {reason}"
+                    )
+                return True  # Domain is now blocked
+            
+            return False  # Domain not blocked yet
+    
+    def get_blocked_domains(self) -> List[str]:
+        """Get list of currently blocked domains"""
+        current_time = time.time()
+        return [domain for domain, blocked_until in self.blocked_until.items() if current_time < blocked_until]
 
 
 class BrowserManager:
@@ -358,6 +428,9 @@ class ActiveFetcher:
         self.download_counter = 0  # Track downloads for rotation
         self.ssl_verify = config.get('verify_ssl', False)
         
+        # ✅ CRITICAL FIX: HTTP/2 auto-negotiation (removed http_version="1.1")
+        # Real Chrome 120 uses HTTP/2. Forcing HTTP/1.1 breaks TLS fingerprint.
+        
         # Session management configuration
         session_config = config.get('session_management', {})
         self.session_pool_size = session_config.get('pool_size', 3)
@@ -379,9 +452,16 @@ class ActiveFetcher:
             ssl_verify=self.ssl_verify
         )
         self.domain_rate_limiter = DomainRateLimiter(requests_per_second=5.0)
-        self.domain_perf_tracker = DomainPerformanceTracker(min_samples=5, failure_threshold=0.5)
+        self.domain_perf_tracker = DomainPerformanceTracker(min_samples=5, failure_threshold=0.7)
         
-        self.logger.info(f"✅ Advanced features initialized: per-domain limits={max_per_domain}, rate_limiter=5rps")
+        # ✅ NEW: Circuit Breaker to prevent hammering failing domains
+        self.circuit_breaker = DomainCircuitBreaker(
+            failure_threshold=3,  # Block after 3 consecutive failures
+            cooldown_seconds=60,  # 60s cooldown before retry
+            logger=self.logger
+        )
+        
+        self.logger.info(f"✅ Advanced features initialized: per-domain limits={max_per_domain}, rate_limiter=5rps, circuit_breaker=enabled")
     
     def _get_random_user_agent(self) -> str:
         """Get a random user agent to avoid WAF fingerprinting"""
@@ -479,11 +559,11 @@ class ActiveFetcher:
         # Create session pool for load distribution and resilience
         self.logger.info(f"Creating session pool with {self.session_pool_size} sessions...")
         for i in range(self.session_pool_size):
+            # ✅ HTTP/2 auto-negotiation for realistic Chrome 120 fingerprint
             session = AsyncSession(
                 impersonate="chrome120",  # Mimics Chrome 120 TLS fingerprint
                 timeout=None,  # ✅ FIX 1A: Disable session timeout, use per-request timeouts
-                verify=self.ssl_verify,
-                http_version="1.1"  # Force HTTP/1.1 for maximum speed (HTTP/2 has protocol overhead)
+                verify=self.ssl_verify
             )
             self.session_pool.append(session)
         
@@ -505,6 +585,66 @@ class ActiveFetcher:
             self.logger.info("Playwright browser manager initialized")
         else:
             self.logger.info("Playwright initialization skipped (--no-live flag)")
+    
+    async def harvest_cookies_for_domains(self, urls: list[str]) -> None:
+        """
+        🍪 PROACTIVE COOKIE HARVESTING (Golden Ticket Strategy)
+        Visit each unique domain ONCE with browser at scan start to:
+        1. Solve WAF/Cloudflare challenges
+        2. Capture authentication cookies
+        3. Populate cookie jar BEFORE HTTP downloads begin
+        
+        This prevents mid-scan browser launches and enables fast HTTP-only downloads.
+        """
+        if not self.browser_manager:
+            self.logger.debug("Cookie harvesting skipped - no browser available")
+            return
+        
+        # Extract unique domains from URL list
+        unique_domains = set()
+        for url in urls:
+            try:
+                parsed = urllib.parse.urlparse(url)
+                if parsed.scheme and parsed.netloc:
+                    domain_root = f"{parsed.scheme}://{parsed.netloc}/"
+                    unique_domains.add(domain_root)
+            except Exception:
+                continue
+        
+        if not unique_domains:
+            self.logger.info("No unique domains found for cookie harvesting")
+            return
+        
+        self.logger.info(f"🍪 PROACTIVE COOKIE HARVEST: Visiting {len(unique_domains)} unique domains...")
+        
+        harvested_count = 0
+        failed_count = 0
+        
+        for domain_root in unique_domains:
+            try:
+                self.logger.debug(f"Harvesting cookies from {domain_root}...")
+                
+                # Visit domain root with browser to trigger WAF challenges
+                await self.fetch_with_playwright(domain_root)
+                
+                if self.valid_cookies:
+                    harvested_count += 1
+                    cf_cookies = [name for name in self.valid_cookies.keys() if 'cf' in name.lower()]
+                    self.logger.info(
+                        f"✅ Harvested {len(self.valid_cookies)} cookies from {domain_root} "
+                        f"(Cloudflare: {', '.join(cf_cookies) if cf_cookies else 'None'})"
+                    )
+                else:
+                    self.logger.debug(f"No cookies captured from {domain_root}")
+                    
+            except Exception as e:
+                failed_count += 1
+                self.logger.warning(f"⚠️  Cookie harvest failed for {domain_root}: {str(e)[:100]}")
+                continue
+        
+        self.logger.info(
+            f"🍪 Cookie harvest complete: {harvested_count} successful, {failed_count} failed out of {len(unique_domains)} domains"
+        )
 
     async def _preflight_check(self, url: str) -> Tuple[bool, str, Optional[int]]:
         """
@@ -608,11 +748,11 @@ class ActiveFetcher:
                 self.logger.debug(f"Error closing old session: {str(e)}")
             
             # Create new session with same config
+            # ✅ HTTP/2 auto-negotiation for realistic Chrome 120 fingerprint
             new_session = AsyncSession(
                 impersonate="chrome120",
                 timeout=None,  # ✅ FIX 1A: Disable session timeout, use per-request timeouts
-                verify=self.ssl_verify,
-                http_version="1.1"  # Force HTTP/1.1 for maximum speed
+                verify=self.ssl_verify
             )
             
             self.session_pool[session_index] = new_session
@@ -1187,29 +1327,84 @@ class ActiveFetcher:
         
         # MANUAL RETRY LOOP with PROGRESSIVE TIMEOUT (boss's recommended approach)
         last_exception = None
+        total_time_spent = 0.0  # Track cumulative time for timeout circuit breaker
+        MAX_TOTAL_TIMEOUT = 180.0  # 3 minutes maximum per URL
+        
+        # Check circuit breaker BEFORE attempting download
+        parsed = urllib.parse.urlparse(url)
+        domain = parsed.netloc
+        
+        if await self.circuit_breaker.is_blocked(domain):
+            self.logger.warning(f"⛔ Circuit breaker ACTIVE for {domain} - skipping {url[:60]}...")
+            self.last_failure_reason = 'circuit_breaker_blocked'
+            self.error_stats['http_errors'] += 1
+            return None
+        
+        # ✅ ADAPTIVE PERFORMANCE TRACKER: Use browser-first if domain has high HTTP failure rate
+        use_browser_first = self.domain_perf_tracker.should_use_browser(domain)
+        if use_browser_first and self.browser_manager:
+            self.logger.info(
+                f"🧠 ADAPTIVE: Domain {domain} has high HTTP failure rate (>70%). Using browser-first strategy for {url[:60]}..."
+            )
+            try:
+                browser_content = await self.fetch_with_playwright(url)
+                if browser_content:
+                    self.logger.info(f"✅ Adaptive browser-first SUCCESS: {url[:60]}...")
+                    await self.domain_perf_tracker.record(domain, success=True, latency=0.5)  # Nominal latency
+                    return browser_content
+                else:
+                    self.logger.warning(f"⚠️  Adaptive browser-first failed, falling back to HTTP: {url[:60]}...")
+            except Exception as e:
+                self.logger.debug(f"Adaptive browser error: {str(e)[:100]}. Falling back to HTTP.")
+        
         for attempt in range(max_attempts):
             try:
+                attempt_start_time = time.time()
+                
                 # ✅ FIX 1C: AGGRESSIVE timeout scaling - exponential for slow domains
                 current_timeout = base_timeout * (domain_multiplier ** attempt)
+                
+                # ✅ NEW: Cap individual attempt timeout to prevent runaway waits
+                current_timeout = min(current_timeout, MAX_TOTAL_TIMEOUT)
+                
+                # ✅ NEW: Timeout circuit breaker - if we've spent too much time already, abort
+                if total_time_spent >= MAX_TOTAL_TIMEOUT:
+                    self.logger.error(
+                        f"⏱️  TIMEOUT CIRCUIT BREAKER: {url[:50]}... exceeded {MAX_TOTAL_TIMEOUT}s cumulative time"
+                    )
+                    await self.circuit_breaker.record_failure(domain, f"timeout_circuit_breaker_{total_time_spent:.0f}s")
+                    break
                 
                 if attempt > 0:
                     # Log retry with new timeout
                     self.logger.warning(
                         f"⚠ Retry {attempt + 1}/{max_attempts} for {url[:50]}... "
-                        f"(timeout increased to {current_timeout:.1f}s, multiplier: {domain_multiplier}x)"
+                        f"(timeout increased to {current_timeout:.1f}s, cumulative: {total_time_spent:.1f}s, multiplier: {domain_multiplier}x)"
                     )
                 
                 # Try to fetch with progressive timeout
                 result = await self._fetch_content_impl(url, timeout_override=current_timeout)
                 
+                # Track time spent on this attempt
+                attempt_time = time.time() - attempt_start_time
+                total_time_spent += attempt_time
+                
                 # Success!
                 if attempt > 0:
                     self.logger.info(f"✓ {url[:50]}... succeeded on attempt {attempt + 1}/{max_attempts}")
+                
+                # Record success for circuit breaker and performance tracker
+                await self.circuit_breaker.record_success(domain)
+                await self.domain_perf_tracker.record(domain, success=True, latency=attempt_time)
                 
                 return result
                 
             except retry_exceptions as e:
                 last_exception = e
+                
+                # Track time spent
+                attempt_time = time.time() - attempt_start_time
+                total_time_spent += attempt_time
                 
                 # Check if we have more attempts left
                 if attempt < max_attempts - 1:
@@ -1224,7 +1419,7 @@ class ActiveFetcher:
                     
                     self.logger.warning(
                         f"⚠ {url[:50]}... failed (attempt {attempt + 1}/{max_attempts}): {str(e)[:100]} "
-                        f"- retrying in {delay:.1f}s"
+                        f"- retrying in {delay:.1f}s (cumulative time: {total_time_spent:.1f}s)"
                     )
                     await asyncio.sleep(delay)
                 else:
@@ -1232,6 +1427,11 @@ class ActiveFetcher:
                     self.logger.error(
                         f"✗ {url[:50]}... failed after {max_attempts} attempts: {str(e)[:200]}"
                     )
+                    
+                    # Record failure for circuit breaker and performance tracker
+                    failure_reason = type(e).__name__
+                    await self.circuit_breaker.record_failure(domain, failure_reason)
+                    await self.domain_perf_tracker.record(domain, success=False, latency=total_time_spent)
             
             except Exception as e:
                 # Non-retryable error - fail immediately
@@ -1242,6 +1442,11 @@ class ActiveFetcher:
                 self.logger.debug("Full fetch error traceback:", exc_info=True)
                 self.last_failure_reason = 'non_retryable_error'
                 self.error_stats['http_errors'] += 1
+                
+                # Record failure for circuit breaker and performance tracker
+                await self.circuit_breaker.record_failure(domain, "non_retryable_error")
+                await self.domain_perf_tracker.record(domain, success=False, latency=time.time() - attempt_start_time)
+                
                 return None
         
         # All retry attempts exhausted - TRY BROWSER FALLBACK for WAF bypass
@@ -1437,12 +1642,47 @@ class ActiveFetcher:
                     self.error_stats['http_errors'] += 1
                     return None
                 
-                # Rate Limiting (No retries - fail fast)
+                # Rate Limiting (Trigger emergency cookie harvest + exponential backoff)
                 if response.status_code in [429, 503]:
-                    self.logger.debug(f"[RATE LIMITED] {url} (status {response.status_code})")
+                    self.logger.warning(f"🚨 RATE LIMIT DETECTED (HTTP {response.status_code}): {url[:80]}")
+                    
+                    # Trigger circuit breaker immediately for this domain
+                    parsed = urllib.parse.urlparse(url)
+                    domain = parsed.netloc
+                    await self.circuit_breaker.record_failure(domain, f"rate_limit_{response.status_code}")
+                    
+                    # Emergency cookie refresh via browser (one-time per domain)
+                    if self.browser_manager and domain not in getattr(self, '_cookie_refreshed_domains', set()):
+                        try:
+                            # Track domains we've already tried to refresh
+                            if not hasattr(self, '_cookie_refreshed_domains'):
+                                self._cookie_refreshed_domains = set()
+                            
+                            self.logger.info(f"🍪 EMERGENCY COOKIE HARVEST for {domain}...")
+                            
+                            # Visit domain root with browser to solve WAF challenge
+                            domain_root = f"{parsed.scheme}://{domain}/"
+                            await self.fetch_with_playwright(domain_root)
+                            
+                            # Mark domain as refreshed
+                            self._cookie_refreshed_domains.add(domain)
+                            
+                            # If we captured new cookies, update ALL sessions in the pool
+                            if self.valid_cookies:
+                                self.logger.info(
+                                    f"✅ Captured {len(self.valid_cookies)} cookies for {domain}. "
+                                    f"Updating all {len(self.session_pool)} sessions..."
+                                )
+                                # Note: Cookies are automatically used in next request via self.valid_cookies
+                            
+                        except Exception as e:
+                            self.logger.warning(f"⚠️  Cookie harvest failed for {domain}: {str(e)[:100]}")
+                    
                     self.last_failure_reason = 'rate_limit'
                     self.error_stats['rate_limits'] += 1
-                    return None
+                    
+                    # Raise exception to trigger retry with exponential backoff
+                    raise ConnectionError(f"Rate limit (HTTP {response.status_code})")
                 
                 # 🔍 DIAGNOSTIC: Handle 404 and other non-success status codes
                 if response.status_code == 404:
