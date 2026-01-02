@@ -147,6 +147,18 @@ class Processor:
             self.logger.warning(f"Skipping beautification for large file ({content_size_mb:.1f}MB, limit: 20MB)")
             return content
         
+        # Detect malformed packed code patterns that break jsbeautifier
+        # Common signatures: eval(function(p,a,c,k,e,d){...})
+        packed_patterns = [
+            r'eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\)',  # Dean Edwards packer
+            r'}\s*\(\s*["\']\w+["\']\s*,\s*\d+\s*,\s*\d+\s*,\s*["\']\w+["\']\s*\.split',  # Split packer variant
+        ]
+        
+        for pattern in packed_patterns:
+            if re.search(pattern, content[:5000]):  # Check first 5KB only
+                self.logger.debug("Detected packed code, skipping beautification (use bundle_unpacker instead)")
+                return content
+        
         try:
             # Configurable timeout thresholds from config.yaml
             beautification_config = self.config.get('beautification', {})
@@ -169,10 +181,11 @@ class Processor:
             self.logger.debug(f"Beautification timed out after {timeout}s ({content_size_mb:.1f}MB file), using original content")
             return content
         except (ValueError, TypeError) as e:
-            self.logger.warning(f"Failed to beautify (invalid content): {e}")
+            self.logger.debug(f"Failed to beautify (invalid content): {e}")
             return content
         except (IndexError, AttributeError) as e:
-            self.logger.warning(f"Beautification failed due to internal packer error (likely malformed packed code): {e}")
+            # This is usually malformed packed code that wasn't caught by pattern detection
+            self.logger.debug(f"Beautification failed (packed code detection missed): {e}")
             return content
         except Exception as e:
             self.logger.error(f"Unexpected error during beautification: {e}", exc_info=True)
