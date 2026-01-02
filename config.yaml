@@ -33,9 +33,9 @@ subjs:
 # Deep scan for lazy-loaded code. RAM intensive.
 playwright:
   headless: true
-  max_concurrent: 5 # ✅ FIX 3: Increased from 1 to 5 for parallel browser pool
-  restart_after: 50 # Restart frequently to prevent Chromium memory leaks
-  page_timeout: 45000 # ✅ FIX 3: Increased from 30s to 45s for slow sites
+  max_concurrent: 2 # CPU-OPTIMIZED: Reduced from 5 to 2 (browsers are CPU hogs!)
+  restart_after: 20 # CPU-OPTIMIZED: Restart more frequently (was 50) to free CPU
+  page_timeout: 30000 # CPU-OPTIMIZED: Reduced from 45s to 30s for faster fail-fast
   enable_interactions: false # ✅ FIX 3: DISABLED for speed - only downloading JS, no UI testing
 
 # Performance Optimizations
@@ -64,14 +64,14 @@ code_splitting:
 
 # Threading (Global)
 # CRITICAL: 'threads' controls ACTUAL download concurrency
-# ✅ INCREASED: 40 threads (was 10) for better domain parallelization
-threads: 40
+# ✅ CPU-OPTIMIZED: 10 threads per instance (7 instances × 10 = 70 total)
+threads: 10
 
 # Batch Processing (The heavy lifting)
 batch_processing:
   enabled: true
   # Phase 4: CPU Bound Processing
-  process_threads: 10 # Reduced from 100 to match VPS capacity
+  process_threads: 3 # CPU-OPTIMIZED: Reduced from 10 to 3 for multi-instance usage
   cleanup_minified: false
 
 # Download tuning - VPS-OPTIMIZED for stability over raw speed
@@ -83,7 +83,7 @@ download:
 # Session Management (curl_cffi HTTP Client) - MAXIMUM SPEED CONFIG
 # Optimized for high-bandwidth VPS with excellent connectivity
 session_management:
-  pool_size: 15 # ✅ INCREASED from 5 to 15 - better session distribution for 40 threads
+  pool_size: 10 # CPU-OPTIMIZED: Match threads 1:1 (was 15 for 40 threads)
   rotate_after: 500 # Increased from 100 - keep connections alive longer
   download_timeout: 120 # ✅ FIX 1B: Increased from 60s to 120s - handle slow domains
 
@@ -92,7 +92,7 @@ session_management:
 trufflehog_path: "" # Auto-detect
 trufflehog_timeout: 300
 # CPU Bottleneck Warning: TruffleHog is heavy.
-trufflehog_max_concurrent: 10 # Reduced from 50 - VPS CPU limits
+trufflehog_max_concurrent: 5 # CPU-OPTIMIZED: Reduced from 10 to 5 for multi-instance usage
 
 # --- ALERTING ---
 

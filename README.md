@@ -67,6 +67,10 @@ cp .env.example .env
 
 ## 🚀 Quick Start
 
+### 🔥 Running Multiple Instances on VPS?
+
+**See our [VPS Optimization Guide](docs/optimization/VPS_QUICK_START.md)** for CPU-optimized configuration and multi-instance deployment.
+
 ### Basic Scan (SubJS Only - Fastest)
 
 ```bash

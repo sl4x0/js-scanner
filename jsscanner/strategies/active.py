@@ -268,6 +268,7 @@ class BrowserManager:
 
                 # Cross-platform Chromium launch arguments
                 # Linux VPS requires --no-sandbox and --disable-setuid-sandbox
+                # CPU-OPTIMIZED: Added aggressive CPU reduction flags
                 launch_args = [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -277,7 +278,17 @@ class BrowserManager:
                     '--disable-dev-tools',
                     '--disable-background-timer-throttling',
                     '--disable-backgrounding-occluded-windows',
-                    '--disable-renderer-backgrounding'
+                    '--disable-renderer-backgrounding',
+                    # CPU OPTIMIZATION FLAGS (added for multi-instance VPS)
+                    '--single-process',  # Run browser in single process (less CPU overhead)
+                    '--no-zygote',  # Disable process forking (saves CPU)
+                    '--disable-accelerated-2d-canvas',  # Disable canvas acceleration
+                    '--disable-animations',  # No CSS animations
+                    '--disable-web-security',  # Skip security checks (faster)
+                    '--disable-features=IsolateOrigins,site-per-process',  # Disable site isolation (less CPU)
+                    '--blink-settings=imagesEnabled=false',  # Don't load images (huge CPU save!)
+                    '--disable-javascript-harmony-shipping',  # Disable experimental JS features
+                    '--js-flags=--max-old-space-size=512'  # Limit V8 memory (forces faster GC)
                 ]
 
                 self.browser = await self.playwright.chromium.launch(
