@@ -117,7 +117,7 @@ def minimal_config():
 def tmp_result_paths(tmp_path):
     """Create temporary result directory structure"""
     base = tmp_path / "results" / "test_target"
-    
+
     paths = {
         'base': str(base),
         'unique_js': str(base / 'unique_js'),
@@ -126,11 +126,11 @@ def tmp_result_paths(tmp_path):
         'unpacked': str(base / 'unpacked'),
         'sourcemaps': str(base / 'sourcemaps')
     }
-    
+
     # Create directories
     for path in paths.values():
         Path(path).mkdir(parents=True, exist_ok=True)
-    
+
     return paths
 
 
@@ -138,7 +138,7 @@ def tmp_result_paths(tmp_path):
 def ignored_patterns_config(tmp_path):
     """Create a temporary ignored_patterns.json file"""
     config_file = tmp_path / "ignored_patterns.json"
-    
+
     config_data = {
         'cdn_domains': [
             'cdnjs.cloudflare.com',
@@ -162,7 +162,7 @@ def ignored_patterns_config(tmp_path):
             'bootstrap-5.1.3': 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
         }
     }
-    
+
     config_file.write_text(json.dumps(config_data, indent=2))
     return str(config_file)
 
@@ -270,11 +270,11 @@ class MockHTTPResponse:
         self._text = text
         self._json_data = json_data
         self.headers = {}
-    
+
     @property
     def text(self):
         return self._text
-    
+
     def json(self):
         if self._json_data is not None:
             return self._json_data
@@ -287,28 +287,28 @@ class MockHTTPClient:
         self.responses = {}
         self.get_calls = []
         self.post_calls = []
-    
+
     def add_response(self, url: str, response: MockHTTPResponse):
         """Add a mock response for a URL"""
         self.responses[url] = response
-    
+
     async def get(self, url: str, **kwargs):
         """Mock GET request"""
         self.get_calls.append({'url': url, 'kwargs': kwargs})
         if url in self.responses:
             return self.responses[url]
         return MockHTTPResponse(404, "Not Found")
-    
+
     async def post(self, url: str, **kwargs):
         """Mock POST request"""
         self.post_calls.append({'url': url, 'kwargs': kwargs})
         if url in self.responses:
             return self.responses[url]
         return MockHTTPResponse(404, "Not Found")
-    
+
     async def __aenter__(self):
         return self
-    
+
     async def __aexit__(self, *args):
         pass
 
@@ -369,12 +369,12 @@ class MockAsyncSubprocess:
         self._stderr = stderr
         self.stdout = AsyncMock()
         self.stderr = AsyncMock()
-    
+
     async def communicate(self):
         """Mock communicate"""
         return self._stdout.encode() if isinstance(self._stdout, str) else self._stdout, \
                self._stderr.encode() if isinstance(self._stderr, str) else self._stderr
-    
+
     async def wait(self):
         """Mock wait"""
         return self.returncode
@@ -446,33 +446,33 @@ def tmp_state_dir(tmp_path):
     base = tmp_path / "results" / "test_target"
     db_path = base / '.warehouse' / 'db'
     findings_path = base / 'findings'
-    
+
     # Create directories
     db_path.mkdir(parents=True, exist_ok=True)
     findings_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Initialize state files
     history_file = db_path / 'history.json'
     history_file.write_text(json.dumps({
         'scanned_hashes': [],
         'scan_metadata': {}
     }, indent=2))
-    
+
     metadata_file = db_path / 'metadata.json'
     metadata_file.write_text(json.dumps({
         'target': 'example.com',
         'created_at': '2026-01-06T00:00:00Z'
     }, indent=2))
-    
+
     secrets_file = findings_path / 'secrets.json'
     secrets_file.write_text('')  # Empty secrets file
-    
+
     state_file = db_path / 'state.json'
     state_file.write_text(json.dumps({
         'version': '1.0',
         'config_hash': None
     }, indent=2))
-    
+
     return {
         'base': str(base),
         'db_path': str(db_path),
@@ -520,20 +520,20 @@ def mock_discovery_strategy():
 def mock_fetcher():
     """Mock fetcher for download operations"""
     fetcher = AsyncMock()
-    
+
     # Mock methods
     fetcher.fetch_and_write_with_fallback = AsyncMock(return_value=True)
     fetcher.validate_domain = AsyncMock(return_value=(True, None))
     fetcher.fetch_live = AsyncMock(return_value=['https://example.com/live.js'])
     fetcher.cleanup = AsyncMock()
     fetcher.last_failure_reason = None
-    
+
     # Mock noise filter
     noise_filter = Mock()
     noise_filter.should_skip_content = Mock(return_value=False)
     noise_filter.should_skip_url = Mock(return_value=False)
     fetcher.noise_filter = noise_filter
-    
+
     return fetcher
 
 
@@ -546,28 +546,28 @@ def mock_analysis_modules():
         'semgrep_analyzer': AsyncMock(),
         'ast_analyzer': AsyncMock()
     }
-    
+
     # SecretScanner
     modules['secret_scanner'].scan_file = AsyncMock(return_value=[])
     modules['secret_scanner'].cleanup = AsyncMock()
-    
+
     # Processor
     modules['processor'].process = AsyncMock(return_value={
         'beautified_content': 'beautified code',
         'decoded_content': 'decoded code',
         'extracts': {}
     })
-    
+
     # SemgrepAnalyzer
     modules['semgrep_analyzer'].check_binary = Mock(return_value=True)
     modules['semgrep_analyzer'].analyze_directory = AsyncMock(return_value=[])
-    
+
     # AST Analyzer
     modules['ast_analyzer'].analyze = Mock(return_value={
         'endpoints': [],
         'interesting_vars': []
     })
-    
+
     return modules
 
 
@@ -681,7 +681,7 @@ def sample_report_data(tmp_path):
     base = tmp_path / "results" / "test_target"
     findings_dir = base / "findings"
     findings_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create trufflehog.json with newline-delimited JSON
     trufflehog_file = findings_dir / "trufflehog.json"
     secrets = [
@@ -708,11 +708,11 @@ def sample_report_data(tmp_path):
             "Redacted": "ghp_***********************************"
         }
     ]
-    
+
     with open(trufflehog_file, 'w', encoding='utf-8') as f:
         for secret in secrets:
             f.write(json.dumps(secret) + '\n')
-    
+
     # Create extracts files
     endpoints_file = findings_dir / "endpoints.txt"
     endpoints_file.write_text("\n".join([
@@ -720,7 +720,7 @@ def sample_report_data(tmp_path):
         "https://api.example.com/v1/posts",
         "https://api.example.com/v1/comments"
     ]))
-    
+
     params_file = findings_dir / "params.txt"
     params_file.write_text("\n".join([
         "user_id",
@@ -728,14 +728,14 @@ def sample_report_data(tmp_path):
         "auth_token",
         "session_id"
     ]))
-    
+
     domains_file = findings_dir / "domains.txt"
     domains_file.write_text("\n".join([
         "api.example.com",
         "cdn.example.com",
         "assets.example.com"
     ]))
-    
+
     return {
         'base_path': str(base),
         'findings_dir': str(findings_dir),
@@ -754,10 +754,10 @@ def tmp_report_paths(tmp_path):
     artifacts = base / "artifacts" / "source_code"
     logs = base / "logs"
     warehouse = base / ".warehouse" / "db"
-    
+
     for path in [findings, artifacts, logs, warehouse]:
         path.mkdir(parents=True, exist_ok=True)
-    
+
     return {
         'base': str(base),
         'findings': str(findings),
@@ -775,32 +775,39 @@ def tmp_report_paths(tmp_path):
 def mock_async_session():
     """Mock curl_cffi AsyncSession for HTTP requests"""
     session = AsyncMock()
-    
+
     # Mock response object
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_response.text = "console.log('test');"
-    mock_response.content = b"console.log('test');"
+
+    # Mock response.content with iter_chunked for streaming support
+    mock_content = AsyncMock()
+    async def mock_iter_chunked(size):
+        yield b"console.log('test');"
+    mock_content.iter_chunked = mock_iter_chunked
+    mock_response.content = mock_content
+
     mock_response.headers = {
         'Content-Type': 'application/javascript',
         'Content-Length': '22'
     }
-    
-    # Mock aiter_content for streaming
+
+    # Mock aiter_content for streaming (alternative API)
     async def mock_aiter_content(chunk_size):
         yield b"console.log('test');"
-    
+
     mock_response.aiter_content = mock_aiter_content
-    
+
     # Mock session methods
     session.get = AsyncMock(return_value=mock_response)
     session.head = AsyncMock(return_value=mock_response)
     session.close = AsyncMock()
-    
+
     # Context manager support
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock()
-    
+
     return session
 
 
@@ -822,18 +829,18 @@ def mock_playwright_page():
 def mock_playwright_context():
     """Mock Playwright browser context"""
     context = AsyncMock()
-    
+
     # Mock page creation
     mock_page = AsyncMock()
     mock_page.goto = AsyncMock()
     mock_page.content = AsyncMock(return_value="console.log('playwright content');")
     mock_page.cookies = AsyncMock(return_value=[])
     mock_page.close = AsyncMock()
-    
+
     context.new_page = AsyncMock(return_value=mock_page)
     context.cookies = AsyncMock(return_value=[])
     context.close = AsyncMock()
-    
+
     return context
 
 
@@ -841,7 +848,7 @@ def mock_playwright_context():
 def mock_playwright_browser():
     """Mock Playwright browser instance"""
     browser = AsyncMock()
-    
+
     # Mock context creation
     mock_context = AsyncMock()
     mock_page = AsyncMock()
@@ -849,15 +856,15 @@ def mock_playwright_browser():
     mock_page.content = AsyncMock(return_value="console.log('browser content');")
     mock_page.cookies = AsyncMock(return_value=[])
     mock_page.close = AsyncMock()
-    
+
     mock_context.new_page = AsyncMock(return_value=mock_page)
     mock_context.cookies = AsyncMock(return_value=[])
     mock_context.close = AsyncMock()
-    
+
     browser.new_context = AsyncMock(return_value=mock_context)
     browser.close = AsyncMock()
     browser.is_connected = Mock(return_value=True)
-    
+
     return browser
 
 
@@ -1005,13 +1012,13 @@ def mock_logger_handler():
     """Mock logging handler with StringIO for capturing log output"""
     import io
     import logging
-    
+
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
-    
+
     return {'handler': handler, 'stream': stream}
 
 
@@ -1042,22 +1049,22 @@ def sample_unicode_content():
     return """
     # English
     Hello World!
-    
+
     # Emoji
     🎉🔥💻🐛🚀
-    
+
     # Japanese
     こんにちは世界
-    
+
     # Arabic
     مرحبا بالعالم
-    
+
     # Russian
     Привет мир
-    
+
     # Chinese
     你好世界
-    
+
     # Special characters
     ñ ü ö ä ß € £ ¥
     """
@@ -1070,26 +1077,26 @@ async def retry_failure_counter():
         def __init__(self):
             self.attempt = 0
             self.max_failures = 0
-            
+
         def reset(self, max_failures: int = 0):
             """Reset counter with new failure threshold"""
             self.attempt = 0
             self.max_failures = max_failures
-            
+
         async def async_fail_then_succeed(self):
             """Async function that fails N times then succeeds"""
             self.attempt += 1
             if self.attempt <= self.max_failures:
                 raise ValueError(f"Attempt {self.attempt} failed")
             return f"Success on attempt {self.attempt}"
-            
+
         def sync_fail_then_succeed(self):
             """Sync function that fails N times then succeeds"""
             self.attempt += 1
             if self.attempt <= self.max_failures:
                 raise ValueError(f"Attempt {self.attempt} failed")
             return f"Success on attempt {self.attempt}"
-    
+
     return FailureCounter()
 
 

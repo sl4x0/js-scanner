@@ -207,10 +207,10 @@ secrets:
 # Purpose: Fast security pattern detection in downloaded JS files
 semgrep:
   enabled: true # Set to true after installing and logging in to Semgrep
-  timeout: 360 # Maximum scan time in seconds (6 minutes default)
-  max_target_bytes: 200000000 # Max file size to scan (200MB)
-  jobs: 20 # Parallel jobs for faster scanning
-  chunk_size: 50 # Number of files per semgrep subprocess to avoid timeouts/arglist limits
+  timeout: 60 # Maximum scan time per batch in seconds (1 minute for smaller batches)
+  max_target_bytes: 2000000 # Max file size to scan (2MB - reasonable for JS files)
+  jobs: 4 # Parallel jobs (reduced to prevent CPU contention and timeouts)
+  chunk_size: 10 # ✅ FIX: Reduced from 50 to 10 files per batch to avoid timeouts
   ruleset: "p/javascript"
   max_files: 100 # Max number of files to scan with semgrep
   binary_path: "" # Optional: explicit path to semgrep binary (leave empty for auto-detect)

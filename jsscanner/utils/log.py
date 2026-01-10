@@ -27,7 +27,7 @@ if sys.platform == 'win32' and hasattr(sys.stdout, 'buffer'):
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter with colors"""
-    
+
     COLORS = {
         'DEBUG': Fore.CYAN,
         'INFO': Fore.GREEN,
@@ -35,7 +35,7 @@ class ColoredFormatter(logging.Formatter):
         'ERROR': Fore.RED,
         'CRITICAL': Fore.RED + Style.BRIGHT
     }
-    
+
     def format(self, record):
         levelname = record.levelname
         if levelname in self.COLORS:
@@ -46,26 +46,26 @@ class ColoredFormatter(logging.Formatter):
 def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logger:
     """
     Sets up a logger with console and dual file output (scan.log + errors.log)
-    
+
     Architecture:
         - Console: INFO level with colors
         - scan.log: DEBUG level (complete telemetry)
         - errors.log: WARNING+ level (error forensics only)
-    
+
     Args:
         name: Logger name
         log_file: Deprecated. Logs now auto-route to logs/scan.log and logs/errors.log
-        
+
     Returns:
         Configured logger instance
     """
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
-    
+
     # Avoid duplicate handlers
     if logger.handlers:
         return logger
-    
+
     # ========== CONSOLE HANDLER ==========
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
@@ -75,23 +75,23 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
     )
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
-    
+
     # ========== DUAL FILE HANDLERS ==========
     # Define log directory (relative to project root)
     log_dir = Path('logs')
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Detailed formatter for forensic analysis (includes file location)
     detailed_formatter = logging.Formatter(
         '%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    
+
     # ========== HANDLER A: Main Log (scan.log) ==========
     # Captures EVERYTHING (DEBUG+) for full scan telemetry
     main_log_path = log_dir / 'scan.log'
     main_handler = RotatingFileHandler(
-        main_log_path,
+        str(main_log_path),
         maxBytes=10 * 1024 * 1024,  # 10MB
         backupCount=5,
         encoding='utf-8'
@@ -99,12 +99,12 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
     main_handler.setLevel(logging.DEBUG)
     main_handler.setFormatter(detailed_formatter)
     logger.addHandler(main_handler)
-    
+
     # ========== HANDLER B: Error Log (errors.log) ==========
     # Captures only WARNING+ for error forensics
     error_log_path = log_dir / 'errors.log'
     error_handler = RotatingFileHandler(
-        error_log_path,
+        str(error_log_path),
         maxBytes=5 * 1024 * 1024,  # 5MB
         backupCount=3,
         encoding='utf-8'
@@ -112,7 +112,7 @@ def setup_logger(name: str = "jsscanner", log_file: str = None) -> logging.Logge
     error_handler.setLevel(logging.WARNING)
     error_handler.setFormatter(detailed_formatter)
     logger.addHandler(error_handler)
-    
+
     return logger
 
 
@@ -134,7 +134,7 @@ def log_banner():
 def log_stats(logger: logging.Logger, stats: dict):
     """
     Logs scan statistics
-    
+
     Args:
         logger: Logger instance
         stats: Dictionary containing scan stats
@@ -142,17 +142,17 @@ def log_stats(logger: logging.Logger, stats: dict):
     logger.info(f"{Fore.YELLOW}{'='*60}{Style.RESET_ALL}")
     logger.info(f"{Fore.CYAN}Scan Statistics:{Style.RESET_ALL}")
     logger.info(f"  Files Scanned: {stats.get('total_files', 0)}")
-    
+
     # Show total findings + verified breakdown (critical for bug bounty triaging)
     total_secrets = stats.get('total_secrets', 0)
     verified_secrets = stats.get('verified_secrets', 0)
     unverified_secrets = total_secrets - verified_secrets
-    
+
     if total_secrets > 0:
         logger.info(f"  Total Findings: {Fore.RED}{total_secrets}{Style.RESET_ALL} ({verified_secrets} verified, {unverified_secrets} unverified)")
     else:
         logger.info(f"  Secrets Found: {Fore.GREEN}0{Style.RESET_ALL}")
-    
+
     logger.info(f"  Duration: {stats.get('scan_duration', 0):.2f}s")
     if stats.get('errors'):
         logger.info(f"  Errors: {len(stats['errors'])}")
@@ -162,7 +162,7 @@ def log_stats(logger: logging.Logger, stats: dict):
 class StructuredLoggerAdapter(logging.LoggerAdapter):
     """
     Adapter that adds structured context to log messages
-    
+
     Example:
         logger = StructuredLoggerAdapter(base_logger, {
             'target': 'example.com',
@@ -170,25 +170,25 @@ class StructuredLoggerAdapter(logging.LoggerAdapter):
         })
         logger.info("File processed", extra={'filename': 'app.js', 'size': 12345})
     """
-    
+
     def __init__(self, logger: logging.Logger, extra: dict = None):
         """
         Initialize structured logger adapter
-        
+
         Args:
             logger: Base logger instance
             extra: Dictionary of context fields to add to all log messages
         """
         super().__init__(logger, extra or {})
-    
+
     def process(self, msg: str, kwargs: dict) -> tuple:
         """
         Process log message and add structured context
-        
+
         Args:
             msg: Log message
             kwargs: Keyword arguments including 'extra' dict
-            
+
         Returns:
             Tuple of (message, kwargs)
         """
@@ -197,7 +197,7 @@ class StructuredLoggerAdapter(logging.LoggerAdapter):
         if 'extra' in kwargs:
             extra.update(kwargs['extra'])
         kwargs['extra'] = extra
-        
+
         # Add structured fields to message for file logging
         if extra and hasattr(self.logger, 'handlers'):
             for handler in self.logger.handlers:
@@ -207,22 +207,22 @@ class StructuredLoggerAdapter(logging.LoggerAdapter):
                     if extra_str:
                         msg = f"{msg} [{extra_str}]"
                     break
-        
+
         return msg, kwargs
 
 
 def create_structured_logger(name: str, log_file: str = None, context: dict = None) -> StructuredLoggerAdapter:
     """
     Create a structured logger with context
-    
+
     Args:
         name: Logger name
         log_file: Optional path to log file
         context: Dictionary of context fields to add to all log messages
-        
+
     Returns:
         Configured StructuredLoggerAdapter instance
-        
+
     Example:
         logger = create_structured_logger(
             'jsscanner',

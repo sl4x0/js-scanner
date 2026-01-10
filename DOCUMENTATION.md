@@ -859,19 +859,19 @@ async def test_complete_workflow(sample_report_data, tmp_path):
 
 ### Troubleshooting Output Module Tests
 
-**Issue**: `NotImplementedError: add_reader() is not implemented on Windows`  
+**Issue**: `NotImplementedError: add_reader() is not implemented on Windows`
 **Solution**: Ensure event loop policy is set to `WindowsSelectorEventLoopPolicy`. This is handled automatically in conftest.py.
 
-**Issue**: Tests hang on `discord.stop()`  
+**Issue**: Tests hang on `discord.stop()`
 **Solution**: Ensure worker thread is started with `discord.start()` before calling `stop()`.
 
-**Issue**: Rate limiting tests fail randomly  
+**Issue**: Rate limiting tests fail randomly
 **Solution**: Use `asyncio.sleep()` to advance time in tests that verify rate limit window expiration.
 
-**Issue**: Reporter tests fail with "trufflehog.json not found"  
+**Issue**: Reporter tests fail with "trufflehog.json not found"
 **Solution**: Use `sample_report_data` fixture which includes pre-populated trufflehog.json.
 
-**Issue**: Integration tests timeout  
+**Issue**: Integration tests timeout
 **Solution**: Mark slow tests with `@pytest.mark.slow` and run separately or increase timeout.
 
 ---
