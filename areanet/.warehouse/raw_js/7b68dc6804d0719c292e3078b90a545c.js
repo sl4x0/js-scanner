@@ -1,1 +1,0 @@
-var Errors={};!function(){"use strict";Errors.report=Errors.info=Errors.error=function(){}}();

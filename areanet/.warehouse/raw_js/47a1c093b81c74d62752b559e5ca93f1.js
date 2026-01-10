@@ -1,1 +1,0 @@
-YUI.add("shop-carousel",function(e){var a=(document.getElementsByClassName("featured-img")||[])[0],s=document.getElementsByClassName("item-photo");for(let e=0;e<s.length;e++)(t=>{s[t].addEventListener("click",function(){var e=`background-image: url(${s[t].children[0].dataset.src})`;a.getAttribute("style")!==e&&a.setAttribute("style",e)})})(e)},"@VERSION");

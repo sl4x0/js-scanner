@@ -1,7 +1,0 @@
-YUI.add("races", function(e) {
-  new(e.namespace("GW2").Itemselector)({
-    itemType: "race"
-  })
-}, "@VERSION@", {
-  requires: ["itemselector"]
-});

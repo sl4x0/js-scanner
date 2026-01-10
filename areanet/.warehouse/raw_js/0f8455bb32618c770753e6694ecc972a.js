@@ -1,1 +1,0 @@
-YUI.add("gamesight",function(e){e=e.one("#ffbf-merch");e&&e.on("click",function(){window.uancsoft("send","gw2_shop_external")})},"@VERSION",{requires:["node","event","dom-base"]});

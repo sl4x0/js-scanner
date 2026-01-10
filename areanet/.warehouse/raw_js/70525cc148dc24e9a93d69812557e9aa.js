@@ -1,1 +1,0 @@
-YUI.add("popup-launcher",function(e){e.all(".popup-launcher").on("click",function(e){var t=e.target.ancestor("a",!0);e.preventDefault(),window.open(t.get("href"),t.get("title"),`menubar=no,resizable=yes,width=${t.getData("width")},height=`+t.getData("height"))})},"@VERSION",{requires:["node"]});
