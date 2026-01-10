@@ -199,12 +199,12 @@ def main():
         print("📋 Step 4: Verify single file creation")
         log_path = verify_file_creation(logger, "test_target")
         print()
-        
+
         # Step 5: Verify only ONE file exists
         print("📋 Step 5: Verify single file approach (no error log, no summary)")
         verify_single_file_only("logs", "test_target")
         print()
-        
+
         # Step 6: Verify file content (no INFO messages)
         print("📋 Step 6: Verify file content (WARNING/ERROR only, no INFO)")
         verify_file_content(log_path)
@@ -213,22 +213,22 @@ def main():
         print("📋 Step 7: Verify log analyzer")
         stats = verify_analyzer(log_path)
         print()
-        
+
         # Step 8: Verify summary generation (optional tool)
         print("📋 Step 8: Verify summary generation (manual tool)")
         summary = verify_summary_generation(log_path)
         print()
-        
+
         # Step 9: Verify filename sanitization
         print("📋 Step 9: Verify filename sanitization")
         verify_filename_sanitization()
         print()
-        
+
         # Final cleanup
         print("📋 Step 10: Final cleanup")
         cleanup_test_logs()
         print()
-        
+
         # Success
         print("=" * 70)
         print("✅ LOGGING SYSTEM VERIFIED - ALL CHECKS PASSED")

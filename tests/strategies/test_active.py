@@ -453,9 +453,11 @@ async def test_fetch_content_circuit_breaker_blocks(mock_async_session, strategi
 
     # Create circuit breaker that's already open
     breaker = DomainCircuitBreaker(failure_threshold=1, cooldown_seconds=60)
-    breaker.record_failure("Test failure")
+    # ✅ FIX: Record failure for the specific domain being tested
+    breaker.record_failure("example.com", "Test failure")
 
-    fetcher.circuit_breakers = {'example.com': breaker}
+    # ✅ FIX: Use singular 'circuit_breaker' attribute (not plural dict)
+    fetcher.circuit_breaker = breaker
     # rate_limiter not needed - using domain_rate_limiter
     # connection_manager not needed - using domain_connection_manager
 

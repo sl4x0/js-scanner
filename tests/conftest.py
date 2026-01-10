@@ -2,6 +2,7 @@
 Pytest configuration and shared fixtures for JS Scanner tests
 """
 import pytest
+import pytest_asyncio  # ✅ FIX: Import pytest_asyncio for async fixtures
 import json
 import asyncio
 import tempfile
@@ -1070,7 +1071,7 @@ def sample_unicode_content():
     """
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def retry_failure_counter():
     """Helper for tracking retry attempts in tests"""
     class FailureCounter:
