@@ -1,0 +1,1 @@
+YUI.add("shop-cid",function(e){e.parseUri(location.href).queryKey.cid&&e.all("#buy-cid a").each(function(e){e.set("href",e.get("href").split("?")[0])})},"@VERSION",{requires:["node","dom-base"]});

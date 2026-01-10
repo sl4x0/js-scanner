@@ -1,0 +1,45 @@
+YUI.add("lightbox-base", function(e) {
+  var t = e.Lang;
+
+  function i() {}
+  i.ATTRS = {
+    index: {
+      value: 0,
+      validator: function(e, t) {
+        return this.get(t) !== e && e < this.get("images").length && 0 <= e
+      }
+    },
+    image: {
+      value: ""
+    },
+    images: {
+      value: [],
+      validator: t.isArray
+    }
+  }, i.prototype = {
+    move: function(e) {
+      var t = this.get("images");
+      e < 0 || e >= t.length || (this.set("index", e), this.set("image", t[e]))
+    },
+    prevIndex: function() {
+      var e = this.get("index"),
+        t = this.get("images");
+      return 0 < e ? e - 1 : t.length - 1
+    },
+    prevImage: function() {
+      return this.get("images")[this.prevIndex()]
+    },
+    prev: function() {
+      this.move(this.prevIndex())
+    },
+    nextIndex: function() {
+      return (this.get("index") + 1) % this.get("images").length
+    },
+    nextImage: function() {
+      return this.get("images")[this.nextIndex()]
+    },
+    next: function() {
+      this.move(this.nextIndex())
+    }
+  }, e.LightboxBase = i
+}, "@VERSION@");

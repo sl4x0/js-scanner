@@ -1,0 +1,18 @@
+! function(t, n) {
+  "use strict";
+  var e, a, i = /Chrome\/4/.test(window.navigator.userAgent) ? "coherent" : "cef";
+
+  function o() {
+    if (e && a) {
+      for (var i in t.lang !== e.language && (t.lang = e.language), n._stats = e, a) n._stats["id" === i ? "buildId" : i] = a[i];
+      t.setAttribute("ready", ""), n.trigger("ready")
+    }
+  }
+  t.setAttribute("browser", i), window.top !== window && (n = window.native = window.top.native), n.call("GetStats").then((function(t) {
+    e = t, o()
+  })), n.call("GetBuildInfo").then((function(t) {
+    a = t, o()
+  })), n.on("stats", (function(n) {
+    n.language && t.lang !== n.language && window.native.call("ChangeTab", "TradingPost")
+  }))
+}(document.documentElement, window.native);

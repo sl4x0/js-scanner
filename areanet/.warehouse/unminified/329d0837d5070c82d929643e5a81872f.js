@@ -1,0 +1,254 @@
+var gw2_config = {
+  combine: !0,
+  root: '/yui/3.17.2/',
+  comboBase: 'https://static.staticwars.com/combo/_',
+  groups: {
+    gw2: {
+      combine: !0,
+      comboBase: 'https://guildwars2.staticwars.com/combo/_',
+      root: '/wp-content/themes/guildwars2.com-live/js/',
+      base: '/wp-content/themes/guildwars2.com-live/js/',
+      modules: {
+        awards: {
+          path: 'awards.f64673f6.js',
+          requires: ['node', 'event-delegate', 'charrousel-timer', 'charrousel-fade']
+        },
+        countdown: {
+          path: 'countdown.7a5c9714.js',
+          requires: ['event-delegate', 'node-base', 'node-style']
+        },
+        faq: {
+          path: 'faq.989523d1.js',
+          requires: ['node', 'transition', 'event', 'node-event-delegate', 'event-key']
+        },
+        gamesight: {
+          path: 'gamesight.413d2dce.js',
+          requires: ['node', 'event', 'dom-base']
+        },
+        home: {
+          path: 'home.a2c6215f.js',
+          requires: ['node', 'event-delegate', 'tabview', 'charrousel-timer', 'charrousel-fade', 'cookie']
+        },
+        'image-compare': {
+          path: 'image-compare.58ecbd63.js',
+          requires: ['node', 'event', 'dom-base']
+        },
+        'login-status': {
+          path: 'login-status.6897f391.js',
+          requires: ['node', 'event-delegate', 'jsonp', 'jsonp-url']
+        },
+        'main-menu': {
+          path: 'menu.1e25d77e.js',
+          requires: ['node', 'event-hover', 'transition']
+        },
+        media: {
+          path: 'media.3008f345.js',
+          requires: ['lightbox-widget', 'targetedMediaPlayer-widget', 'lightboxMediaPlayer-widget', 'mediaCenterLightboxFadeAnimationPlugin', 'mediaCenterInlineMediaPlugin', 'mediaCenterFadeAnimationPlugin', 'mediaCenter-youtubeVideo-plugin']
+        },
+        'media-loader': {
+          path: 'media-loader.7decd9a0.js',
+          requires: ['node', 'event', 'transition']
+        },
+        'page-count': {
+          path: 'page-count.js',
+          requires: ['node', 'event-delegate', 'targeted-media-player-widget', 'mc-inlinemedia-plugin', 'mc-fade-plugin', 'mc-youtubevideo-plugin', 'countdown']
+        },
+        'popup-launcher': {
+          path: 'popup-launcher.2078a9b8.js',
+          requires: .node
+        },
+        professions: {
+          path: 'professions.a6abda11.js',
+          requires: .itemselector
+        },
+        races: {
+          path: 'races.d7e9a7d2.js',
+          requires: .itemselector
+        },
+        rating: {
+          path: 'rating.9870fb8a.js',
+          requires: ['node', 'io-base', 'gallery-parseuri']
+        },
+        'release-carousel': {
+          path: 'release-carousel.80e1a2a4.js'
+        },
+        retailers: {
+          path: 'retailers.7cde6364.js'
+        },
+        'shop-carousel': {
+          path: 'shop-carousel.34003834.js'
+        },
+        'shop-cid': {
+          path: 'shop-cid.c0c72fb1.js',
+          requires: ['node', 'dom-base', 'gallery-parseuri']
+        },
+        'shop-item': {
+          path: 'shop-item.7b3c46ee.js',
+          requires: ['lightbox-widget']
+        },
+        'skip-to-main-content': {
+          path: 'skip-to-main-content.e91f54de.js',
+          requires: ['node', 'event', 'dom-base']
+        },
+        sliderKit: {
+          path: 'sliderKit.js'
+        },
+        snow: {
+          path: 'snow.5fc46ec7.js',
+          requires: .node
+        },
+        'social-share': {
+          path: 'social-share.1f1d9b6e.js'
+        },
+        'sticky-buy': {
+          path: 'sticky-buy.8d49b9a4.js',
+          requires: ['node', 'event', 'dom-base']
+        },
+        'sticky-nav': {
+          path: 'sticky-nav.a6fc562b.js'
+        },
+        'stretch-video': {
+          path: 'stretch-video.de77e457.js',
+          requires: ['node', 'event', 'transition', 'get']
+        },
+        takeover: {
+          path: 'takeover.f559ec26.js',
+          requires: ['node', 'event', 'event-key', 'transition', 'cookie']
+        },
+        'toggle-list': {
+          path: 'toggle-list.afe646f7.js'
+        },
+        yulb: {
+          path: 'yulb.806656c0.js',
+          requires: ['node', 'event', 'array-extras']
+        }
+      }
+    },
+    saf: {
+      comboBase: 'https://guildwars2.staticwars.com/combo/_',
+      root: '/wp-content/themes/guildwars2.com-live/js/saf/',
+      base: '/wp-content/themes/guildwars2.com-live/js/saf/',
+      modules: {
+        cursor: {
+          path: 'cursor.177e9387.js',
+          requires: ['node', 'event', 'node-event-delegate']
+        },
+        soundcloud: {
+          path: 'soundcloud.760b9b99.js',
+          requires: ['node', 'event', 'node-event-delegate']
+        },
+        tribulation: {
+          path: 'tribulation.6dc4104c.js',
+          requires: []
+        },
+        progimages: {
+          path: 'progimages.bd731330.js',
+          requires: .node
+        },
+        'saf-screenshots': {
+          path: 'screenshots.b93812d7.js',
+          requires: ['node', 'event']
+        },
+        'saf-arcade': {
+          path: 'arcade.926651b2.js',
+          requires: ['node', 'node-core', 'event']
+        }
+      }
+    },
+    controls: {
+      comboBase: 'https://guildwars2.staticwars.com/combo/_',
+      root: '/wp-content/themes/guildwars2.com-live/js/controls/',
+      base: '/wp-content/themes/guildwars2.com-live/js/controls/',
+      modules: {
+        itemselector: {
+          path: 'itemselector.5661fc3b.js',
+          requires: ['node-base', 'base-build', 'event-delegate', 'event-mouseenter', 'transition', 'anim-base', 'anim-color']
+        }
+      }
+    },
+    charrousel: {
+      comboBase: 'https://guildwars2.staticwars.com/combo/_',
+      root: '/wp-content/themes/guildwars2.com-live/js/charrousel/',
+      base: '/wp-content/themes/guildwars2.com-live/js/charrousel/',
+      modules: {
+        'charrousel-base': {
+          path: 'charrousel-base.4d9557b4.js'
+        },
+        'charrousel-widget': {
+          path: 'charrousel-widget.531c6a9b.js',
+          requires: ['charrousel-base', 'node-base', 'base-build', 'widget']
+        },
+        'charrousel-fade': {
+          path: 'charrousel-fade.a052b078.js',
+          requires: ['charrousel-widget', 'base-build', 'plugin', 'transition']
+        },
+        'charrousel-timer': {
+          path: 'charrousel-timer.325f3b47.js',
+          requires: ['charrousel-widget', 'base-build', 'plugin']
+        }
+      }
+    },
+    lightbox: {
+      comboBase: 'https://guildwars2.staticwars.com/combo/_',
+      root: '/wp-content/themes/guildwars2.com-live/js/lightbox/',
+      base: '/wp-content/themes/guildwars2.com-live/js/lightbox/',
+      modules: {
+        'lightbox-base': {
+          path: 'lightbox-base.6bf8f8d2.js'
+        },
+        'lightbox-widget': {
+          path: 'lightbox-widget.e018cda4.js',
+          requires: ['lightbox-base', 'base-build', 'widget-base', 'dom-screen', 'node-base', 'node-event-delegate', 'selector-css3', 'transition']
+        }
+      }
+    },
+    media_center: {
+      comboBase: 'https://guildwars2.staticwars.com/combo/_',
+      root: '/wp-content/themes/guildwars2.com-live/js/media_center/',
+      base: '/wp-content/themes/guildwars2.com-live/js/media_center/',
+      modules: {
+        youtube: {
+          fullpath: '//www.youtube.com/player_api'
+        },
+        'mediaCenter-base': {
+          path: 'mediaCenter-base.6f9c1237.js'
+        },
+        'targetedMediaPlayer-widget': {
+          path: 'targetedMediaPlayer-widget.d7b2f7f2.js',
+          requires: ['mediaCenter-base', 'node-base', 'base-build', 'widget', 'json-parse']
+        },
+        'lightboxMediaPlayer-widget': {
+          path: 'lightboxMediaPlayer-widget.f3a57d5d.js',
+          requires: ['mediaCenter-base', 'node-base', 'base-build', 'widget', 'json-parse']
+        },
+        mediaCenterInlineMediaPlugin: {
+          path: 'mediaCenter-InlineMedia-plugin.99968e51.js',
+          requires: ['mediaCenter-base', 'node-base', 'base-build', 'plugin', 'json-parse']
+        },
+        mediaCenterFadeAnimationPlugin: {
+          path: 'mediaCenter-FadeAnimation-plugin.bc36d8ef.js',
+          requires: ['mediaCenter-base', 'node-base', 'base-build', 'plugin', 'json-parse']
+        },
+        mediaCenterLightboxFadeAnimationPlugin: {
+          path: 'mediaCenter-LightboxFadeAnimation-plugin.e09b2312.js',
+          requires: ['mediaCenter-base', 'node-base', 'base-build', 'plugin', 'json-parse']
+        },
+        'mediaCenter-youtubeVideo-plugin': {
+          path: 'mediaCenter-youtubeVideo-plugin.a26dfed8.js',
+          requires: ['mediaCenter-base', 'node-base', 'base-build', 'plugin', 'json-parse', 'io-base', 'youtube', 'dd', 'event-hover', 'node-screen']
+        }
+      }
+    },
+    gw2_gallery: {
+      comboBase: 'https://guildwars2.staticwars.com/combo/_',
+      root: '/wp-content/themes/guildwars2.com-live/js/gallery/',
+      base: '/wp-content/themes/guildwars2.com-live/js/gallery/',
+      modules: {
+        'gallery-animateintoview': {
+          path: 'gallery-animateintoview.4834120c.js',
+          requires: ['node-base', 'anim-base', 'anim-scroll', 'anim-easing']
+        }
+      }
+    }
+  }
+}

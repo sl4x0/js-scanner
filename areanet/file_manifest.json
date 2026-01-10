@@ -1,0 +1,1124 @@
+{
+  "02dec8879789cb746ffd3636c3a6e5d2": {
+    "filename": "02dec8879789cb746ffd3636c3a6e5d2.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.682070Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/character-search.5d64adc9.js"
+  },
+  "04780ef31248ce3759d907acf7e293c3": {
+    "filename": "04780ef31248ce3759d907acf7e293c3.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:06.787563Z",
+    "url": "http://forums.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "04d5fd846297973e2d07c1c21ca4cf68": {
+    "filename": "04d5fd846297973e2d07c1c21ca4cf68.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.785845Z",
+    "url": "https://fr-forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "05e052b6fd456e4e1d849506e51a4b14": {
+    "filename": "05e052b6fd456e4e1d849506e51a4b14.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:08.488130Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/cookie/cookie-min.js&/yui/3.9.0/classnamemanager/classnamemanager-min.js&/yui/3.9.0/array-extras/array-extras-min.js&/yui/3.9.0/attribute-core/attribute-core-min.js&/yui/3.9.0/event-custom-complex/event-custom-complex-min.js&/yui/3.9.0/attribute-observable/attribute-observable-min.js&/yui/3.9.0/attribute-extras/attribute-extras-min.js&/yui/3.9.0/attribute-base/attribute-base-min.js&/yui/3.9.0/base-core/base-core-min.js&/yui/3.9.0/base-observable/base-observable-min.js&/yui/3.9.0/base-base/base-base-min.js&/yui/3.9.0/base-build/base-build-min.js&/yui/3.9.0/history-base/history-base-min.js&/yui/3.9.0/event-synthetic/event-synthetic-min.js&/yui/3.9.0/history-html5/history-html5-min.js&/yui/3.9.0/history-hash/history-hash-min.js&/yui/3.9.0/history-hash-ie/history-hash-ie-min.js&/yui/3.9.0/router/router-min.js&/yui/3.9.0/pjax-base/pjax-base-min.js&/yui/3.9.0/pjax-content/pjax-content-min.js&/yui/3.9.0/pjax/pjax-min.js"
+  },
+  "0afd65d48f79de621c87013be95922ea": {
+    "filename": "0afd65d48f79de621c87013be95922ea.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:17.152126Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/social-share.1f1d9b6e.js"
+  },
+  "0c110e3b14c6dc9d76b2e4c3ea2c4325": {
+    "filename": "0c110e3b14c6dc9d76b2e4c3ea2c4325.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.415754Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/_config-min.js&/yui/3.17.2/yui/yui-min.js"
+  },
+  "0d43969c8ad363cd9b9361429753592a": {
+    "filename": "0d43969c8ad363cd9b9361429753592a.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.913111Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/media-loader.7decd9a0.js"
+  },
+  "0d5f6a3389cb36a5e87dd03cb58f0bba": {
+    "filename": "0d5f6a3389cb36a5e87dd03cb58f0bba.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:10.823402Z",
+    "url": "https://account.staticwars.com/iojs/5.11.0/dyn_wdp.js?loaderVer=5.8.1&compat=false&tp=true&tp_split=false&fp_static=true&fp_dyn=true"
+  },
+  "0eb12feefab2576f90f5914ee17d3802": {
+    "filename": "0eb12feefab2576f90f5914ee17d3802.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.431456Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/media_center/mediaCenter-base.6f9c1237.js"
+  },
+  "0f7a554b9f5a228f2e8144943735a75c": {
+    "filename": "0f7a554b9f5a228f2e8144943735a75c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.417400Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/oop/oop-min.js&/yui/3.17.2/event-custom-base/event-custom-base-min.js&/yui/3.17.2/event-base/event-base-min.js&/yui/3.17.2/dom-core/dom-core-min.js&/yui/3.17.2/dom-base/dom-base-min.js&/yui/3.17.2/selector-native/selector-native-min.js&/yui/3.17.2/selector/selector-min.js&/yui/3.17.2/node-core/node-core-min.js&/yui/3.17.2/dom-style/dom-style-min.js&/yui/3.17.2/node-base/node-base-min.js&/yui/3.17.2/event-delegate/event-delegate-min.js&/yui/3.17.2/node-event-delegate/node-event-delegate-min.js&/yui/3.17.2/pluginhost-base/pluginhost-base-min.js&/yui/3.17.2/pluginhost-config/pluginhost-config-min.js&/yui/3.17.2/node-pluginhost/node-pluginhost-min.js&/yui/3.17.2/dom-screen/dom-screen-min.js&/yui/3.17.2/node-screen/node-screen-min.js&/yui/3.17.2/node-style/node-style-min.js&/yui/3.17.2/attribute-core/attribute-core-min.js&/yui/3.17.2/event-custom-complex/event-custom-complex-min.js&/yui/3.17.2/attribute-observable/attribute-observable-min.js"
+  },
+  "0f8455bb32618c770753e6694ecc972a": {
+    "filename": "0f8455bb32618c770753e6694ecc972a.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.696010Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/gamesight.413d2dce.js"
+  },
+  "1080cb36e9ff6f85a2cc68dceed160e4": {
+    "filename": "1080cb36e9ff6f85a2cc68dceed160e4.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.435327Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/json-parse/json-parse-min.js&/yui/3.17.2/querystring-stringify-simple/querystring-stringify-simple-min.js&/yui/3.17.2/io-base/io-base-min.js&/yui/3.17.2/yui-throttle/yui-throttle-min.js&/yui/3.17.2/dd-ddm-base/dd-ddm-base-min.js&/yui/3.17.2/dd-ddm/dd-ddm-min.js&/yui/3.17.2/dd-ddm-drop/dd-ddm-drop-min.js&/yui/3.17.2/dd-drag/dd-drag-min.js&/yui/3.17.2/dd-proxy/dd-proxy-min.js&/yui/3.17.2/dd-constrain/dd-constrain-min.js&/yui/3.17.2/dd-drop/dd-drop-min.js&/yui/3.17.2/dd-scroll/dd-scroll-min.js&/yui/3.17.2/dd-drop-plugin/dd-drop-plugin-min.js&/yui/3.17.2/dd-delegate/dd-delegate-min.js&/yui/gallery/v4/parseuri-min.js"
+  },
+  "11f1c1e028ceaa707554c8c569def19c": {
+    "filename": "11f1c1e028ceaa707554c8c569def19c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.413772Z",
+    "url": "https://2gemstore.staticwars.com/const/gw2/build192224/GemStore/en/searchindex.fa40f9a5.js"
+  },
+  "12501f5c52d527ebfddf0ceb38c69684": {
+    "filename": "12501f5c52d527ebfddf0ceb38c69684.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:06.789008Z",
+    "url": "http://forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "12ae3231c4b13d6347b6296ac5c17516": {
+    "filename": "12ae3231c4b13d6347b6296ac5c17516.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.986094Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/faq.989523d1.js"
+  },
+  "12feb9c086a5a570bb5a636a7ef53fd7": {
+    "filename": "12feb9c086a5a570bb5a636a7ef53fd7.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.416819Z",
+    "url": "https://2tradingpost.staticwars.com/gen/i18n/strings-en.ded72118.js"
+  },
+  "1545f5e59e4dad0ba47bf0bfa622803f": {
+    "filename": "1545f5e59e4dad0ba47bf0bfa622803f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.328936Z",
+    "url": "https://2tradingpost.staticwars.com/combo/_/gw2/native/native-call.d9953d70.js&/gw2/native/native-stats.302e17af.js&/gw2/native/native-api-ime.677234ea.js&/gw2/native/native-scale.8989021c.js&/gw2/shared/gw2-enums.5ab99e92.js&/shared/filter-types.4844948.js&/gw2/util/util-log.15c1a463.js&/app/app-state.cc7301aa.js&/gw2/sts/sts-http.7f6c008f.js&/gw2/sts/sts-request.eb464748.js&/gw2/sts/sts-request-jssrv.f1e93203.js&/gw2/sts/sts-userinfo.9f4602b6.js&/gen/gw2/shared/micro-gw2-unauthorized.gen.a9979162.js&/gw2/shared/unauthorized.f10ab380.js&/gw2/util/util-text-keys.8a710828.js&/gw2/shared/account-status.39e0680c.js&/shared/util-items.6a7b0d8b.js&/shared/navigation.d583393b.js&/sections/sell.b14e981d.js&/sections/browse.18233913.js&/sections/transactions.7b777ee8.js&/gw2/util/util-optional.27796170.js&/gw2/elements/item-mithril/item.eff1b870.js&/sections/home/home.53b8497c.js&/gw2/prompt/prompt.7f1c9b51.js&/gw2/util/util-coins.f279a29c.js&/gw2/util/util-restricted.2d47fa20.js"
+  },
+  "1b09e3c95ce2880d95adaa6e0974b527": {
+    "filename": "1b09e3c95ce2880d95adaa6e0974b527.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.101818Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/idletimer-min.js"
+  },
+  "1bf86a347eec421c71b6682d733010d3": {
+    "filename": "1bf86a347eec421c71b6682d733010d3.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:08.478104Z",
+    "url": "https://help.guildwars.com/hc/theming_assets/317231/360000007567/script.js?digest=30036107324819"
+  },
+  "1e1a895bb3c17c7b92a3acc586c2eb3d": {
+    "filename": "1e1a895bb3c17c7b92a3acc586c2eb3d.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.133570Z",
+    "url": "https://guildwars2.staticwars.com/gen/pof/contentMedia.cf67a6c8.js"
+  },
+  "1e99bac6324398d0e40723e8f68f878c": {
+    "filename": "1e99bac6324398d0e40723e8f68f878c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.703567Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/lazy-load-min.js"
+  },
+  "1f3291774e3ea1b888ea6b00aa23c038": {
+    "filename": "1f3291774e3ea1b888ea6b00aa23c038.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:08.481412Z",
+    "url": "http://hom.guildwars2.com/gtm.js"
+  },
+  "206dc08611252636336ac7538967e934": {
+    "filename": "206dc08611252636336ac7538967e934.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.424346Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/lightbox/lightbox-widget.e018cda4.js"
+  },
+  "20a092c8fe5d4191d963ec4c12aa04ad": {
+    "filename": "20a092c8fe5d4191d963ec4c12aa04ad.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.604071Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/charrousel/charrousel-widget.531c6a9b.js"
+  },
+  "21de90746bb38f54a234752540a99f05": {
+    "filename": "21de90746bb38f54a234752540a99f05.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.260002Z",
+    "url": "http://en-forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "2308f751dec76a9a108a28afa58e9820": {
+    "filename": "2308f751dec76a9a108a28afa58e9820.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.413254Z",
+    "url": "https://2gemstore.staticwars.com/gen/gemstore.bd707157.js"
+  },
+  "263303703286d02300c9bcd9aebfac32": {
+    "filename": "263303703286d02300c9bcd9aebfac32.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.430014Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/lightbox/lightbox-base.6bf8f8d2.js"
+  },
+  "27e40f0c671951b4cbd90388943c4b20": {
+    "filename": "27e40f0c671951b4cbd90388943c4b20.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.939390Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/points.1dd99894.js"
+  },
+  "298ee91e272aad34c4e9b26da5725e36": {
+    "filename": "298ee91e272aad34c4e9b26da5725e36.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:07.528654Z",
+    "url": "https://heartofthorns.guildwars2.com/assets/js/full.js"
+  },
+  "2af45ec60a905af24f8405e65cd2f686": {
+    "filename": "2af45ec60a905af24f8405e65cd2f686.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:16.156427Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/image-compare.58ecbd63.js"
+  },
+  "2ea377739deec1d94467d61ce7cc8639": {
+    "filename": "2ea377739deec1d94467d61ce7cc8639.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.414746Z",
+    "url": "https://static.staticwars.com/bumpers/5/index.min.js"
+  },
+  "2ecc310b4fada71a137cb234e5322e43": {
+    "filename": "2ecc310b4fada71a137cb234e5322e43.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.922455Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/print-btn.6eebd4fa.js"
+  },
+  "30defde53e912086be9af1a7149f3e28": {
+    "filename": "30defde53e912086be9af1a7149f3e28.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.253854Z",
+    "url": "https://help.guildwars2.com/hc/theming_assets/317231/1278366/script.js?digest=45411053204371"
+  },
+  "3129ecdbc6ca5bddf1b3a51370d4e0e3": {
+    "filename": "3129ecdbc6ca5bddf1b3a51370d4e0e3.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:16.998552Z",
+    "url": "http://support.guildwars.com/hc/theming_assets/317231/360000007567/gtm.js"
+  },
+  "325b05444c55288b08e0c8942e6cd458": {
+    "filename": "325b05444c55288b08e0c8942e6cd458.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.410108Z",
+    "url": "https://2gemstore.staticwars.com/gen/i18n/strings-en.92f9b712.js"
+  },
+  "329d0837d5070c82d929643e5a81872f": {
+    "filename": "329d0837d5070c82d929643e5a81872f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.426931Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/_config.33d5356.js"
+  },
+  "334eedb63a4b98ce2d9b707b95e884d6": {
+    "filename": "334eedb63a4b98ce2d9b707b95e884d6.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:17.158943Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/points-header.4b047ff3.js"
+  },
+  "33612747a97ac4d1b7e53d5aac8754dd": {
+    "filename": "33612747a97ac4d1b7e53d5aac8754dd.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.417298Z",
+    "url": "https://static.staticwars.com/combo/_/mithril/0.2.0/mithril-min.js&/mithril-stream/1.1.0/stream-min.js"
+  },
+  "340218e2fba178f30796d632cdb8862d": {
+    "filename": "340218e2fba178f30796d632cdb8862d.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.855667Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/timers/timers-min.js&/yui/3.17.2/promise/promise-min.js&/yui/3.17.2/oop/oop-min.js&/yui/3.17.2/event-custom-base/event-custom-base-min.js&/yui/3.17.2/querystring-stringify-simple/querystring-stringify-simple-min.js&/yui/3.17.2/io-base/io-base-min.js&/yui/3.17.2/template-base/template-base-min.js&/yui/3.17.2/escape/escape-min.js&/yui/3.17.2/template-micro/template-micro-min.js&/yui/3.17.2/event-base/event-base-min.js&/yui/3.17.2/dom-core/dom-core-min.js&/yui/3.17.2/dom-base/dom-base-min.js&/yui/3.17.2/selector-native/selector-native-min.js&/yui/3.17.2/selector/selector-min.js&/yui/3.17.2/node-core/node-core-min.js&/yui/3.17.2/dom-style/dom-style-min.js&/yui/3.17.2/node-base/node-base-min.js&/yui/3.17.2/event-delegate/event-delegate-min.js&/yui/3.17.2/event-custom-complex/event-custom-complex-min.js&/yui/3.17.2/event-synthetic/event-synthetic-min.js&/yui/3.17.2/event-mousewheel/event-mousewheel-min.js&/yui/3.17.2/event-mouseenter/event-mouseenter-min.js"
+  },
+  "362b03f4b25297c4aa0e9a4b801f1cfb": {
+    "filename": "362b03f4b25297c4aa0e9a4b801f1cfb.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.420092Z",
+    "url": "https://services.staticwars.com/services/2pita/v1/client.42d173d0-svc.js"
+  },
+  "38a6bac0138e0b3b64c4e0132077e43c": {
+    "filename": "38a6bac0138e0b3b64c4e0132077e43c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.132279Z",
+    "url": "https://static.staticwars.com/zenscroll/4.0.0/zenscroll-min.js"
+  },
+  "3c49f6971cf89c3998228635902394a8": {
+    "filename": "3c49f6971cf89c3998228635902394a8.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.991901Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/parseuri-min.js"
+  },
+  "3d2a27a2e1eb1a673454b32d4b4dac75": {
+    "filename": "3d2a27a2e1eb1a673454b32d4b4dac75.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.130163Z",
+    "url": "https://static.staticwars.com/sketch-js/1.1.3/sketch-min.js"
+  },
+  "40df2ebb74c704b7d598a0a88003d50f": {
+    "filename": "40df2ebb74c704b7d598a0a88003d50f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.334555Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/pluginhost-config/pluginhost-config-min.js&/yui/3.17.2/node-pluginhost/node-pluginhost-min.js&/yui/3.17.2/dom-screen/dom-screen-min.js&/yui/3.17.2/node-screen/node-screen-min.js&/yui/3.17.2/node-style/node-style-min.js&/yui/3.17.2/json-parse/json-parse-min.js&/yui/3.17.2/model/model-min.js&/yui/3.17.2/array-extras/array-extras-min.js&/yui/3.17.2/plugin/plugin-min.js&/yui/3.17.2/base-pluginhost/base-pluginhost-min.js&/yui/3.17.2/transition/transition-min.js&/yui/3.17.2/event-simulate/event-simulate-min.js&/yui/3.17.2/async-queue/async-queue-min.js&/yui/3.17.2/gesture-simulate/gesture-simulate-min.js&/yui/3.17.2/node-event-simulate/node-event-simulate-min.js"
+  },
+  "41b63338c550e1e1ad0ff3e440ad9950": {
+    "filename": "41b63338c550e1e1ad0ff3e440ad9950.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.752349Z",
+    "url": "https://es-forum.guildwars2.com/cdn-cgi/challenge-platform/h/g/scripts/jsd/fc21b7e0d793/main.js?"
+  },
+  "45803442d11bf6734ed7fee3c8147c87": {
+    "filename": "45803442d11bf6734ed7fee3c8147c87.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.141806Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/page-control.3da3e336.js"
+  },
+  "4610f355ec02316da4472b92bcaad872": {
+    "filename": "4610f355ec02316da4472b92bcaad872.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.235918Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/event-mouseenter/event-mouseenter-min.js&/yui/3.17.2/event-key/event-key-min.js&/yui/3.17.2/event-focus/event-focus-min.js&/yui/3.17.2/event-resize/event-resize-min.js&/yui/3.17.2/event-hover/event-hover-min.js&/yui/3.17.2/event-outside/event-outside-min.js&/yui/3.17.2/event-touch/event-touch-min.js&/yui/3.17.2/event-move/event-move-min.js&/yui/3.17.2/event-flick/event-flick-min.js&/yui/3.17.2/event-valuechange/event-valuechange-min.js&/yui/3.17.2/event-tap/event-tap-min.js&/yui/3.17.2/transition/transition-min.js&/yui/3.17.2/array-extras/array-extras-min.js&/yui/3.17.2/attribute-core/attribute-core-min.js&/yui/3.17.2/attribute-observable/attribute-observable-min.js&/yui/3.17.2/attribute-extras/attribute-extras-min.js&/yui/3.17.2/attribute-base/attribute-base-min.js&/yui/3.17.2/base-core/base-core-min.js&/yui/3.17.2/base-observable/base-observable-min.js&/yui/3.17.2/base-base/base-base-min.js&/yui/3.17.2/base-build/base-build-min.js"
+  },
+  "46841fc6595da5e85fc24dfd44c9c1f6": {
+    "filename": "46841fc6595da5e85fc24dfd44c9c1f6.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:08.491060Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/oop/oop-min.js&/yui/3.9.0/event-custom-base/event-custom-base-min.js&/yui/3.9.0/querystring-stringify-simple/querystring-stringify-simple-min.js&/yui/3.9.0/io-base/io-base-min.js&/yui/3.9.0/dom-core/dom-core-min.js&/yui/3.9.0/dom-base/dom-base-min.js&/yui/3.9.0/selector-native/selector-native-min.js&/yui/3.9.0/selector/selector-min.js&/yui/3.9.0/node-core/node-core-min.js&/yui/3.9.0/node-base/node-base-min.js&/yui/3.9.0/event-base/event-base-min.js&/yui/3.9.0/event-delegate/event-delegate-min.js&/yui/3.9.0/node-event-delegate/node-event-delegate-min.js&/yui/3.9.0/pluginhost-base/pluginhost-base-min.js&/yui/3.9.0/pluginhost-config/pluginhost-config-min.js&/yui/3.9.0/node-pluginhost/node-pluginhost-min.js&/yui/3.9.0/dom-style/dom-style-min.js&/yui/3.9.0/dom-screen/dom-screen-min.js&/yui/3.9.0/node-screen/node-screen-min.js&/yui/3.9.0/node-style/node-style-min.js"
+  },
+  "47a1c093b81c74d62752b559e5ca93f1": {
+    "filename": "47a1c093b81c74d62752b559e5ca93f1.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.939619Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/shop-carousel.34003834.js"
+  },
+  "47a8feaa093e30a8a0a16a36635cb916": {
+    "filename": "47a8feaa093e30a8a0a16a36635cb916.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.323013Z",
+    "url": "https://2tradingpost.staticwars.com/combo/_/components/item-table/component-item-table.edff5ca0.js&/components/breadcrumbs/component-breadcrumbs.bbcb7ed4.js&/gw2/button/button.8e1699bd.js&/app/app-ntp.2c27d060.js"
+  },
+  "4e21180e51b5e8c4db187c9caba77c83": {
+    "filename": "4e21180e51b5e8c4db187c9caba77c83.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.413621Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/media_center/lightboxMediaPlayer-widget.f3a57d5d.js"
+  },
+  "4e4da2cd04863e0247e4946b67368c84": {
+    "filename": "4e4da2cd04863e0247e4946b67368c84.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:07.520323Z",
+    "url": "https://2gemstore.staticwars.com/gen/i18n/strings-de.36d8bf36.js"
+  },
+  "4e790187112f935d8474a6706101d7b0": {
+    "filename": "4e790187112f935d8474a6706101d7b0.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:10.814986Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.2.0/attribute/attribute-min.js&/yui/3.2.0/classnamemanager/classnamemanager-min.js&/yui/3.2.0/widget/widget-min.js&/yui/3.2.0/widget/widget-stdmod-min.js&/yui/3.2.0/widget/widget-position-min.js&/yui/3.2.0/widget/widget-position-align-min.js&/yui/3.2.0/widget/widget-stack-min.js&/yui/3.2.0/widget/widget-position-constrain-min.js&/yui/3.2.0/overlay/overlay-min.js"
+  },
+  "4eb92bf79b55d171f0c0f383d655eae5": {
+    "filename": "4eb92bf79b55d171f0c0f383d655eae5.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.116117Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/helper-i18n-min.js"
+  },
+  "50af1826fb9a5b3e0afcccb07916f578": {
+    "filename": "50af1826fb9a5b3e0afcccb07916f578.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.119003Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/overlay-transition-min.js"
+  },
+  "530c03dc56174b97e03404a95262a998": {
+    "filename": "530c03dc56174b97e03404a95262a998.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:17.155658Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/print-page.5a4e56fc.js"
+  },
+  "5496a2e10bc72b7a03db4fa4bcfd7d80": {
+    "filename": "5496a2e10bc72b7a03db4fa4bcfd7d80.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:09.340761Z",
+    "url": "http://support.guildwars.com/hc/theming_assets/317231/360000007567/script.js?digest=30036107324819"
+  },
+  "55e222b149c2a3c00bb079bd4df3a8ec": {
+    "filename": "55e222b149c2a3c00bb079bd4df3a8ec.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.419439Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/media_center/targetedMediaPlayer-widget.d7b2f7f2.js"
+  },
+  "56faf8de7a555eb35e995c4ac25b4faa": {
+    "filename": "56faf8de7a555eb35e995c4ac25b4faa.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:10.821490Z",
+    "url": "https://account.guildwars2.com/iojs/5.11.0/dyn_wdp.js?loaderVer=5.8.1&compat=false&tp=true&tp_split=false&fp_static=true&fp_dyn=true"
+  },
+  "57367bfcd35261cbd58ca26674faa8d2": {
+    "filename": "57367bfcd35261cbd58ca26674faa8d2.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.412369Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.2.0/_config-min.js&/yui/gallery/v4/_config-min.js&/yui/3.2.0/yui/yui-min.js&/yui/3.2.0/loader/loader-min.js"
+  },
+  "5763025d34f040c5f5403141d9a314dd": {
+    "filename": "5763025d34f040c5f5403141d9a314dd.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.138838Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/menu.1e25d77e.js"
+  },
+  "5a79e87d710582de1a60c51f4b5ded71": {
+    "filename": "5a79e87d710582de1a60c51f4b5ded71.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.331621Z",
+    "url": "https://2tradingpost.staticwars.com/combo/_/gw2/elements/coins-mithril/coins.e1389aaa.js&/sections/order/model-coins.2c568e10.js&/sections/order/model-listings.c96e3015.js&/sections/order/extension-last-viewed.b59bf35.js&/sections/order/model-orderstate.f10d9f0a.js&/sections/order/view-order.c38f8d43.js&/gw2/shared/number-floater-plugin.9ee15c62.js&/components/balance/component-balance.cacc6fff.js&/components/filters/component-filters.58049cae.js&/components/delivery-box/component-delivery-box.e3f34a.js&/components/tabs/component-tabs.91583818.js&/components/categories/component-categories.6ce4b00b.js&/components/item-table/item-table-controller.db089b01.js&/components/item-table/item-table-data.4884173c.js&/components/item-table/util-relative-time.55ebd835.js&/components/item-table/item-table-cells.55687b8d.js&/components/item-table/item-table-viewport.642b9a7.js&/components/item-table/item-table-outer.4ba8b78b.js&/components/item-table/item-table-view.d6e8c520.js"
+  },
+  "5ab62df43579a145e98d43de770ed672": {
+    "filename": "5ab62df43579a145e98d43de770ed672.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.255905Z",
+    "url": "https://en-forum.guildwars2.com/cdn-cgi/challenge-platform/h/g/scripts/jsd/fc21b7e0d793/main.js?"
+  },
+  "5abc14ee99fe5bc693b05aa633e78c53": {
+    "filename": "5abc14ee99fe5bc693b05aa633e78c53.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.410558Z",
+    "url": "https://static.staticwars.com/combo/_/mithril/1.1.7/mithril-min.js&/mithril-stream/1.0.0/stream-min.js&/zenscroll/4.0.0/zenscroll-min.js"
+  },
+  "5b9b2d48069517f76a962205d5e654ee": {
+    "filename": "5b9b2d48069517f76a962205d5e654ee.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.151899Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/event-nav-keys-min.js"
+  },
+  "5cd521ffd6137385e8bf0d9e1ab76329": {
+    "filename": "5cd521ffd6137385e8bf0d9e1ab76329.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.325970Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/event-key/event-key-min.js&/yui/3.17.2/event-focus/event-focus-min.js&/yui/3.17.2/event-resize/event-resize-min.js&/yui/3.17.2/event-hover/event-hover-min.js&/yui/3.17.2/event-outside/event-outside-min.js&/yui/3.17.2/event-touch/event-touch-min.js&/yui/3.17.2/event-move/event-move-min.js&/yui/3.17.2/event-flick/event-flick-min.js&/yui/3.17.2/event-valuechange/event-valuechange-min.js&/yui/3.17.2/event-tap/event-tap-min.js&/yui/3.17.2/attribute-core/attribute-core-min.js&/yui/3.17.2/attribute-observable/attribute-observable-min.js&/yui/3.17.2/attribute-extras/attribute-extras-min.js&/yui/3.17.2/attribute-base/attribute-base-min.js&/yui/3.17.2/base-core/base-core-min.js&/yui/3.17.2/base-observable/base-observable-min.js&/yui/3.17.2/base-base/base-base-min.js&/yui/3.17.2/base-build/base-build-min.js&/yui/3.17.2/node-event-delegate/node-event-delegate-min.js&/yui/3.17.2/view/view-min.js&/yui/3.17.2/pluginhost-base/pluginhost-base-min.js"
+  },
+  "5dace6771abb87da05f8cdb6fc05ffec": {
+    "filename": "5dace6771abb87da05f8cdb6fc05ffec.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.408616Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/media_center/mediaCenter-youtubeVideo-plugin.a26dfed8.js"
+  },
+  "5e2f155da2e09bc6cdf6c38598f49ed8": {
+    "filename": "5e2f155da2e09bc6cdf6c38598f49ed8.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.421034Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/charrousel/charrousel-fade.a052b078.js"
+  },
+  "5eb87bac032bd5c57a46713e31d26404": {
+    "filename": "5eb87bac032bd5c57a46713e31d26404.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.191954Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/idletimer-min.js"
+  },
+  "608f3f90643d98a1fb46a333a1c9abc3": {
+    "filename": "608f3f90643d98a1fb46a333a1c9abc3.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:11.499348Z",
+    "url": "https://forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "61e578dc386760159a9d481b8a7e704d": {
+    "filename": "61e578dc386760159a9d481b8a7e704d.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.790578Z",
+    "url": "http://fr-forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "62a33d5b3149d9fadaab29fb80b71bea": {
+    "filename": "62a33d5b3149d9fadaab29fb80b71bea.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.238810Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/dd-drop-plugin/dd-drop-plugin-min.js&/yui/3.17.2/dd-delegate/dd-delegate-min.js&/yui/gallery/v4/parseuri-min.js"
+  },
+  "631ded4bc1f8e8c0ba984e2c024e75c5": {
+    "filename": "631ded4bc1f8e8c0ba984e2c024e75c5.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.247324Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/attribute-complex/attribute-complex-min.js&/yui/3.17.2/base-pluginhost/base-pluginhost-min.js&/yui/3.17.2/classnamemanager/classnamemanager-min.js&/yui/3.17.2/widget-base/widget-base-min.js&/yui/3.17.2/selector-css2/selector-css2-min.js&/yui/3.17.2/selector-css3/selector-css3-min.js&/yui/3.17.2/widget-htmlparser/widget-htmlparser-min.js&/yui/3.17.2/widget-skin/widget-skin-min.js&/yui/3.17.2/widget-uievents/widget-uievents-min.js&/yui/3.17.2/json-parse/json-parse-min.js&/yui/3.17.2/plugin/plugin-min.js&/yui/3.17.2/querystring-stringify-simple/querystring-stringify-simple-min.js&/yui/3.17.2/io-base/io-base-min.js&/yui/3.17.2/yui-throttle/yui-throttle-min.js&/yui/3.17.2/dd-ddm-base/dd-ddm-base-min.js&/yui/3.17.2/dd-ddm/dd-ddm-min.js&/yui/3.17.2/dd-ddm-drop/dd-ddm-drop-min.js&/yui/3.17.2/dd-drag/dd-drag-min.js&/yui/3.17.2/dd-proxy/dd-proxy-min.js&/yui/3.17.2/dd-constrain/dd-constrain-min.js&/yui/3.17.2/dd-drop/dd-drop-min.js&/yui/3.17.2/dd-scroll/dd-scroll-min.js"
+  },
+  "63bc75894fa5855919ee8ebda7aa4e67": {
+    "filename": "63bc75894fa5855919ee8ebda7aa4e67.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:17.148781Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/countdown.7a5c9714.js"
+  },
+  "65b5e8f16d4d65e2bc6066c4b0a822b7": {
+    "filename": "65b5e8f16d4d65e2bc6066c4b0a822b7.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:08.479571Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.2.0/oop/oop-min.js&/yui/3.2.0/event-custom/event-custom-min.js&/yui/3.2.0/attribute/attribute-base-min.js&/yui/3.2.0/pluginhost/pluginhost-min.js&/yui/3.2.0/base/base-min.js&/yui/3.2.0/dom/dom-base-min.js&/yui/3.2.0/dom/selector-native-min.js&/yui/3.2.0/dom/selector-css2-min.js&/yui/3.2.0/event/event-base-min.js&/yui/3.2.0/node/node-base-min.js&/yui/3.2.0/event/event-delegate-min.js&/yui/3.2.0/event/event-synthetic-min.js&/yui/3.2.0/history/history-base-min.js&/yui/3.2.0/history/history-hash-min.js&/yui/gallery/v4/preload-min.js"
+  },
+  "694ec5d01c69d0bea88ac5eb4047d350": {
+    "filename": "694ec5d01c69d0bea88ac5eb4047d350.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:03.428723Z",
+    "url": "https://static.staticwars.com/cid/8/cid.js"
+  },
+  "69f9d9b581550ce2dd8e7f6f20581c51": {
+    "filename": "69f9d9b581550ce2dd8e7f6f20581c51.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.126931Z",
+    "url": "https://guildwars2.staticwars.com/gen/pof/strings-en.365a0aa0.js"
+  },
+  "6d7ff074f5724af6994771e0dc319633": {
+    "filename": "6d7ff074f5724af6994771e0dc319633.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.995560Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/skip-to-main-content.e91f54de.js"
+  },
+  "6d82fa0696e9c4ba0883e3707d5d5cb4": {
+    "filename": "6d82fa0696e9c4ba0883e3707d5d5cb4.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.442857Z",
+    "url": "http://beta.guildwars2.com/gtm.js"
+  },
+  "6d9e897a525fee11e41b7f0cba8f2635": {
+    "filename": "6d9e897a525fee11e41b7f0cba8f2635.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.249750Z",
+    "url": "https://de-forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "6de459243b01d954e8e6cf151ec23edd": {
+    "filename": "6de459243b01d954e8e6cf151ec23edd.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.928421Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/event-visible-min.js"
+  },
+  "70525cc148dc24e9a93d69812557e9aa": {
+    "filename": "70525cc148dc24e9a93d69812557e9aa.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.714039Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/popup-launcher.2078a9b8.js"
+  },
+  "7072844c404e9531e48e943c28dc0a57": {
+    "filename": "7072844c404e9531e48e943c28dc0a57.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:06.263551Z",
+    "url": "http://en.support.guildwars2.com/hc/theming_assets/317231/1278366/script.js?digest=45411053204371"
+  },
+  "728d1eaa492e07aa37b2e1f4e82c59c6": {
+    "filename": "728d1eaa492e07aa37b2e1f4e82c59c6.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:04.134756Z",
+    "url": "http://migration.guildwars2.com/services/2bumpers/gen/anet-bumpers/index.ed78f3dc-svc.js"
+  },
+  "742be9eb57ca28d1cd7951b09b4195d3": {
+    "filename": "742be9eb57ca28d1cd7951b09b4195d3.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.414748Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/media_center/mediaCenter-InlineMedia-plugin.99968e51.js"
+  },
+  "765dc028759bd58f51d356d7291f3f5d": {
+    "filename": "765dc028759bd58f51d356d7291f3f5d.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.428053Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/media_center/mediaCenter-LightboxFadeAnimation-plugin.e09b2312.js"
+  },
+  "777c72a06cb6a780f3ae10ae9f79a5f8": {
+    "filename": "777c72a06cb6a780f3ae10ae9f79a5f8.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.424928Z",
+    "url": "http://2welcome.staticwars.com/services/2bumpers/gen/anet-bumpers/index.85cb22f9-svc.js"
+  },
+  "779d48125ab638b56981aa2368d91731": {
+    "filename": "779d48125ab638b56981aa2368d91731.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.678524Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/takeover.f559ec26.js"
+  },
+  "77e285bfe58c7bab62d00a9aef41fec3": {
+    "filename": "77e285bfe58c7bab62d00a9aef41fec3.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:09.859345Z",
+    "url": "http://www.guildwars.com/gtm.js"
+  },
+  "782d45e69ad387ec0fd1fa97c5c942f6": {
+    "filename": "782d45e69ad387ec0fd1fa97c5c942f6.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.866159Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/_config-min.js"
+  },
+  "789716952e51f2f765cd499643e7a4a7": {
+    "filename": "789716952e51f2f765cd499643e7a4a7.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.685401Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/awards.f64673f6.js"
+  },
+  "79a3ed12abee3ff1d697d3cadf56b21f": {
+    "filename": "79a3ed12abee3ff1d697d3cadf56b21f.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:09.337719Z",
+    "url": "http://support.guildwars.com/gtm.js"
+  },
+  "7a0b6dac9c26beb56856d074491a3d9f": {
+    "filename": "7a0b6dac9c26beb56856d074491a3d9f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.870483Z",
+    "url": "http://heartofthorns.guildwars2.com/assets/js/app.js"
+  },
+  "7ab633469e7cce72feb16f9aac2deb1f": {
+    "filename": "7ab633469e7cce72feb16f9aac2deb1f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.417898Z",
+    "url": "https://2tradingpost.staticwars.com/gw2/_gw2.bdf75075.js"
+  },
+  "7aba55578949d8cd980af8c805909140": {
+    "filename": "7aba55578949d8cd980af8c805909140.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:03.864764Z",
+    "url": "http://competitive.guildwars2.com/services/2bumpers/gen/cookie-notification-2/index.c637c8bb-svc.js"
+  },
+  "7b68dc6804d0719c292e3078b90a545c": {
+    "filename": "7b68dc6804d0719c292e3078b90a545c.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:03.867215Z",
+    "url": "https://services.staticwars.com/services/errors/js/errors-stub.153685b7-svc.js"
+  },
+  "7c71ddff53b4a6c3aca83a0980e3cb53": {
+    "filename": "7c71ddff53b4a6c3aca83a0980e3cb53.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.411966Z",
+    "url": "http://2arenanet2.staticwars.com/services/2bumpers/gen/cookie-notification-2/index.c637c8bb-svc.js"
+  },
+  "7f64188a463aa24e605d9b132a99d831": {
+    "filename": "7f64188a463aa24e605d9b132a99d831.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.916323Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/overlay-transition-min.js"
+  },
+  "805e9a7cdf1cfa4c587311e8f23e32a3": {
+    "filename": "805e9a7cdf1cfa4c587311e8f23e32a3.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:17.162488Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/debounce-min.js"
+  },
+  "8270b6f7f256c8de61d4988cdff04bf2": {
+    "filename": "8270b6f7f256c8de61d4988cdff04bf2.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.414177Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/bootstrap.ba1bf3fe.js"
+  },
+  "86dbd9664258d1b23992c5c51e9219a5": {
+    "filename": "86dbd9664258d1b23992c5c51e9219a5.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:06.261818Z",
+    "url": "http://de.support.guildwars2.com/gtm.js"
+  },
+  "888b61665d11e90f467f39f3d1ee6aac": {
+    "filename": "888b61665d11e90f467f39f3d1ee6aac.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.160948Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/points-anim.b0f4ffd3.js"
+  },
+  "88f02b50a9eeba2f787076385c608620": {
+    "filename": "88f02b50a9eeba2f787076385c608620.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.857710Z",
+    "url": "http://welcome.guildwars2.com/polyfill-74d6d6f8f4507f0091d0.js"
+  },
+  "8972cbe9e31fa53a298162f89b8f63a5": {
+    "filename": "8972cbe9e31fa53a298162f89b8f63a5.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.419133Z",
+    "url": "https://static.staticwars.com/mithril/1.1.7/mithril-min.js"
+  },
+  "8c13054b339360ae39cce1ac9abdc9ab": {
+    "filename": "8c13054b339360ae39cce1ac9abdc9ab.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.187299Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/welcome-page.8694a321.js"
+  },
+  "8e4d491b227dde831cab21ea5d715cff": {
+    "filename": "8e4d491b227dde831cab21ea5d715cff.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.906985Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/loader-details.1d30b28a.js"
+  },
+  "8edd2d2bdf3c2476302c13941cb04348": {
+    "filename": "8edd2d2bdf3c2476302c13941cb04348.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.411500Z",
+    "url": "https://services.staticwars.com/services/2native/gen/native-bundle.4c2e12c4-svc.js"
+  },
+  "8f3ca94a99c7cffd3b505ad28585f729": {
+    "filename": "8f3ca94a99c7cffd3b505ad28585f729.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.952948Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/debounce-min.js"
+  },
+  "8f52f2b510aade46afd9dfc472402adf": {
+    "filename": "8f52f2b510aade46afd9dfc472402adf.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.425986Z",
+    "url": "https://account.staticwars.com/gen/rollup.305dcca0.js"
+  },
+  "911be942dd4787b25dec036e254268b1": {
+    "filename": "911be942dd4787b25dec036e254268b1.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:08.476078Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/lib/Base64Codec.2e2f6a63.js&/js/points.1dd99894.js&/js/page-control.3da3e336.js"
+  },
+  "92e0846255e045000ef9318f7685a072": {
+    "filename": "92e0846255e045000ef9318f7685a072.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.406583Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/charrousel/charrousel-base.4d9557b4.js"
+  },
+  "9339e49a3341ed7358ae4dba9dac9b40": {
+    "filename": "9339e49a3341ed7358ae4dba9dac9b40.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.692298Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/helper-i18n-min.js"
+  },
+  "98ef516221f5c42b11bc70899116a6ea": {
+    "filename": "98ef516221f5c42b11bc70899116a6ea.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.251861Z",
+    "url": "http://de-forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "995325f7e69e40ed7cbf91a2cfa65820": {
+    "filename": "995325f7e69e40ed7cbf91a2cfa65820.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.131512Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/stretch-video.de77e457.js"
+  },
+  "997cb70ddaec0b94ce8ef085ea87fdf5": {
+    "filename": "997cb70ddaec0b94ce8ef085ea87fdf5.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.106062Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/reward-meter-overlay.6dc173d8.js"
+  },
+  "9a2c631b2f41cf7312e5bb600f359735": {
+    "filename": "9a2c631b2f41cf7312e5bb600f359735.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:05.441317Z",
+    "url": "https://static.staticwars.com/cid/7/cid.js"
+  },
+  "9a4c66e38768bd116eb701023b29e033": {
+    "filename": "9a4c66e38768bd116eb701023b29e033.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:10.817513Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.2.0/dom/dom-min.js&/yui/3.2.0/event/event-min.js&/yui/3.2.0/node/node-min.js&/yui/3.2.0/cookie/cookie-min.js&/yui/3.2.0/transition/transition-min.js&/yui/3.2.0/anim/anim-base-min.js&/yui/3.2.0/anim/anim-easing-min.js"
+  },
+  "9c5e42f097f8629597dd2f0878f76a86": {
+    "filename": "9c5e42f097f8629597dd2f0878f76a86.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.869456Z",
+    "url": "http://manual.guildwars2.com/services/2bumpers/gen/cookie-notification-2/index.c637c8bb-svc.js"
+  },
+  "9d479f95aaef0536f20a0fc8bfe77faf": {
+    "filename": "9d479f95aaef0536f20a0fc8bfe77faf.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.957659Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/shop-item.7b3c46ee.js"
+  },
+  "a31ff337321f78d0f07f1d01c404e298": {
+    "filename": "a31ff337321f78d0f07f1d01c404e298.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.137053Z",
+    "url": "https://guildwars2.staticwars.com/gen/pof/bundle.bbb65b85.js"
+  },
+  "a36850cc6059f02a33f20f4d454aec2e": {
+    "filename": "a36850cc6059f02a33f20f4d454aec2e.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:07.518238Z",
+    "url": "https://2gemstore.staticwars.com/gen/i18n/strings-fr.6421f977.js"
+  },
+  "a794111366fc3de563c41df686c40ed6": {
+    "filename": "a794111366fc3de563c41df686c40ed6.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.433074Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/widget-autohide/widget-autohide-min.js&/yui/3.17.2/escape/escape-min.js&/yui/3.17.2/button-core/button-core-min.js&/yui/3.17.2/button-plugin/button-plugin-min.js&/yui/3.17.2/widget-stdmod/widget-stdmod-min.js&/yui/3.17.2/widget-buttons/widget-buttons-min.js&/yui/3.17.2/widget-modality/widget-modality-min.js&/yui/3.17.2/widget-position/widget-position-min.js&/yui/3.17.2/widget-position-align/widget-position-align-min.js&/yui/3.17.2/widget-position-constrain/widget-position-constrain-min.js&/yui/3.17.2/widget-stack/widget-stack-min.js&/yui/3.17.2/panel/panel-min.js"
+  },
+  "a7bd712495a41df580a7a16c498e6171": {
+    "filename": "a7bd712495a41df580a7a16c498e6171.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.861453Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/gallery/boxshadow-anim.411441ac.js&/js/character-search.5d64adc9.js&/js/welcome-page.8694a321.js"
+  },
+  "a81ae29325168bbff0059040e17b8bd5": {
+    "filename": "a81ae29325168bbff0059040e17b8bd5.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.427902Z",
+    "url": "https://static.staticwars.com/bumpers/7/index.min.js"
+  },
+  "ad816eb02bc81667c1058376d33148e7": {
+    "filename": "ad816eb02bc81667c1058376d33148e7.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.113592Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/todo.906ecd95.js"
+  },
+  "aeffa9bbca57ab91ebeddd3b387eeaa0": {
+    "filename": "aeffa9bbca57ab91ebeddd3b387eeaa0.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.411773Z",
+    "url": "https://guildwars2.staticwars.com/combo/_/wp-content/themes/guildwars2.com-live/js/home.a2c6215f.js&/wp-content/themes/guildwars2.com-live/js/skip-to-main-content.e91f54de.js&/wp-content/themes/guildwars2.com-live/js/takeover.f559ec26.js&/wp-content/themes/guildwars2.com-live/js/menu.1e25d77e.js&/wp-content/themes/guildwars2.com-live/js/yulb.806656c0.js&/wp-content/themes/guildwars2.com-live/js/media.3008f345.js&/wp-content/themes/guildwars2.com-live/js/rating.9870fb8a.js&/wp-content/themes/guildwars2.com-live/js/snow.5fc46ec7.js"
+  },
+  "af968c040b46dfaf5bbba4bdd976d838": {
+    "filename": "af968c040b46dfaf5bbba4bdd976d838.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.124059Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/release-carousel.80e1a2a4.js"
+  },
+  "b07c6b8700fdc4015b55d5ff876ed068": {
+    "filename": "b07c6b8700fdc4015b55d5ff876ed068.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.110369Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/loader-monitor.27a16db.js"
+  },
+  "b4da1461610c7c4ddba9ba7a99f9d2ed": {
+    "filename": "b4da1461610c7c4ddba9ba7a99f9d2ed.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.129359Z",
+    "url": "https://static.staticwars.com/mithril-stream/1.0.0/stream-min.js"
+  },
+  "b4e808b9f64c5163667b407dd4a7971e": {
+    "filename": "b4e808b9f64c5163667b407dd4a7971e.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.244624Z",
+    "url": "https://de-forum.guildwars2.com/cdn-cgi/challenge-platform/h/g/scripts/jsd/fc21b7e0d793/main.js?"
+  },
+  "b4f9795b443fec242a2b133d8678a9a1": {
+    "filename": "b4f9795b443fec242a2b133d8678a9a1.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.711686Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.9.0/yui/yui-min.js&/yui/3.9.0/_config-min.js&/yui/gallery/v4/preload-min.js"
+  },
+  "b60d93321517216bc377f8ecbfbd4651": {
+    "filename": "b60d93321517216bc377f8ecbfbd4651.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.988993Z",
+    "url": "http://heartofthorns.guildwars2.com/assets/js/mobile.js"
+  },
+  "b6124189619d456d08fe4aeaa7e026d1": {
+    "filename": "b6124189619d456d08fe4aeaa7e026d1.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.755156Z",
+    "url": "https://es-forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "b9fe2843e6b487cb091a3030f85b20a8": {
+    "filename": "b9fe2843e6b487cb091a3030f85b20a8.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.942143Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/main-page.f0763edf.js"
+  },
+  "ba1589ed85d9adf39cc371ccf470d4c2": {
+    "filename": "ba1589ed85d9adf39cc371ccf470d4c2.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.131246Z",
+    "url": "https://static.staticwars.com/svgxuse/1.1.20/svgxuse-min.js"
+  },
+  "ba47be78b198ac4334141b29d3584a87": {
+    "filename": "ba47be78b198ac4334141b29d3584a87.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:07.524995Z",
+    "url": "https://2gemstore.staticwars.com/gen/i18n/strings-es.ea66c915.js"
+  },
+  "ba6811d745d218fb957ddaefedf248ca": {
+    "filename": "ba6811d745d218fb957ddaefedf248ca.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.241829Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/oop/oop-min.js&/yui/3.17.2/event-custom-base/event-custom-base-min.js&/yui/3.17.2/event-base/event-base-min.js&/yui/3.17.2/dom-core/dom-core-min.js&/yui/3.17.2/dom-base/dom-base-min.js&/yui/3.17.2/selector-native/selector-native-min.js&/yui/3.17.2/selector/selector-min.js&/yui/3.17.2/node-core/node-core-min.js&/yui/3.17.2/dom-style/dom-style-min.js&/yui/3.17.2/node-base/node-base-min.js&/yui/3.17.2/event-delegate/event-delegate-min.js&/yui/3.17.2/node-event-delegate/node-event-delegate-min.js&/yui/3.17.2/pluginhost-base/pluginhost-base-min.js&/yui/3.17.2/pluginhost-config/pluginhost-config-min.js&/yui/3.17.2/node-pluginhost/node-pluginhost-min.js&/yui/3.17.2/dom-screen/dom-screen-min.js&/yui/3.17.2/node-screen/node-screen-min.js&/yui/3.17.2/node-style/node-style-min.js&/yui/3.17.2/event-custom-complex/event-custom-complex-min.js&/yui/3.17.2/event-synthetic/event-synthetic-min.js&/yui/3.17.2/event-mousewheel/event-mousewheel-min.js"
+  },
+  "bc493ca341a7b21d279bff83f7342b51": {
+    "filename": "bc493ca341a7b21d279bff83f7342b51.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.195838Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/event-nav-keys-min.js"
+  },
+  "bf915e4ef1174669a0786477f6ef1275": {
+    "filename": "bf915e4ef1174669a0786477f6ef1275.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.412772Z",
+    "url": "https://2arenanet2.staticwars.com/gen/arenanet/bundle.c082c2c5.js"
+  },
+  "c03df9ba0909a4eed9e8f2a27f116780": {
+    "filename": "c03df9ba0909a4eed9e8f2a27f116780.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.426051Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/async-queue/async-queue-min.js&/yui/3.17.2/gesture-simulate/gesture-simulate-min.js&/yui/3.17.2/node-event-simulate/node-event-simulate-min.js&/yui/3.17.2/event-key/event-key-min.js&/yui/3.17.2/node-focusmanager/node-focusmanager-min.js&/yui/3.17.2/tabview/tabview-min.js&/yui/3.17.2/transition/transition-min.js&/yui/3.17.2/cookie/cookie-min.js&/yui/3.17.2/event-mousewheel/event-mousewheel-min.js&/yui/3.17.2/event-mouseenter/event-mouseenter-min.js&/yui/3.17.2/event-resize/event-resize-min.js&/yui/3.17.2/event-hover/event-hover-min.js&/yui/3.17.2/event-outside/event-outside-min.js&/yui/3.17.2/event-touch/event-touch-min.js&/yui/3.17.2/event-move/event-move-min.js&/yui/3.17.2/event-flick/event-flick-min.js&/yui/3.17.2/event-valuechange/event-valuechange-min.js&/yui/3.17.2/event-tap/event-tap-min.js&/yui/3.17.2/array-extras/array-extras-min.js&/yui/3.17.2/selector-css2/selector-css2-min.js&/yui/3.17.2/selector-css3/selector-css3-min.js"
+  },
+  "c1559891540cdc880ab0de9e23ad54b4": {
+    "filename": "c1559891540cdc880ab0de9e23ad54b4.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.429700Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/_config-min.js"
+  },
+  "c15aaec7ed70f1182f632258323a330c": {
+    "filename": "c15aaec7ed70f1182f632258323a330c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.924406Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/reward-meter.899e9564.js"
+  },
+  "c2efe18ad80a5bcb6093db077056afc7": {
+    "filename": "c2efe18ad80a5bcb6093db077056afc7.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.145172Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/link-btn.5c34039a.js"
+  },
+  "c33d32be0300fef0be3c38279d62d5ca": {
+    "filename": "c33d32be0300fef0be3c38279d62d5ca.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:05.415936Z",
+    "url": "https://static.staticwars.com/gamesight/1/gamesight.js"
+  },
+  "c3dd2c144b63085b45133f4531f0f80c": {
+    "filename": "c3dd2c144b63085b45133f4531f0f80c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:06.258072Z",
+    "url": "https://en-forum.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "c455231d590f3f49d1a21156456fb618": {
+    "filename": "c455231d590f3f49d1a21156456fb618.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.910380Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/item-modal.59100bda.js"
+  },
+  "c52bd3a84773d241eb112d69dcee1dcc": {
+    "filename": "c52bd3a84773d241eb112d69dcee1dcc.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.944629Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/races.d7e9a7d2.js"
+  },
+  "c6f405eb0cce9699555783ab63afc612": {
+    "filename": "c6f405eb0cce9699555783ab63afc612.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.935814Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/snow.5fc46ec7.js"
+  },
+  "c86ba07a0b554bb5b0e2d96fe6b99867": {
+    "filename": "c86ba07a0b554bb5b0e2d96fe6b99867.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.121592Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/rating.9870fb8a.js"
+  },
+  "cbe722d228874a398862d4235dc8d0ac": {
+    "filename": "cbe722d228874a398862d4235dc8d0ac.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.947663Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/yulb.806656c0.js"
+  },
+  "cc5b5ada24202c26a39b3c55d3310450": {
+    "filename": "cc5b5ada24202c26a39b3c55d3310450.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.868338Z",
+    "url": "http://heartofthorns.guildwars2.com/assets/js/modernizr.js"
+  },
+  "cd66e3024d1444c7c63cddc693fd8b36": {
+    "filename": "cd66e3024d1444c7c63cddc693fd8b36.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.708601Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/lazy-load-min.js"
+  },
+  "d19f4ed79950626c25c91cbc64b97822": {
+    "filename": "d19f4ed79950626c25c91cbc64b97822.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.605751Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/attribute-extras/attribute-extras-min.js&/yui/3.17.2/attribute-base/attribute-base-min.js&/yui/3.17.2/attribute-complex/attribute-complex-min.js&/yui/3.17.2/base-core/base-core-min.js&/yui/3.17.2/base-observable/base-observable-min.js&/yui/3.17.2/base-base/base-base-min.js&/yui/3.17.2/base-pluginhost/base-pluginhost-min.js&/yui/3.17.2/classnamemanager/classnamemanager-min.js&/yui/3.17.2/event-synthetic/event-synthetic-min.js&/yui/3.17.2/event-focus/event-focus-min.js&/yui/3.17.2/widget-base/widget-base-min.js&/yui/3.17.2/widget-htmlparser/widget-htmlparser-min.js&/yui/3.17.2/widget-skin/widget-skin-min.js&/yui/3.17.2/widget-uievents/widget-uievents-min.js&/yui/3.17.2/arraylist/arraylist-min.js&/yui/3.17.2/base-build/base-build-min.js&/yui/3.17.2/widget-parent/widget-parent-min.js&/yui/3.17.2/widget-child/widget-child-min.js&/yui/3.17.2/tabview-base/tabview-base-min.js&/yui/3.17.2/plugin/plugin-min.js&/yui/3.17.2/event-simulate/event-simulate-min.js"
+  },
+  "d249ec026ff703b2b5b61631fe2720e0": {
+    "filename": "d249ec026ff703b2b5b61631fe2720e0.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:10.825352Z",
+    "url": "https://account.guildwars2.com/iojs/general5/static_wdp.js?loaderVer=5.8.1&compat=false&tp=true&tp_split=false&fp_static=true&fp_dyn=true"
+  },
+  "d41d8cd98f00b204e9800998ecf8427e": {
+    "filename": "d41d8cd98f00b204e9800998ecf8427e.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:10.819561Z",
+    "url": "https://account.staticwars.com/iojs/5.11.0/logo.js"
+  },
+  "d47e6e39eb05c979120ecc731e51f731": {
+    "filename": "d47e6e39eb05c979120ecc731e51f731.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.410915Z",
+    "url": "https://2arenanet2.staticwars.com/gen/i18n/strings-en.45151224.js"
+  },
+  "d4b683464fdd49783870d3d1861b80ff": {
+    "filename": "d4b683464fdd49783870d3d1861b80ff.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.135601Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/professions.a6abda11.js"
+  },
+  "d626148ebdad0848bcefae0807bb66c6": {
+    "filename": "d626148ebdad0848bcefae0807bb66c6.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.147999Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/details-page.65fc7926.js"
+  },
+  "d811b4f6077a9ce2a7db7edb48abaf5f": {
+    "filename": "d811b4f6077a9ce2a7db7edb48abaf5f.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:03.431664Z",
+    "url": "https://2gemstore.staticwars.com/const/gw2/build192224/GemStore/en/catalog.3fd9600c.js"
+  },
+  "d9699edf32d325604b912888e4ee9c3c": {
+    "filename": "d9699edf32d325604b912888e4ee9c3c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.962354Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/shop-cid.c0c72fb1.js"
+  },
+  "dbf3c08ec65f02f71ba88a368e5afa49": {
+    "filename": "dbf3c08ec65f02f71ba88a368e5afa49.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.699780Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/toggle-list.afe646f7.js"
+  },
+  "dcc12d6b2ee39c80c727b88dfd45615c": {
+    "filename": "dcc12d6b2ee39c80c727b88dfd45615c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:07.522310Z",
+    "url": "https://2gemstore.staticwars.com/gen/i18n/strings-zh.63ea9e28.js"
+  },
+  "de02a954eb11b38a714a3c3e6520847f": {
+    "filename": "de02a954eb11b38a714a3c3e6520847f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.437153Z",
+    "url": "https://static.staticwars.com/cid/8/cid-min.js"
+  },
+  "de2d6af9f3a5e4c1f34ea7294c75b09f": {
+    "filename": "de2d6af9f3a5e4c1f34ea7294c75b09f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.410010Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/media_center/mediaCenter-FadeAnimation-plugin.bc36d8ef.js"
+  },
+  "de3bba74802b5a66752e800c46db5e67": {
+    "filename": "de3bba74802b5a66752e800c46db5e67.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:09.319846Z",
+    "url": "https://guildwars2.staticwars.com/combo/_/wp-content/themes/guildwars2.com-live/js/skip-to-main-content.e91f54de.js&/wp-content/themes/guildwars2.com-live/js/popup-launcher.2078a9b8.js&/wp-content/themes/guildwars2.com-live/js/social-share.1f1d9b6e.js&/wp-content/themes/guildwars2.com-live/js/menu.1e25d77e.js&/wp-content/themes/guildwars2.com-live/js/yulb.806656c0.js&/wp-content/themes/guildwars2.com-live/js/media.3008f345.js&/wp-content/themes/guildwars2.com-live/js/rating.9870fb8a.js&/wp-content/themes/guildwars2.com-live/js/snow.5fc46ec7.js"
+  },
+  "e0d3e8d0d38c2301752bd2aa29056d12": {
+    "filename": "e0d3e8d0d38c2301752bd2aa29056d12.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.127505Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/event-visible-min.js"
+  },
+  "e18777a4f0729f79ec13c57d1b132b11": {
+    "filename": "e18777a4f0729f79ec13c57d1b132b11.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:11.495933Z",
+    "url": "https://forums.guildwars2.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+  },
+  "e48a83df6f922170e16d5a5e58b08812": {
+    "filename": "e48a83df6f922170e16d5a5e58b08812.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.415209Z",
+    "url": "https://2tradingpost.staticwars.com/gw2/_ready.7073004c.js"
+  },
+  "e4d70d2dc638a7dbeacfab3226ac7c0f": {
+    "filename": "e4d70d2dc638a7dbeacfab3226ac7c0f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.438873Z",
+    "url": "https://static.staticwars.com/cookie-notification/11.1/cookie-notification-min.js"
+  },
+  "e614f9eb7dedb284238de6d01bef0e16": {
+    "filename": "e614f9eb7dedb284238de6d01bef0e16.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.943008Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/login-status.6897f391.js"
+  },
+  "e67101b0a394f796d3b12be0bc4060e6": {
+    "filename": "e67101b0a394f796d3b12be0bc4060e6.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.422424Z",
+    "url": "https://www.guildwars2.com/wp-content/themes/guildwars2.com-live/js/charrousel/charrousel-timer.325f3b47.js"
+  },
+  "e68f74f09812e13bc259daca6376018c": {
+    "filename": "e68f74f09812e13bc259daca6376018c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.424048Z",
+    "url": "http://account.guildwars2.com/services/2antifraud/external/iovation/loader_5.8.1.js"
+  },
+  "e8d93ab8e5f1928a8cd9000e2d74905f": {
+    "filename": "e8d93ab8e5f1928a8cd9000e2d74905f.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.688684Z",
+    "url": "https://2hom.staticwars.com/combo/_/js/_config.d87bfc0d.js&/js/loader-main.92c16671.js"
+  },
+  "ea306448bbb0db7157f727ce7f082d76": {
+    "filename": "ea306448bbb0db7157f727ce7f082d76.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:15.706251Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/preload-min.js"
+  },
+  "ea402d46871d27e6c8837926b5f8b2fc": {
+    "filename": "ea402d46871d27e6c8837926b5f8b2fc.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:16.965313Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/sticky-nav.a6fc562b.js"
+  },
+  "ebce7fd6b3fb9291ace90d5971e397dd": {
+    "filename": "ebce7fd6b3fb9291ace90d5971e397dd.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.900911Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/media.3008f345.js"
+  },
+  "ec8eaa492bbc2e4aafa7e4759dba0921": {
+    "filename": "ec8eaa492bbc2e4aafa7e4759dba0921.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:04.128261Z",
+    "url": "https://static.staticwars.com/mithril/1.1.1/mithril-min.js"
+  },
+  "f37d0f75972f8aa7cb9b6bcda6ef442c": {
+    "filename": "f37d0f75972f8aa7cb9b6bcda6ef442c.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.920641Z",
+    "url": "https://static.staticwars.com/combo/_/yui/3.17.2/yui/yui-min.js&/yui/3.17.2/_config-min.js&/yui/gallery/v4/parseuri-min.js"
+  },
+  "f4312d5aa080925a144604e498ac3feb": {
+    "filename": "f4312d5aa080925a144604e498ac3feb.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:05.440057Z",
+    "url": "https://guildwars2.staticwars.com/combo/_/wp-content/themes/guildwars2.com-live/js/skip-to-main-content.e91f54de.js&/wp-content/themes/guildwars2.com-live/js/stretch-video.de77e457.js&/wp-content/themes/guildwars2.com-live/js/menu.1e25d77e.js&/wp-content/themes/guildwars2.com-live/js/yulb.806656c0.js&/wp-content/themes/guildwars2.com-live/js/media.3008f345.js&/wp-content/themes/guildwars2.com-live/js/rating.9870fb8a.js&/wp-content/themes/guildwars2.com-live/js/snow.5fc46ec7.js"
+  },
+  "f69ea5d57bbcf875c0ac16da0a33f85f": {
+    "filename": "f69ea5d57bbcf875c0ac16da0a33f85f.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:03.430674Z",
+    "url": "http://atlas.guildwars2.com/services/2bumpers/gen/cookie-notification-2/index.c637c8bb-svc.js"
+  },
+  "f7ae79a01e44f4a9677b319e39f0c960": {
+    "filename": "f7ae79a01e44f4a9677b319e39f0c960.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.932033Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/retailers.7cde6364.js"
+  },
+  "f7e9625cdedd8a6318cefb3212e572f4": {
+    "filename": "f7e9625cdedd8a6318cefb3212e572f4.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:04.135897Z",
+    "url": "http://register.guildwars2.com/services/2bumpers/gen/cookie-notification-2/index.c637c8bb-svc.js"
+  },
+  "fa7cc96d832b5930a4301f33e3394152": {
+    "filename": "fa7cc96d832b5930a4301f33e3394152.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.416226Z",
+    "url": "https://2tradingpost.staticwars.com/combo/_/_config.694ac4ad.js&/_init.879b0f45.js"
+  },
+  "fc89e913f308e0c697fa9947bf5fa9e3": {
+    "filename": "fc89e913f308e0c697fa9947bf5fa9e3.js",
+    "is_minified": false,
+    "timestamp": "2026-01-10T11:06:03.418558Z",
+    "url": "https://2gemstore.staticwars.com/const/gw2/build192224/GemStore/en/categories.aea6e948.js"
+  },
+  "ff9ee0005f3cea08276bf5d1ca4f8c2d": {
+    "filename": "ff9ee0005f3cea08276bf5d1ca4f8c2d.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.904679Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/home.a2c6215f.js"
+  },
+  "ffd94be307c61bd3fca38b1ea7b00959": {
+    "filename": "ffd94be307c61bd3fca38b1ea7b00959.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:14.918581Z",
+    "url": "https://guildwars2.staticwars.com/wp-content/themes/guildwars2.com-live/js/sticky-buy.8d49b9a4.js"
+  },
+  "fff11141bc97682e41fa5fc7759b22b5": {
+    "filename": "fff11141bc97682e41fa5fc7759b22b5.js",
+    "is_minified": true,
+    "timestamp": "2026-01-10T11:06:03.423165Z",
+    "url": "https://account.staticwars.com/gen/i18n/strings-en.b252da1c.js"
+  }
+}

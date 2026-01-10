@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-01-10 (Production Performance & Diagnostics)
+
+- **Semgrep Timeout Optimization**: 
+  - Removed hardcoded +30s buffer from semgrep batch timeout
+  - Now respects configured timeout (60s) instead of running for 90s
+  - **Impact**: Saves 300s (5 minutes) on 10-batch scans when batches timeout
+- **Enhanced HTTP Error Diagnostics**:
+  - Added detailed HTTP status code breakdown to error summary
+  - Shows top 5 failing status codes with counts (e.g., "403(150), 404(50), 429(23)")
+  - Helps diagnose root cause of download failures immediately
+  - **Impact**: No longer need to search log files to understand why downloads failed
+
 ### Fixed - 2026-01-10 (Test Suite & Code Quality Improvements)
 
 - **REAL BUG FIXES** (Not just test adjustments):

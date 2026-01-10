@@ -1,0 +1,340 @@
+const HOM_config = {
+  ignore: ['skin-sam-overlay', 'skin-sam-widget', 'skin-sam-widget-stack', 'skin-sam-tabview'],
+  groups: {
+    'js/': {
+      combine: !0,
+      comboBase: 'https://2hom.staticwars.com/combo/_',
+      root: '/js/',
+      base: '/js/',
+      modules: {
+        'hom-character-search': {
+          path: 'character-search.5d64adc9.js',
+          requires: ['cookie', 'event', 'transition', 'gallery-boxshadow-anim', 'anim-easing', 'hom-points']
+        },
+        'details-page': {
+          path: 'details-page.65fc7926.js',
+          requires: ['event', 'tabview', 'hom-points', 'main-page', 'hom-points-header', 'hom-reward-meter', 'hom-points-animator', 'details-page-css', 'hom-loader-details']
+        },
+        'hom-item-modal': {
+          path: 'item-modal.59100bda.js',
+          requires: ['base', 'overlay', 'anim', 'gallery-outside-events', 'gallery-overlay-extras', 'gallery-event-nav-keys', 'gallery-overlay-transition']
+        },
+        'hom-link-btn': {
+          path: 'link-btn.5c34039a.js',
+          requires: ['event-mouseenter', 'anim', 'transition']
+        },
+        'hom-loader-details': {
+          path: 'loader-details.1d30b28a.js',
+          requires: ['gallery-dispatcher']
+        },
+        'hom-loader-main': {
+          path: 'loader-main.92c16671.js',
+          requires: ['gallery-dispatcher', 'node', 'event-custom']
+        },
+        'hom-loader-monitor': {
+          path: 'loader-monitor.27a16db.js',
+          requires: ['gallery-dispatcher']
+        },
+        'main-page': {
+          path: 'main-page.f0763edf.js',
+          requires: ['event-custom', 'transition', 'anim', 'hom-item-modal', 'hom-points-header', 'hom-reward-meter', 'hom-points', 'hom-points-animator', 'hom-loader-main', 'main-page-css']
+        },
+        'hom-page-control': {
+          path: 'page-control.3da3e336.js',
+          requires: ['base', 'event-delegate', 'history-hash', 'hom-points']
+        },
+        'hom-points-animator': {
+          path: 'points-anim.b0f4ffd3.js',
+          requires: ['node', 'gallery-generic-anim']
+        },
+        'hom-points-header': {
+          path: 'points-header.4b047ff3.js',
+          requires: ['node', 'hom-points', 'hom-todo', 'hom-points-animator', 'hom-print-btn', 'hom-link-btn', 'hom-loader-monitor']
+        },
+        'hom-points': {
+          path: 'points.1dd99894.js',
+          requires: ['base', 'arena-base64']
+        },
+        'hom-print-btn': {
+          path: 'print-btn.6eebd4fa.js',
+          requires: ['event-mouseenter', 'transition']
+        },
+        'print-page': {
+          path: 'print-page.5a4e56fc.js',
+          requires: ['base', 'node', 'print-page-css', 'io-base', 'hom-character-search']
+        },
+        'hom-reward-meter-overlay': {
+          path: 'reward-meter-overlay.6dc173d8.js',
+          requires: ['node', 'event-mouseenter', 'overlay', 'gallery-overlay-transition']
+        },
+        'hom-reward-meter': {
+          path: 'reward-meter.899e9564.js',
+          requires: ['event', 'transition', 'hom-points', 'gallery-generic-anim', 'hom-todo', 'hom-reward-meter-overlay', 'hom-loader-monitor', 'reward-monitor-css', 'icons-css']
+        },
+        'hom-todo': {
+          path: 'todo.906ecd95.js',
+          requires: ['base', 'event-mouseenter', 'hom-points', 'oop', 'json', 'cookie']
+        },
+        'welcome-page': {
+          path: 'welcome-page.8694a321.js',
+          requires: ['event', 'node', 'hom-character-search', 'hom-page-control']
+        }
+      }
+    },
+    'js/gallery/': {
+      combine: !0,
+      comboBase: 'https://2hom.staticwars.com/combo/_',
+      root: '/js/gallery/',
+      base: '/js/gallery/',
+      modules: {
+        'gallery-boxshadow-anim': {
+          path: 'boxshadow-anim.411441ac.js',
+          requires: ['anim-base']
+        },
+        'gallery-dispatcher': {
+          path: 'dispatcher.b6f8b33d.js',
+          requires: ['base', 'node-base', 'io-base', 'get', 'async-queue', 'classnamemanager']
+        },
+        'gallery-generic-anim': {
+          path: 'generic-anim.f946de23.js',
+          requires: ['base', 'base-build']
+        },
+        'gallery-overlay-extras': {
+          path: 'overlay-extras.8b77c590.js',
+          supersedes: ['gallery-overlay-modal'],
+          requires: ['overlay', 'plugin', 'event-resize', 'event-outside']
+        }
+      }
+    },
+    'js/lib/': {
+      combine: !0,
+      comboBase: 'https://2hom.staticwars.com/combo/_',
+      root: '/js/lib/',
+      base: '/js/lib/',
+      modules: {
+        'arena-base64': {
+          path: 'Base64Codec.2e2f6a63.js',
+          requires: []
+        }
+      }
+    },
+    css: {
+      combine: !0,
+      comboBase: 'https://2hom.staticwars.com/combo/_',
+      root: '/css/',
+      base: '/css/',
+      modules: {
+        'icons-css': {
+          path: 'icons.3bdf6a84.css',
+          type: 'css'
+        },
+        'main-page-css': {
+          path: 'main-page.1f3c1616.css',
+          type: 'css'
+        },
+        'details-page-css': {
+          path: 'details-page.69272956.css',
+          type: 'css'
+        },
+        'reward-monitor-css': {
+          path: 'reward-monitor.66eb93b.css',
+          type: 'css'
+        },
+        'print-page-css': {
+          path: 'print-page.32fc1a61.css',
+          type: 'css'
+        }
+      }
+    }
+  }
+}
+YUI.add("print-page", (function(t) {
+  "use strict";
+  const s = t.Lang,
+    i = t.namespace("hom"),
+    e = /\s+\(.*\)/,
+    o = t.Base.create("PrintPage", t.Base, [], {
+      initializer() {
+        t.Get.css("https://2hom.staticwars.com/css/print.c8b7995b.css", {
+          attributes: {
+            media: "print"
+          }
+        }), t.delegate("click", (function(t) {
+          t.preventDefault(), t.target.get("href").indexOf("print") > -1 ? window.print() : i.pageControl.pages.main || i.pageControl.pages.details ? window.history.back() : i.pageControl.set("page", "main")
+        }), "#print .btns", "a"), this.after("rewardsChange", this._rewardsUpdate, this), this.after("todoChange", this._todoUpdate, this), this.after("collectionChange", this._collectionUpdate, this), this.after("itemsChange", this._itemsUpdate, this), t.on("change", (function(t) {
+          this.set("rewards", t.target.get("checked"))
+        }), "#print-show-rewards", this), t.on("change", (function(t) {
+          this.set("todo", t.target.get("checked"))
+        }), "#print-show-todo", this), t.on("change", (function(t) {
+          this.set("collection", t.target.get("checked"))
+        }), "#print-show-collection", this), t.on("change", (function(t) {
+          this.set("items", t.target.get("checked"))
+        }), "#print-show-items", this), i.points.after("totalChange", this._pointUpdate), i.points.after("valueChange", this._rulesUpdate, this), i.todo.after("change", this._todoUpdate, this), t.io(`/html/${HOM.lang}/print`, {
+          on: {
+            success(s, e) {
+              const o = t.one("#print-show-rewards"),
+                n = t.one("#print-show-todo"),
+                a = t.one("#print-show-collection"),
+                c = t.one("#print-show-items");
+              t.one("#bd").append(e.responseText), this._pointUpdate(i.points.get("total")), this.set("rewards", !o || o.get("checked")), this.set("todo", !n || n.get("checked")), this.set("collection", !a || a.get("checked")), this.set("items", !c || c.get("checked")), this._rulesUpdate()
+            }
+          },
+          context: this
+        })
+      },
+      _pointUpdate(s) {
+        s.newVal && (s = s.newVal), t.one("#print-hd .points").replaceClass("points\\d+", `points${s}`), t.one("#print-hd .points .count").setContent(s)
+      },
+      _rulesUpdate() {
+        let n, a, c;
+        t.each(i.points.getValues(), (function(r, h) {
+          n = [], a = i.rules[h];
+          for (const t in a) a.hasOwnProperty(t) && (c = a[t].test(r) >= 1 ? "active" : "", n[n.length] = s.sub(o.TEMPLATES.rule, {
+            active: c,
+            points: a[t].points,
+            check: `<img src='${o.TEMPLATES.print_check[c?"on":"off"]}' />`,
+            rule: HOM.rules.rules[h][t].replace(e, "")
+          }));
+          t.one(`#print-points .${h} h4 span`).setContent(`${r.total}/${r.possible}`), t.one(`#print-points .${h} .rules`).setContent(`<ul>${n.join("")}</ul>`)
+        }))
+      },
+      _rewardsUpdate() {
+        const e = this.get("rewards"),
+          n = t.one("#print-rewards"),
+          a = i.points.get("total");
+        let c, r, h, m, p = "";
+        e && (p = [], t.each(HOM.rewards.regular, (function(i, e) {
+          h = ++e < 10 ? `0${e}` : e, r = [], c = [], s.isArray(i) ? t.each(i, (function(t, i) {
+            r[r.length] = t.name, c[c.length] = s.sub(o.TEMPLATES.icon, {
+              icon: o.ICONS[h + "ab".charAt(i)]
+            })
+          })) : (r[r.length] = i.name, c[c.length] = s.sub(o.TEMPLATES.icon, {
+            icon: o.ICONS[h]
+          })), m = e <= a, p[p.length] = s.sub(o.TEMPLATES.reward, {
+            active: m ? "active" : "",
+            main: `${c.join("")}<p>${r.join(" & ")}</p>`,
+            number: e,
+            check: `<img src='${o.TEMPLATES.print_reward[m?"on":"off"]}' />`,
+            images: c.length > 1 ? "images" : ""
+          })
+        })), p = p.length ? `<ul>${p.join("")}</ul>` : o.TEMPLATES.empty.rewards), n.one(".bd").setContent(p), n.replaceClass(e ? "" : "shown", e ? "shown" : "")
+      },
+      _todoUpdate() {
+        const e = this.get("todo"),
+          n = t.one("#print-todo");
+        let a = [];
+        e && (a = [], t.each(i.todo.getValues(), (function(i, e) {
+          "devotion" === e ? t.each(i, (function(t, i) {
+            const e = `${s.sub(HOM.strings.js.Minis,{type:HOM.strings.js.minis[i]})} (${t})`;
+            a[a.length] = s.sub(o.TEMPLATES.todo, {
+              item: e
+            })
+          })) : t.each(i, (function(t, i) {
+            a[a.length] = s.sub(o.TEMPLATES.todo, {
+              item: i
+            })
+          }))
+        })), a = a.length ? `<ul>${a.join("")}</ul>` : o.TEMPLATES.empty.todo), n.one(".bd").setContent(a), n.replaceClass(e ? "" : "shown", e ? "shown" : "")
+      },
+      _collectionUpdate() {
+        const s = this.get("collection"),
+          i = t.one("#print-collection"),
+          e = s ? this._itemsList((function(t) {
+            return t
+          }), !0) : [];
+        i.one(".bd").setContent(e.length ? e.join("") : o.TEMPLATES.empty.collection), i.replaceClass(s ? "" : "shown", s ? "shown" : "")
+      },
+      _itemsUpdate() {
+        const s = this.get("items"),
+          i = t.one("#print-items"),
+          e = s ? this._itemsList((function(t) {
+            return !t
+          })) : [];
+        i.one(".bd").setContent(e.length ? e.join("") : o.TEMPLATES.empty.items), i.replaceClass(s ? "" : "shown", s ? "shown" : "")
+      },
+      _itemsList(e, o) {
+        const n = i.points.get("character"),
+          a = [];
+        let c;
+        return t.each(HOM.cols.order, (function(i) {
+          c = [], t.each(n[i], (function(t, n) {
+            e(t) && (c[c.length] = "devotion" === i ? `<li class='ib'><p>${s.sub(HOM.strings.js.Minis,{type:HOM.strings.js.minis[n]})}${o?` (${t})`:""}</p></li>` : `<li class='ib'><p>${n}</p></li>`)
+          })), (o || c.length) && (a[a.length] = `<div><h4>${HOM.cols.details[i].title}</h4><ul>${c.join("")}</ul></div>`)
+        })), a
+      }
+    }, {
+      ATTRS: {
+        rewards: {
+          validator: s.isBoolean
+        },
+        todo: {
+          validator: s.isBoolean
+        },
+        collection: {
+          validator: s.isBoolean
+        },
+        items: {
+          validator: s.isBoolean
+        }
+      },
+      TEMPLATES: {
+        empty: {
+          rewards: "<p>You're pretty clever to have gotten no rewards, that isn't possible without cheating.</p>",
+          todo: "<p>Nothing on your 'to do' list!</p>",
+          collection: "<p>You have no items in your collection",
+          items: "<p>You got EVERY item? What? Seriously? Wow&hellip; that is dedication.</p>"
+        },
+        todo: "<li class='ib'><img src='https://2hom.staticwars.com/img/print-check-off.6705970a.png' />{item}</li>",
+        icon: "<img src='{icon}' />",
+        rule: "<li class='{active}'>{check}<p>{points}-{rule}</p></li>",
+        reward: "<li class='ib {active} {images}'><div class='main'>{main}</div><div class='status'>{check}<p class='number'>{number}</p></div>",
+        print_reward: {
+          on: "https://2hom.staticwars.com/img/print-reward-on.ea9b10b8.png",
+          off: "https://2hom.staticwars.com/img/print-reward-off.182256c9.png"
+        },
+        print_check: {
+          on: "https://2hom.staticwars.com/img/print-check-on.ea46e7e1.png",
+          off: "https://2hom.staticwars.com/img/print-check-off.6705970a.png"
+        }
+      },
+      ICONS: {
+        "01": "https://2hom.staticwars.com/img/rewards/single/01-icon-m.47f9d6ad.jpg",
+        "02": "https://2hom.staticwars.com/img/rewards/single/02-icon-m.70af8469.jpg",
+        "03": "https://2hom.staticwars.com/img/rewards/single/03-icon-m.d336772b.jpg",
+        "04": "https://2hom.staticwars.com/img/rewards/single/04-icon-m.c4fdc455.jpg",
+        "05": "https://2hom.staticwars.com/img/rewards/single/05-icon-m.f7519495.jpg",
+        "06": "https://2hom.staticwars.com/img/rewards/single/06-icon-m.e889636f.jpg",
+        "07": "https://2hom.staticwars.com/img/rewards/single/07-icon-m.14b2bdf5.jpg",
+        "08": "https://2hom.staticwars.com/img/rewards/single/08-icon-m.707736d4.jpg",
+        "09": "https://2hom.staticwars.com/img/rewards/single/09-icon-m.b59632d4.jpg",
+        10: "https://2hom.staticwars.com/img/rewards/single/10-icon-m.c05b1db6.jpg",
+        11: "https://2hom.staticwars.com/img/rewards/single/11-icon-m.cbba8bcf.jpg",
+        12: "https://2hom.staticwars.com/img/rewards/single/12-icon-m.f6deb655.jpg",
+        13: "https://2hom.staticwars.com/img/rewards/single/13-icon-m.ceb600f2.jpg",
+        14: "https://2hom.staticwars.com/img/rewards/single/14-icon-m.35542ab.jpg",
+        "15a": "https://2hom.staticwars.com/img/rewards/single/15-icon-a-m.a5c42970.jpg",
+        "15b": "https://2hom.staticwars.com/img/rewards/single/15-icon-b-m.6149cc66.jpg",
+        16: "https://2hom.staticwars.com/img/rewards/single/16-icon-m.b5308f7e.jpg",
+        17: "https://2hom.staticwars.com/img/rewards/single/17-icon-m.4281014a.jpg",
+        18: "https://2hom.staticwars.com/img/rewards/single/18-icon-m.5272256.jpg",
+        19: "https://2hom.staticwars.com/img/rewards/single/19-icon-m.db1be9fc.jpg",
+        "20a": "https://2hom.staticwars.com/img/rewards/single/20-icon-a-m.2cc064f0.jpg",
+        "20b": "https://2hom.staticwars.com/img/rewards/single/20-icon-b-m.7c09c508.jpg",
+        21: "https://2hom.staticwars.com/img/rewards/single/21-icon-m.b97f8fc5.jpg",
+        22: "https://2hom.staticwars.com/img/rewards/single/22-icon-m.45e20630.jpg",
+        23: "https://2hom.staticwars.com/img/rewards/single/23-icon-m.9f9ea18d.jpg",
+        24: "https://2hom.staticwars.com/img/rewards/single/24-icon-m.fae34215.jpg",
+        "25a": "https://2hom.staticwars.com/img/rewards/single/25-icon-a-m.93cdf453.jpg",
+        "25b": "https://2hom.staticwars.com/img/rewards/single/25-icon-b-m.139e66dc.jpg",
+        26: "https://2hom.staticwars.com/img/rewards/single/26-icon-m.3131b545.jpg",
+        27: "https://2hom.staticwars.com/img/rewards/single/27-icon-m.6543b539.jpg",
+        28: "https://2hom.staticwars.com/img/rewards/single/28-icon-m.8f68196.jpg",
+        29: "https://2hom.staticwars.com/img/rewards/single/29-icon-m.f1ca6fdf.jpg",
+        "30a": "https://2hom.staticwars.com/img/rewards/single/30-icon-a-m.c5dff463.jpg",
+        "30b": "https://2hom.staticwars.com/img/rewards/single/30-icon-b-m.a829c199.jpg"
+      }
+    });
+  t.namespace("hom").pageControl.constructors.print = o
+}), "@VERSION@", {
+  requires: ["base", "node", "print-page-css", "io-base", "hom-character-search"]
+});

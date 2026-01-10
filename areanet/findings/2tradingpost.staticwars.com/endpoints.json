@@ -1,0 +1,15 @@
+{
+  "domain": "2tradingpost.staticwars.com",
+  "count": 1,
+  "endpoints": [
+    "/services/combo/js/"
+  ],
+  "detailed": {
+    "/services/combo/js/": {
+      "occurrences": 1,
+      "files": [
+        "https://2tradingpost.staticwars.com/combo/_/_config.694ac4ad.js&/_init.879b0f45.js"
+      ]
+    }
+  }
+}

@@ -1,0 +1,4 @@
+ArenaNet-purchase-history-{page}.csv
+https://d3b4yo2b5lbfy.cloudfront.net/npg/live/page-data/en/new-player-guide/page-data.json
+https://d3b4yo2b5lbfy.cloudfront.net/npg/live/page-data/app-data.json
+/assets/manifest.json

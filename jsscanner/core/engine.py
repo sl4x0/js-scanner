@@ -1732,6 +1732,13 @@ class ScanEngine:
         if error_stats['http_errors'] > 0:
             self.logger.info(f"  ❌ HTTP Errors: {error_stats['http_errors']}")
             self.logger.info("     → 4xx/5xx status codes")
+            
+            # Show HTTP status code breakdown
+            if hasattr(self.fetcher, 'http_status_breakdown') and self.fetcher.http_status_breakdown:
+                status_summary = sorted(self.fetcher.http_status_breakdown.items(), key=lambda x: x[1], reverse=True)
+                self.logger.info(f"     └─ Breakdown: " + ", ".join([f"{code}({count})" for code, count in status_summary[:5]]))
+                if len(status_summary) > 5:
+                    self.logger.info(f"        ... and {len(status_summary) - 5} more status codes")
 
         self.logger.info(f"{'='*60}\n")
 

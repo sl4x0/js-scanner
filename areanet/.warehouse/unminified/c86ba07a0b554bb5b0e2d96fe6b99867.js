@@ -1,0 +1,18 @@
+YUI.add("rating", function(e) {
+  var s = "/ws/rating",
+    r = e.parseUri(location.href).queryKey.fakeip,
+    o = "esrb",
+    a = ["usk", "pegi"],
+    i = e.one("html"),
+    t = e.one("a.rating"),
+    n = e.one(".gw2-footer");
+  t && n && (r && (s += "?fakeip=" + r), e.io(s, {
+    on: {
+      complete: function(e, s) {
+        !s.responseText || a.indexOf(s.responseText) < 0 || ("usk" === s.responseText ? (i.removeClass(o), n.removeClass(o), t.remove()) : (i.removeClass(o), n.removeClass(o).addClass("pegi"), t.removeClass(o).addClass("pegi").setAttribute("href", "https://pegi.info").setHTML("PEGI")))
+      }
+    }
+  }))
+}, "@VERSION@", {
+  requires: ["node", "io-base", "gallery-parseuri"]
+});

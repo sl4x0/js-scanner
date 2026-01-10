@@ -269,11 +269,10 @@ class SemgrepAnalyzer:
                 try:
                     stdout, stderr = await asyncio.wait_for(
                         process.communicate(),
-                        timeout=self.timeout + 30
+                        timeout=self.timeout
                     )
                 except asyncio.TimeoutError:
-                    actual_timeout = self.timeout + 30
-                    self.logger.warning(f"⚠️  Semgrep batch {batch_num}/{batch_total} timed out after {actual_timeout}s")
+                    self.logger.warning(f"⚠️  Semgrep batch {batch_num}/{batch_total} timed out after {self.timeout}s")
                     try:
                         process.kill()
                     except Exception:

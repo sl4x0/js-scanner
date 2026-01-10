@@ -1,0 +1,60 @@
+YUI.add("home", function(o) {
+  var e, n, t, i, r = ["hobbit"];
+  for (new o.Charrousel({
+      srcNode: ".home .yui3-charrousel-content",
+      boundingBox: ".home .yui3-charrousel",
+      contentBox: ".home .yui3-charrousel-content",
+      render: !0,
+      "show.next": !1,
+      "show.prev": !1,
+      "show.location": ".yui3-charrousel-nav",
+      plugins: [{
+        fn: o.CharrouselTimer,
+        cfg: {
+          delay: 1e4
+        }
+      }, {
+        fn: o.CharrouselFade,
+        cfg: {
+          "transition.base.duration": .4
+        }
+      }],
+      after: {
+        render: function() {
+          this.get("contentBox").one("ol").removeClass("hide")
+        }
+      }
+    }), new o.TabView({
+      boundingBox: ".yui3-tabview",
+      contentBox: ".yui3-tabview-content",
+      render: !0
+    }), (n = o.one(".interstitial")) && (n = n.get("id"), e = o.Cookie.get(n), n) && !e && (t = new o.Panel({
+      srcNode: ".interstitial",
+      centered: !0,
+      render: !0,
+      modal: !0,
+      zIndex: 9998,
+      hideOn: [{
+        eventName: "clickoutside"
+      }],
+      buttons: [{
+        value: "",
+        action: function(e) {
+          e.preventDefault(), o.all(".yui3-panel, .yui3-widget-mask").transition({
+            opacity: 0,
+            duration: 1
+          }, function() {
+            t.hide()
+          })
+        },
+        section: o.WidgetStdMod.HEADER
+      }]
+    }), o.Cookie.set(n, "shown", {
+      path: "/",
+      expires: new Date("January 1, 2015")
+    })), i = 0; i < r.length; i++) o.Cookie.remove(r[i], {
+    path: "/"
+  })
+}, "@VERSION@", {
+  requires: ["node", "event-delegate", "tabview", "charrousel-timer", "charrousel-fade", "panel", "cookie"]
+});

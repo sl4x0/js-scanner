@@ -1,0 +1,1 @@
+YUI.add("professions",function(e){new(e.namespace("GW2").Itemselector)({itemType:"profession",itemNodeType:"area"})},"@VERSION@",{requires:["itemselector"]});

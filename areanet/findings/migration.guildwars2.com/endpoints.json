@@ -1,0 +1,15 @@
+{
+  "domain": "migration.guildwars2.com",
+  "count": 1,
+  "endpoints": [
+    "/services/2bumpers/gen/anet-bumpers/index.19a332ec-svc.css"
+  ],
+  "detailed": {
+    "/services/2bumpers/gen/anet-bumpers/index.19a332ec-svc.css": {
+      "occurrences": 1,
+      "files": [
+        "http://migration.guildwars2.com/services/2bumpers/gen/anet-bumpers/index.ed78f3dc-svc.js"
+      ]
+    }
+  }
+}
