@@ -302,27 +302,30 @@ def _ensure_log_dir(path: str) -> None:
 def get_target_logger(
     target_name: str,
     log_dir: Optional[str] = None,
-    level: int = logging.INFO,
+    level: int = logging.DEBUG,
     rotation_config: Optional[Dict] = None,
     console_enabled: bool = True
 ) -> logging.Logger:
     """
-    Create a per-target logger with file rotation and error segregation.
+    Create a per-target logger - ONE FILE per target + console output.
 
     This factory creates a logger instance configured with:
-    1. Main file handler: Writes all logs (INFO+) to timestamped file
-    2. Error file handler: Writes only ERROR+ logs to separate file
-    3. Console handler (optional): Outputs WARNING+ to console (preserves Rich dashboard)
+    1. Single file handler: WARNING/ERROR/DEBUG only (no INFO - that goes to console)
+    2. Console handler: INFO+ for user feedback (scan progress, status updates)
 
     Architecture:
-        - Main log: logs/{target}_{timestamp}.log (Level: INFO/DEBUG)
-        - Error log: logs/{target}_errors_{timestamp}.log (Level: ERROR only)
-        - Console: stdout (Level: WARNING+, colored, optional)
+        - File log: logs/{target}_{timestamp}.log (Level: DEBUG/WARNING/ERROR only, NO INFO)
+        - Console: stdout (Level: INFO+, colored, scan progress updates)
+
+    Rationale:
+        - INFO = User-facing scan progress → Console only
+        - WARNING/ERROR/DEBUG = Technical issues → File only for audit trail
+        - Result: ONE log file per target with audit data, console shows scan status
 
     Args:
         target_name: Target domain/URL (will be sanitized for filename)
         log_dir: Directory to store logs (default: './logs')
-        level: Minimum log level for main file handler (default: INFO)
+        level: Minimum log level for file handler (default: DEBUG)
         rotation_config: Dict with rotation settings:
             - type: 'size' or 'time'
             - For 'size': max_bytes, backup_count
@@ -334,12 +337,11 @@ def get_target_logger(
         Configured logging.Logger instance with unique name
 
     Example:
-        >>> logger = get_target_logger('example.com', level=logging.DEBUG)
-        >>> logger.info("Scan started")
-        >>> logger.error("Failed to fetch URL")
-        # Creates:
-        #   logs/example.com_2024-01-15_14-30-25.log (all logs)
-        #   logs/example.com_errors_2024-01-15_14-30-25.log (errors only)
+        >>> logger = get_target_logger('example.com')
+        >>> logger.info("Scan started")          # → Console only (user sees progress)
+        >>> logger.warning("Slow response")      # → File + Console
+        >>> logger.error("Failed to fetch URL")  # → File + Console
+        # Creates: logs/example.com_2024-01-15_14-30-25.log (warnings/errors only)
     """
     if log_dir is None:
         log_dir = DEFAULT_LOG_DIR
@@ -349,20 +351,16 @@ def get_target_logger(
     safe_target = _sanitize_filename(target_name)
     timestamp = _get_timestamp()
 
-    # Generate log file paths
-    main_log_path = os.path.join(
+    # Generate single log file path
+    log_path = os.path.join(
         log_dir,
         LOG_FILENAME_FMT.format(target=safe_target, timestamp=timestamp)
-    )
-    error_log_path = os.path.join(
-        log_dir,
-        ERROR_FILENAME_FMT.format(target=safe_target, timestamp=timestamp)
     )
 
     # Create unique logger name to avoid conflicts
     logger_name = f"jsscanner.target.{safe_target}.{timestamp}"
     logger = logging.getLogger(logger_name)
-    logger.setLevel(level)
+    logger.setLevel(logging.DEBUG)  # Capture everything, filter by handlers
 
     # Prevent duplicate handlers if logger already configured
     if getattr(logger, "_target_configured", False):
@@ -374,14 +372,19 @@ def get_target_logger(
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # ========== HANDLER 1: Main File Handler (with rotation) ==========
+    # ========== HANDLER 1: File Handler (WARNING/ERROR/DEBUG only, NO INFO) ==========
+    # Custom filter to exclude INFO level (user-facing messages go to console only)
+    class NoInfoFilter(logging.Filter):
+        def filter(self, record):
+            return record.levelno != logging.INFO
+
     if rotation_config and rotation_config.get('type') == 'time':
-        # Time-based rotation (e.g., daily at midnight)
+        # Time-based rotation
         when = rotation_config.get('when', 'midnight')
         interval = rotation_config.get('interval', 1)
         backup_count = rotation_config.get('backup_count', 7)
-        main_handler = TimedRotatingFileHandler(
-            main_log_path,
+        file_handler = TimedRotatingFileHandler(
+            log_path,
             when=when,
             interval=interval,
             backupCount=backup_count,
@@ -392,30 +395,25 @@ def get_target_logger(
         # Size-based rotation
         max_bytes = rotation_config.get('max_bytes', 10485760)  # 10MB default
         backup_count = rotation_config.get('backup_count', 5)
-        main_handler = RotatingFileHandler(
-            main_log_path,
+        file_handler = RotatingFileHandler(
+            log_path,
             maxBytes=max_bytes,
             backupCount=backup_count,
             encoding='utf-8'
         )
     else:
         # No rotation (simple file handler)
-        main_handler = logging.FileHandler(main_log_path, encoding='utf-8')
+        file_handler = logging.FileHandler(log_path, encoding='utf-8')
 
-    main_handler.setLevel(level)
-    main_handler.setFormatter(detailed_formatter)
-    logger.addHandler(main_handler)
+    file_handler.setLevel(logging.DEBUG)  # Capture DEBUG and above
+    file_handler.addFilter(NoInfoFilter())  # Exclude INFO
+    file_handler.setFormatter(detailed_formatter)
+    logger.addHandler(file_handler)
 
-    # ========== HANDLER 2: Error-Only File Handler ==========
-    error_handler = logging.FileHandler(error_log_path, encoding='utf-8')
-    error_handler.setLevel(logging.ERROR)
-    error_handler.setFormatter(detailed_formatter)
-    logger.addHandler(error_handler)
-
-    # ========== HANDLER 3: Console Handler (Optional) ==========
+    # ========== HANDLER 2: Console Handler (INFO+ for user feedback) ==========
     if console_enabled:
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.WARNING)  # Only show warnings+ on console
+        console_handler.setLevel(logging.INFO)  # Show INFO+ on console for scan progress
         console_formatter = ColoredFormatter(
             '%(asctime)s - %(levelname)s - %(message)s',
             datefmt='%m/%d/%y %H:%M:%S'
@@ -431,8 +429,7 @@ def get_target_logger(
         'target': target_name,
         'safe_target': safe_target,
         'timestamp': timestamp,
-        'main_log_path': main_log_path,
-        'error_log_path': error_log_path
+        'log_path': log_path
     }
 
     return logger

@@ -27,66 +27,60 @@ def cleanup_test_logs():
 
 
 def verify_file_creation(logger, target_name):
-    """Verify that main and error log files were created"""
+    """Verify that log file was created (single file approach)"""
     metadata = getattr(logger, '_log_metadata', {})
-    main_log = metadata.get('main_log_path')
-    error_log = metadata.get('error_log_path')
+    log_path = metadata.get('log_path')
 
-    assert main_log is not None, "❌ Main log path not found in metadata"
-    assert error_log is not None, "❌ Error log path not found in metadata"
+    assert log_path is not None, "❌ Log path not found in metadata"
 
-    main_log_path = Path(main_log)
-    error_log_path = Path(error_log)
+    log_file_path = Path(log_path)
 
-    assert main_log_path.exists(), f"❌ Main log file not created: {main_log}"
-    assert error_log_path.exists(), f"❌ Error log file not created: {error_log}"
+    assert log_file_path.exists(), f"❌ Log file not created: {log_path}"
 
-    print(f"✅ Main log created: {main_log_path.name}")
-    print(f"✅ Error log created: {error_log_path.name}")
+    print(f"✅ Log file created: {log_file_path.name}")
 
-    return str(main_log_path), str(error_log_path)
+    return str(log_file_path)
 
 
-def verify_error_segregation(error_log_path):
-    """Verify error log contains only ERROR level entries"""
-    with open(error_log_path, 'r') as f:
+def verify_file_content(log_path):
+    """Verify log contains WARNING/ERROR/DEBUG but NOT INFO"""
+    with open(log_path, 'r') as f:
         content = f.read()
 
     lines = [line for line in content.split('\n') if line.strip()]
 
-    # Count log levels in error file
-    error_count = sum(1 for line in lines if ' - ERROR - ' in line)
-    info_count = sum(1 for line in lines if ' - INFO - ' in line)
-    warning_count = sum(1 for line in lines if ' - WARNING - ' in line)
-
-    assert error_count == 2, f"❌ Expected 2 errors, found {error_count}"
-    assert info_count == 0, f"❌ Error log should not contain INFO messages, found {info_count}"
-    assert warning_count == 0, f"❌ Error log should not contain WARNING messages, found {warning_count}"
-
-    print(f"✅ Error segregation verified: {error_count} errors only")
-
-
-def verify_main_log_content(main_log_path):
-    """Verify main log contains all message levels"""
-    with open(main_log_path, 'r') as f:
-        content = f.read()
-
-    lines = [line for line in content.split('\n') if line.strip()]
-
-    info_count = sum(1 for line in lines if ' - INFO - ' in line)
+    # Count log levels
     warning_count = sum(1 for line in lines if ' - WARNING - ' in line)
     error_count = sum(1 for line in lines if ' - ERROR - ' in line)
+    debug_count = sum(1 for line in lines if ' - DEBUG - ' in line)
+    info_count = sum(1 for line in lines if ' - INFO - ' in line)
 
-    assert info_count >= 10, f"❌ Expected at least 10 INFO messages, found {info_count}"
     assert warning_count >= 5, f"❌ Expected at least 5 WARNING messages, found {warning_count}"
     assert error_count >= 2, f"❌ Expected at least 2 ERROR messages, found {error_count}"
+    assert info_count == 0, f"❌ Log file should NOT contain INFO messages (they go to console), found {info_count}"
 
-    print(f"✅ Main log content verified: {info_count} INFO, {warning_count} WARNING, {error_count} ERROR")
+    print(f"✅ File content verified: {warning_count} WARNING, {error_count} ERROR, {debug_count} DEBUG, 0 INFO (correct!)")
 
 
-def verify_analyzer(main_log_path):
-    """Verify log analyzer correctly parses logs"""
-    stats = analyze_log_file(main_log_path)
+def verify_single_file_only(log_dir, target_name):
+    """Verify only ONE log file exists per target"""
+    log_files = list(Path(log_dir).glob(f"{target_name}*.log"))
+
+    # Should have exactly 1 log file (not 2 or 3)
+    assert len(log_files) == 1, f"❌ Expected 1 log file, found {len(log_files)}: {[f.name for f in log_files]}"
+
+    # Should not have error-only or summary files
+    error_logs = list(Path(log_dir).glob(f"{target_name}*errors*.log"))
+    summary_files = list(Path(log_dir).glob(f"{target_name}*summary*.txt"))
+
+    assert len(error_logs) == 0, f"❌ Should not create separate error log, found: {error_logs}"
+    assert len(summary_files) == 0, f"❌ Should not create summary file, found: {summary_files}"
+
+    print(f"✅ Single file verified: Only 1 log file per target (no error log, no summary)")
+
+def verify_analyzer(log_path):
+    """Verify log analyzer correctly parses logs (single-file approach)"""
+    stats = analyze_log_file(log_path)
 
     assert 'level_counts' in stats, "❌ Analyzer did not return level_counts"
     assert 'total_lines' in stats, "❌ Analyzer did not return total_lines"
@@ -97,11 +91,12 @@ def verify_analyzer(main_log_path):
     warning_count = level_counts.get('WARNING', 0)
     error_count = level_counts.get('ERROR', 0)
 
-    assert info_count >= 10, f"❌ Analyzer found {info_count} INFO, expected >= 10"
+    # With single-file approach: INFO should be 0 (console only), WARNING/ERROR in file
+    assert info_count == 0, f"❌ File should not contain INFO messages (console only), found {info_count}"
     assert warning_count >= 5, f"❌ Analyzer found {warning_count} WARNING, expected >= 5"
     assert error_count >= 2, f"❌ Analyzer found {error_count} ERROR, expected >= 2"
 
-    print(f"✅ Log analyzer verified: INFO={info_count}, WARNING={warning_count}, ERROR={error_count}")
+    print(f"✅ Log analyzer verified: INFO={info_count} (console only), WARNING={warning_count}, ERROR={error_count}")
 
     # Verify duration calculation
     if stats['first_timestamp'] and stats['last_timestamp']:
@@ -201,52 +196,49 @@ def main():
         print()
 
         # Step 4: Verify file creation
-        print("📋 Step 4: Verify file creation")
-        main_log, error_log = verify_file_creation(logger, "test_target")
+        print("📋 Step 4: Verify single file creation")
+        log_path = verify_file_creation(logger, "test_target")
         print()
-
-        # Step 5: Verify error segregation
-        print("📋 Step 5: Verify error segregation")
-        verify_error_segregation(error_log)
+        
+        # Step 5: Verify only ONE file exists
+        print("📋 Step 5: Verify single file approach (no error log, no summary)")
+        verify_single_file_only("logs", "test_target")
         print()
-
-        # Step 6: Verify main log content
-        print("📋 Step 6: Verify main log content")
-        verify_main_log_content(main_log)
-        print()
+        
+        # Step 6: Verify file content (no INFO messages)
+        print("📋 Step 6: Verify file content (WARNING/ERROR only, no INFO)")
+        verify_file_content(log_path)
 
         # Step 7: Verify analyzer
         print("📋 Step 7: Verify log analyzer")
-        stats = verify_analyzer(main_log)
+        stats = verify_analyzer(log_path)
         print()
-
-        # Step 8: Verify summary generation
-        print("📋 Step 8: Verify summary generation")
-        summary = verify_summary_generation(main_log)
+        
+        # Step 8: Verify summary generation (optional tool)
+        print("📋 Step 8: Verify summary generation (manual tool)")
+        summary = verify_summary_generation(log_path)
         print()
-
+        
         # Step 9: Verify filename sanitization
         print("📋 Step 9: Verify filename sanitization")
         verify_filename_sanitization()
         print()
-
+        
         # Final cleanup
         print("📋 Step 10: Final cleanup")
         cleanup_test_logs()
         print()
-
+        
         # Success
         print("=" * 70)
         print("✅ LOGGING SYSTEM VERIFIED - ALL CHECKS PASSED")
         print("=" * 70)
         print()
         print("Summary:")
-        print(f"  ✓ Per-target log files created correctly")
-        print(f"  ✓ Error segregation working")
+        print(f"  ✓ Single log file per target created")
+        print(f"  ✓ File contains WARNING/ERROR/DEBUG only (no INFO)")
+        print(f"  ✓ INFO logs go to console for user feedback")
         print(f"  ✓ Log analyzer parsing correctly")
-        print(f"  ✓ Summary generation working")
-        print(f"  ✓ Filename sanitization working")
-        print()
         print("🚀 System is production-ready!")
 
         return 0

@@ -758,11 +758,10 @@ class ScanEngine:
 
     async def _finalize_logging(self):
         """
-        Perform post-scan log analysis and cleanup.
+        Perform post-scan log cleanup.
 
-        - Generates summary report
-        - Aggregates error logs
-        - Cleans up old logs based on retention policy
+        - Only cleans up old logs based on retention policy
+        - No summary generation (single log file approach)
         """
         try:
             log_config = self.config.get('logging', {})
@@ -771,32 +770,14 @@ class ScanEngine:
             if not self._log_metadata:
                 return
 
-            main_log = self._log_metadata.get('main_log_path')
-            error_log = self._log_metadata.get('error_log_path')
-
-            if not main_log or not Path(main_log).exists():
+            log_path = self._log_metadata.get('log_path')
+            if not log_path or not Path(log_path).exists():
                 return
 
-            self.logger.info("Generating post-scan log analysis...")
-
-            # Generate summary report
-            log_dir = log_config.get('dir', 'logs')
-            summary_path = Path(log_dir) / f"{self._log_metadata['safe_target']}_summary_{self._log_metadata['timestamp']}.txt"
-
-            summary = generate_summary_report(
-                [main_log],
-                output_path=str(summary_path)
-            )
-
-            self.logger.info(f"📊 Log summary generated: {summary_path}")
-
-            # Log quick stats
-            if summary['totals']['ERROR'] > 0:
-                self.logger.warning(f"⚠️  {summary['totals']['ERROR']} errors encountered during scan")
-            if summary['totals']['WARNING'] > 0:
-                self.logger.info(f"⚠️  {summary['totals']['WARNING']} warnings logged")
+            self.logger.info("Finalizing scan logs...")
 
             # Cleanup old logs if retention is configured
+            log_dir = log_config.get('dir', 'logs')
             retention_days = log_config.get('retention_days', 0)
             if retention_days > 0:
                 deleted = cleanup_old_logs(log_dir, retention_days)
@@ -804,8 +785,8 @@ class ScanEngine:
                     self.logger.info(f"🧹 Cleaned up {len(deleted)} old log files (retention: {retention_days} days)")
 
         except Exception as e:
-            # Don't let log analysis errors crash the scan
-            self.logger.warning(f"Failed to finalize logging: {e}")
+            # Don't let log cleanup errors crash the scan
+            self.logger.warning(f"Failed to clean up old logs: {e}")
 
     async def _check_dependencies(self):
         """Verify all required external dependencies are available before starting scan."""

@@ -96,8 +96,9 @@ class TestLogRotation:
             )
 
             # Write enough data to trigger rotation (>500 bytes)
+            # Use WARNING because INFO is filtered out (console-only)
             for i in range(50):
-                logger.info(f"Test message {i} " + "x" * 50)
+                logger.warning(f"Test message {i} " + "x" * 50)
 
             # Close handlers
             for handler in logger.handlers[:]:
@@ -189,9 +190,9 @@ class TestEngineIntegration:
             'logs': '/tmp/test/logs'
         }
         mock_logger.return_value = MagicMock()
+        # Single file approach - only log_path in metadata
         mock_logger.return_value._log_metadata = {
-            'main_log_path': '/tmp/test.log',
-            'error_log_path': '/tmp/test_errors.log'
+            'log_path': '/tmp/test.log'
         }
 
         # Create engine

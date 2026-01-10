@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed - 2026-01-10 (Single-File Logging + Fail-Fast Connections)
+
+- **Single-File Logging Architecture**:
+  - Simplified from 3 files (main.log + errors.log + summary.txt) to 1 file per target
+  - File now contains only WARNING/ERROR/DEBUG messages (audit trail)
+  - INFO messages now go to console only for real-time user feedback
+  - Implemented `NoInfoFilter` class to exclude INFO from file logs
+  - Console handler changed from WARNING+ to INFO+ level for visibility
+- **Fail-Fast Connection Handling** (Fixed Hanging Issue):
+  - Wrapped Playwright `page.goto` in `asyncio.wait_for` with 20s hard timeout
+  - Changed wait strategy from `networkidle` to `domcontentloaded` (faster, more reliable)
+  - Added explicit `ConnectionError` and `TimeoutError` exception handling
+  - Prevents indefinite hanging on failed/slow connections (e.g., ERR_CONNECTION_CLOSED)
+  - Reduced scroll delay from 2s to 1s for improved efficiency
+- **Log Finalization Simplified**:
+  - Removed automatic summary report generation (manual tool still available via log_analyzer)
+  - Removed error aggregation (single file contains all relevant logs)
+  - Retained log retention cleanup for automatic old file removal
+- **Updated Verification & Tests**:
+  - Updated `scripts/verify_logging.py` for single-file validation
+  - Updated `tests/utils/test_logging_refactor.py` for new architecture
+  - All 22 tests passing ✅
+
 ### Added - 2026-01-10 (Enhanced Logging System)
 
 - **Per-Target Log Files**:

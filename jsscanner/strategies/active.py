@@ -461,13 +461,32 @@ class BrowserManager:
 
                 page.on('response', handle_response)
 
-                # Navigate and scroll
-                await page.goto(url, wait_until='networkidle')
+                # Navigate with aggressive timeout for fail-fast on connection errors
+                try:
+                    await asyncio.wait_for(
+                        page.goto(url, wait_until='domcontentloaded', timeout=15000),
+                        timeout=20.0  # Hard timeout: 20s max
+                    )
+                except asyncio.TimeoutError:
+                    raise TimeoutError(f"Navigation timeout after 20s for {url}")
+                except Exception as e:
+                    # Fail fast on connection errors (don't hang)
+                    error_msg = str(e)
+                    if any(err in error_msg for err in ['ERR_CONNECTION', 'ERR_NAME_NOT_RESOLVED', 'net::']):
+                        raise ConnectionError(f"Connection failed: {error_msg}")
+                    raise
+
+                # Quick scroll to trigger lazy-loaded scripts
                 await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)  # Reduced from 2s
 
                 self.page_count += 1
 
+            except (ConnectionError, TimeoutError) as e:
+                # Fail fast - don't retry connection errors
+                if self.logger:
+                    self.logger.warning(f"[SKIP] {url}: {e}")
+                raise
             except Exception as e:
                 raise e
             finally:
