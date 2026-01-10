@@ -966,3 +966,78 @@ For test failures or questions:
 - Review MODULE_AUDIT.md for test directives
 - Check CHANGELOG.md for recent changes
 - See .copilot-tracking/plans/ for implementation details
+
+---
+
+## Enhanced Logging System
+
+### Overview
+
+The JS Scanner uses a per-target logging system that creates dedicated log files for each scan target. This allows for easy audit trails, post-scan analysis, and error tracking without cluttering the console output.
+
+### Architecture
+
+**Per-Target Log Files:**
+- Each scan creates two log files in the `logs/` directory:
+  - `{target}_{timestamp}.log` - Complete scan log (INFO+)
+  - `{target}_errors_{timestamp}.log` - Error-only log (ERROR+)
+- Filenames use UTC timestamps: `YYYY-MM-DD_HH-MM-SS`
+- Target names are sanitized (protocols removed, special chars replaced)
+
+**Example:**
+```
+logs/
+ example.com_2024-01-15_14-30-25.log
+ example.com_errors_2024-01-15_14-30-25.log
+ api.test.org_2024-01-15_15-00-00.log
+ api.test.org_errors_2024-01-15_15-00-00.log
+ example.com_summary_2024-01-15_14-30-25.txt
+```
+
+### Configuration
+
+Configure logging in `config.yaml`:
+
+```yaml
+logging:
+  dir: "logs"              # Directory for log files
+  level: "INFO"            # Log level
+  file_enabled: true       # Enable file logging
+  console_enabled: true    # Console output
+  rotation:
+    type: "size"           # 'size' or 'time'
+    max_bytes: 10485760    # 10MB per file
+    backup_count: 5        # Keep 5 rotated files
+  retention_days: 30       # Delete logs older than 30 days
+```
+
+### Usage
+
+**Programmatic API:**
+
+```python
+from jsscanner.utils.log import get_target_logger
+from jsscanner.utils.log_analyzer import analyze_log_file, generate_summary_report
+
+# Create per-target logger
+logger = get_target_logger("example.com", log_dir="logs", level=logging.INFO)
+
+# Use logger
+logger.info("Scan started")
+logger.error("Failed to fetch resource")
+
+# Analyze logs
+stats = analyze_log_file('logs/example.com_2024-01-15.log')
+print(f"Total errors: {stats['level_counts']['ERROR']}")
+```
+
+### Testing
+
+Run logging system tests:
+
+```bash
+pytest tests/utils/test_logging.py -v
+```
+
+For complete documentation, see the Logging section above.
+

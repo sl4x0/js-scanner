@@ -108,9 +108,39 @@ notification_batching:
 
 # --- LOGGING ---
 logging:
+  # Directory for all log files (per-target logs will be created here)
+  dir: "logs"
+
+  # Default log level for file logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
   level: "INFO"
+
+  # Enable file logging (if false, only console output)
   file_enabled: true
-  # Note: Code now auto-generates 'scan.log' (DEBUG) and 'errors.log' (WARNING)
+
+  # Console output during scans (doesn't affect Rich Dashboard)
+  console_enabled: true
+
+  # Log rotation configuration
+  rotation:
+    # Rotation type: 'size' (rotate when file reaches max size) or 'time' (rotate on schedule)
+    type: "size"
+
+    # For 'size' rotation:
+    max_bytes: 10485760 # 10MB per log file before rotation
+    backup_count: 5 # Keep 5 backup files (total: 60MB per target)
+
+    # For 'time' rotation (uncomment to use):
+    # type: "time"
+    # when: "midnight"   # Rotate at midnight UTC
+    # interval: 1        # Rotate every day
+    # backup_count: 7    # Keep 7 days of logs
+
+  # Automatic cleanup of old logs
+  retention_days: 30 # Delete logs older than 30 days (0 = disabled)
+
+  # Note: Per-target logs are automatically created as:
+  #   {target}_{timestamp}.log       (all logs)
+  #   {target}_errors_{timestamp}.log (errors only)
 
 # --- SYSTEM STABILITY ---
 

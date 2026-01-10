@@ -8,9 +8,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added - 2026-01-10 (Enhanced Logging System)
+
+- **Per-Target Log Files**:
+  - Each scan target now gets dedicated timestamped log files: `{target}_{timestamp}.log`
+  - Separate error-only logs: `{target}_errors_{timestamp}.log`
+  - Automatic filename sanitization (removes protocols, special chars)
+  - UTC timestamps for consistent sorting across timezones
+- **Log Rotation**:
+  - Configurable size-based rotation (`RotatingFileHandler`)
+  - Configurable time-based rotation (`TimedRotatingFileHandler`)
+  - Default: 10MB per file, 5 backups (60MB total per target)
+- **Post-Scan Log Analysis**:
+  - Automatic summary report generation with statistics
+  - Error/warning aggregation across scan lifecycle
+  - Duration calculation and performance metrics
+  - Sample error extraction for quick debugging
+- **Log Retention**:
+  - Automatic cleanup of logs older than configured retention period
+  - Default: 30 days retention
+  - Configurable via `config.yaml` or CLI flags
+- **New Configuration Options** (`config.yaml`):
+  ```yaml
+  logging:
+    dir: "logs" # Log directory
+    level: "INFO" # Log level
+    console_enabled: true # Console output toggle
+    rotation:
+      type: "size" # 'size' or 'time'
+      max_bytes: 10485760 # 10MB
+      backup_count: 5 # Keep 5 backups
+    retention_days: 30 # Auto-cleanup threshold
+  ```
+- **New Utility Module**: `jsscanner/utils/log_analyzer.py`
+  - `analyze_log_file()`: Parse and extract statistics
+  - `aggregate_error_logs()`: Combine errors from multiple logs
+  - `generate_summary_report()`: Create human-readable summaries
+  - `cleanup_old_logs()`: Prune old logs based on retention policy
+- **Enhanced Logger Factory**: `get_target_logger()` in `jsscanner/utils/log.py`
+  - Per-target logger instances with unique names
+  - Multi-handler configuration (main, error, console)
+  - Metadata tracking for post-scan analysis
+  - Prevents duplicate handler registration
+
+### Changed - 2026-01-10 (Logging System)
+
+- **ScanEngine** now uses per-target loggers instead of global logger
+- Console output preserved for Rich Dashboard (no breaking changes to UX)
+- Log metadata now stored on logger instances for analysis
+
 ### Fixed - 2026-01-10 (Production Performance & Diagnostics)
 
-- **Semgrep Timeout Optimization**: 
+- **Semgrep Timeout Optimization**:
   - Removed hardcoded +30s buffer from semgrep batch timeout
   - Now respects configured timeout (60s) instead of running for 90s
   - **Impact**: Saves 300s (5 minutes) on 10-batch scans when batches timeout

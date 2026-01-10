@@ -1,14 +1,18 @@
 """
 Logger Utility
 Colorized console output for the scanner
+Enhanced with per-target logging support
 """
 import logging
 import sys
 import io
+import os
+import re
 from datetime import datetime
+from typing import Optional, Dict
 from colorama import Fore, Style, init
 from pathlib import Path
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 
 # Initialize colorama for Windows support
 init(autoreset=True)
@@ -234,3 +238,201 @@ def create_structured_logger(name: str, log_file: str = None, context: dict = No
     """
     base_logger = setup_logger(name, log_file)
     return StructuredLoggerAdapter(base_logger, context or {})
+
+
+# ==============================================================================
+# PER-TARGET LOGGING SYSTEM (Enhanced)
+# ==============================================================================
+
+DEFAULT_LOG_DIR = "logs"
+TIMESTAMP_FMT = "%Y-%m-%d_%H-%M-%S"
+LOG_FILENAME_FMT = "{target}_{timestamp}.log"
+ERROR_FILENAME_FMT = "{target}_errors_{timestamp}.log"
+
+
+def _sanitize_filename(s: str) -> str:
+    """
+    Sanitize a string to be safe for use as a filename.
+
+    Removes URL protocols, replaces special characters with underscores,
+    and limits length to prevent filesystem issues.
+
+    Args:
+        s: String to sanitize (e.g., target name/URL)
+
+    Returns:
+        Sanitized filename-safe string
+
+    Examples:
+        >>> _sanitize_filename("https://example.com/path")
+        'example.com_path'
+        >>> _sanitize_filename("api.internal:8080")
+        'api.internal_8080'
+    """
+    # Remove URL protocols
+    s = re.sub(r'^https?://', '', s)
+    s = re.sub(r'^wss?://', '', s)
+
+    # Replace invalid filesystem characters with underscores
+    s = re.sub(r'[<>:"/\\|?*\s]', '_', s)
+
+    # Remove multiple consecutive underscores
+    s = re.sub(r'_+', '_', s)
+
+    # Trim leading/trailing underscores and dots
+    s = s.strip('_.')
+
+    # Limit length (max 200 chars to leave room for timestamp)
+    if len(s) > 200:
+        s = s[:200]
+
+    return s or "unknown_target"
+
+
+def _get_timestamp() -> str:
+    """Get current UTC timestamp in standardized format."""
+    return datetime.utcnow().strftime(TIMESTAMP_FMT)
+
+
+def _ensure_log_dir(path: str) -> None:
+    """Create log directory if it doesn't exist."""
+    os.makedirs(path, exist_ok=True)
+
+
+def get_target_logger(
+    target_name: str,
+    log_dir: Optional[str] = None,
+    level: int = logging.INFO,
+    rotation_config: Optional[Dict] = None,
+    console_enabled: bool = True
+) -> logging.Logger:
+    """
+    Create a per-target logger with file rotation and error segregation.
+
+    This factory creates a logger instance configured with:
+    1. Main file handler: Writes all logs (INFO+) to timestamped file
+    2. Error file handler: Writes only ERROR+ logs to separate file
+    3. Console handler (optional): Outputs WARNING+ to console (preserves Rich dashboard)
+
+    Architecture:
+        - Main log: logs/{target}_{timestamp}.log (Level: INFO/DEBUG)
+        - Error log: logs/{target}_errors_{timestamp}.log (Level: ERROR only)
+        - Console: stdout (Level: WARNING+, colored, optional)
+
+    Args:
+        target_name: Target domain/URL (will be sanitized for filename)
+        log_dir: Directory to store logs (default: './logs')
+        level: Minimum log level for main file handler (default: INFO)
+        rotation_config: Dict with rotation settings:
+            - type: 'size' or 'time'
+            - For 'size': max_bytes, backup_count
+            - For 'time': when, interval, backup_count
+            Example: {'type': 'size', 'max_bytes': 10485760, 'backup_count': 5}
+        console_enabled: Enable console output (default: True)
+
+    Returns:
+        Configured logging.Logger instance with unique name
+
+    Example:
+        >>> logger = get_target_logger('example.com', level=logging.DEBUG)
+        >>> logger.info("Scan started")
+        >>> logger.error("Failed to fetch URL")
+        # Creates:
+        #   logs/example.com_2024-01-15_14-30-25.log (all logs)
+        #   logs/example.com_errors_2024-01-15_14-30-25.log (errors only)
+    """
+    if log_dir is None:
+        log_dir = DEFAULT_LOG_DIR
+    _ensure_log_dir(log_dir)
+
+    # Sanitize target name for filesystem safety
+    safe_target = _sanitize_filename(target_name)
+    timestamp = _get_timestamp()
+
+    # Generate log file paths
+    main_log_path = os.path.join(
+        log_dir,
+        LOG_FILENAME_FMT.format(target=safe_target, timestamp=timestamp)
+    )
+    error_log_path = os.path.join(
+        log_dir,
+        ERROR_FILENAME_FMT.format(target=safe_target, timestamp=timestamp)
+    )
+
+    # Create unique logger name to avoid conflicts
+    logger_name = f"jsscanner.target.{safe_target}.{timestamp}"
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(level)
+
+    # Prevent duplicate handlers if logger already configured
+    if getattr(logger, "_target_configured", False):
+        return logger
+
+    # Detailed formatter with file location for forensic analysis
+    detailed_formatter = logging.Formatter(
+        '%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # ========== HANDLER 1: Main File Handler (with rotation) ==========
+    if rotation_config and rotation_config.get('type') == 'time':
+        # Time-based rotation (e.g., daily at midnight)
+        when = rotation_config.get('when', 'midnight')
+        interval = rotation_config.get('interval', 1)
+        backup_count = rotation_config.get('backup_count', 7)
+        main_handler = TimedRotatingFileHandler(
+            main_log_path,
+            when=when,
+            interval=interval,
+            backupCount=backup_count,
+            utc=True,
+            encoding='utf-8'
+        )
+    elif rotation_config and rotation_config.get('type') == 'size':
+        # Size-based rotation
+        max_bytes = rotation_config.get('max_bytes', 10485760)  # 10MB default
+        backup_count = rotation_config.get('backup_count', 5)
+        main_handler = RotatingFileHandler(
+            main_log_path,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding='utf-8'
+        )
+    else:
+        # No rotation (simple file handler)
+        main_handler = logging.FileHandler(main_log_path, encoding='utf-8')
+
+    main_handler.setLevel(level)
+    main_handler.setFormatter(detailed_formatter)
+    logger.addHandler(main_handler)
+
+    # ========== HANDLER 2: Error-Only File Handler ==========
+    error_handler = logging.FileHandler(error_log_path, encoding='utf-8')
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(detailed_formatter)
+    logger.addHandler(error_handler)
+
+    # ========== HANDLER 3: Console Handler (Optional) ==========
+    if console_enabled:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.WARNING)  # Only show warnings+ on console
+        console_formatter = ColoredFormatter(
+            '%(asctime)s - %(levelname)s - %(message)s',
+            datefmt='%m/%d/%y %H:%M:%S'
+        )
+        console_handler.setFormatter(console_formatter)
+        logger.addHandler(console_handler)
+
+    # Mark as configured to prevent duplicate handlers
+    logger._target_configured = True
+
+    # Store metadata for log analyzer
+    logger._log_metadata = {
+        'target': target_name,
+        'safe_target': safe_target,
+        'timestamp': timestamp,
+        'main_log_path': main_log_path,
+        'error_log_path': error_log_path
+    }
+
+    return logger

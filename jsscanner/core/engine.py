@@ -6,11 +6,13 @@ import asyncio
 import json
 import time
 import signal
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 from ..utils.fs import FileSystem
-from ..utils.log import setup_logger, log_stats
+from ..utils.log import setup_logger, log_stats, get_target_logger
+from ..utils.log_analyzer import cleanup_old_logs, generate_summary_report, aggregate_error_logs
 from .state import State
 from ..output.discord import Discord
 from ..output.reporter import generate_report
@@ -34,9 +36,31 @@ class ScanEngine:
         # Setup directories
         self.paths = FileSystem.create_result_structure(self.target_name)
 
-        # Initialize logger
-        log_file = Path(self.paths['logs']) / 'scan.log'
-        self.logger = setup_logger(log_file=str(log_file))
+        # Initialize per-target logger with enhanced configuration
+        log_config = config.get('logging', {})
+        log_dir = log_config.get('dir', 'logs')
+        log_level_str = log_config.get('level', 'INFO').upper()
+        log_level = getattr(logging, log_level_str, logging.INFO)
+
+        # Get rotation config
+        rotation_config = log_config.get('rotation')
+        console_enabled = log_config.get('console_enabled', True)
+
+        # Create per-target logger
+        self.logger = get_target_logger(
+            target_name=self.target,
+            log_dir=log_dir,
+            level=log_level,
+            rotation_config=rotation_config,
+            console_enabled=console_enabled
+        )
+
+        # Store log metadata for post-scan analysis
+        self._log_metadata = getattr(self.logger, '_log_metadata', {})
+
+        # Log scan initialization
+        self.logger.info(f"Scan engine initialized for target: {self.target}")
+        self.logger.debug(f"Configuration loaded: {len(config)} settings")
 
         # Initialize state manager
         self.state = State(self.paths['base'])
@@ -725,9 +749,63 @@ class ScanEngine:
                     status_type='error'
                 )
         finally:
+            # Post-scan log analysis and cleanup
+            await self._finalize_logging()
+
             # Cleanup
             await self._cleanup()
             await self.notifier.stop()
+
+    async def _finalize_logging(self):
+        """
+        Perform post-scan log analysis and cleanup.
+
+        - Generates summary report
+        - Aggregates error logs
+        - Cleans up old logs based on retention policy
+        """
+        try:
+            log_config = self.config.get('logging', {})
+
+            # Only proceed if we have log metadata
+            if not self._log_metadata:
+                return
+
+            main_log = self._log_metadata.get('main_log_path')
+            error_log = self._log_metadata.get('error_log_path')
+
+            if not main_log or not Path(main_log).exists():
+                return
+
+            self.logger.info("Generating post-scan log analysis...")
+
+            # Generate summary report
+            log_dir = log_config.get('dir', 'logs')
+            summary_path = Path(log_dir) / f"{self._log_metadata['safe_target']}_summary_{self._log_metadata['timestamp']}.txt"
+
+            summary = generate_summary_report(
+                [main_log],
+                output_path=str(summary_path)
+            )
+
+            self.logger.info(f"📊 Log summary generated: {summary_path}")
+
+            # Log quick stats
+            if summary['totals']['ERROR'] > 0:
+                self.logger.warning(f"⚠️  {summary['totals']['ERROR']} errors encountered during scan")
+            if summary['totals']['WARNING'] > 0:
+                self.logger.info(f"⚠️  {summary['totals']['WARNING']} warnings logged")
+
+            # Cleanup old logs if retention is configured
+            retention_days = log_config.get('retention_days', 0)
+            if retention_days > 0:
+                deleted = cleanup_old_logs(log_dir, retention_days)
+                if deleted:
+                    self.logger.info(f"🧹 Cleaned up {len(deleted)} old log files (retention: {retention_days} days)")
+
+        except Exception as e:
+            # Don't let log analysis errors crash the scan
+            self.logger.warning(f"Failed to finalize logging: {e}")
 
     async def _check_dependencies(self):
         """Verify all required external dependencies are available before starting scan."""
@@ -1732,7 +1810,7 @@ class ScanEngine:
         if error_stats['http_errors'] > 0:
             self.logger.info(f"  ❌ HTTP Errors: {error_stats['http_errors']}")
             self.logger.info("     → 4xx/5xx status codes")
-            
+
             # Show HTTP status code breakdown
             if hasattr(self.fetcher, 'http_status_breakdown') and self.fetcher.http_status_breakdown:
                 status_summary = sorted(self.fetcher.http_status_breakdown.items(), key=lambda x: x[1], reverse=True)
