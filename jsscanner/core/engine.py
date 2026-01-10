@@ -1193,13 +1193,16 @@ class ScanEngine:
                 # Create base URL without query params
                 base_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, '', '', ''))
                 
+                # Normalize for case-insensitive comparison (URLs are case-insensitive for domain and path)
+                base_url_normalized = base_url.lower()
+                
                 # Keep the URL, prefer one without query params
-                if base_url not in unique_urls:
-                    unique_urls[base_url] = url
+                if base_url_normalized not in unique_urls:
+                    unique_urls[base_url_normalized] = url
                 else:
                     # If current URL has no query params, prefer it
-                    if not parsed.query and '?' in unique_urls[base_url]:
-                        unique_urls[base_url] = url
+                    if not parsed.query and '?' in unique_urls[base_url_normalized]:
+                        unique_urls[base_url_normalized] = url
                         
             except Exception as e:
                 # Traceback Pattern: Clean console + forensic log

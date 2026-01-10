@@ -28,12 +28,12 @@ class DomainRateLimiter:
     Token bucket rate limiter per domain to prevent hitting rate limits.
     Spaces out requests to same domain to avoid WAF/CDN blocks.
     """
-    
+
     def __init__(self, requests_per_second: float = 5.0):
         self.domain_buckets: Dict[str, Dict] = {}
         self.rate = requests_per_second
         self.lock = asyncio.Lock()
-    
+
     async def acquire(self, domain: str):
         """Acquire permission to make a request to this domain"""
         async with self.lock:
@@ -42,15 +42,15 @@ class DomainRateLimiter:
                     'tokens': self.rate,
                     'last_update': time.time()
                 }
-            
+
             bucket = self.domain_buckets[domain]
             now = time.time()
-            
+
             # Refill tokens based on elapsed time
             elapsed = now - bucket['last_update']
             bucket['tokens'] = min(self.rate, bucket['tokens'] + elapsed * self.rate)
             bucket['last_update'] = now
-            
+
             if bucket['tokens'] < 1:
                 # Need to wait for tokens to refill
                 wait_time = (1 - bucket['tokens']) / self.rate
@@ -66,18 +66,18 @@ class DomainConnectionManager:
     Manages separate connection pools and concurrency limits per domain.
     Prevents one slow domain from blocking others.
     """
-    
+
     def __init__(self, max_per_domain: int = 3, ssl_verify: bool = False):
         self.domain_sessions: Dict[str, AsyncSession] = {}
         self.domain_semaphores: Dict[str, asyncio.Semaphore] = {}
         self.max_per_domain = max_per_domain
         self.ssl_verify = ssl_verify
         self.lock = asyncio.Lock()
-    
+
     async def get_session(self, url: str) -> Tuple[AsyncSession, asyncio.Semaphore]:
         """Get session and semaphore for this domain"""
         domain = urlparse(url).netloc
-        
+
         async with self.lock:
             if domain not in self.domain_sessions:
                 # Create new session for this domain
@@ -88,9 +88,9 @@ class DomainConnectionManager:
                     verify=self.ssl_verify
                 )
                 self.domain_semaphores[domain] = asyncio.Semaphore(self.max_per_domain)
-        
+
         return self.domain_sessions[domain], self.domain_semaphores[domain]
-    
+
     async def close_all(self):
         """Close all domain sessions"""
         async with self.lock:
@@ -109,13 +109,13 @@ class DomainPerformanceTracker:
     Tracks success rate and latency per domain.
     Adaptively decides whether to use browser or HTTP based on historical performance.
     """
-    
+
     def __init__(self, min_samples: int = 5, failure_threshold: float = 0.5):
         self.domain_stats: Dict[str, Dict] = {}
         self.min_samples = min_samples
         self.failure_threshold = failure_threshold
         self.lock = asyncio.Lock()
-    
+
     async def record(self, domain: str, success: bool, latency: float):
         """Record a request result for this domain"""
         async with self.lock:
@@ -125,7 +125,7 @@ class DomainPerformanceTracker:
                     'failures': 0,
                     'latencies': []
                 }
-            
+
             stats = self.domain_stats[domain]
             if success:
                 stats['success'] += 1
@@ -135,7 +135,7 @@ class DomainPerformanceTracker:
                     stats['latencies'] = stats['latencies'][-100:]
             else:
                 stats['failures'] += 1
-    
+
     def should_use_browser(self, domain: str) -> bool:
         """
         Adaptive decision: use browser if HTTP failure rate > threshold.
@@ -144,14 +144,14 @@ class DomainPerformanceTracker:
         stats = self.domain_stats.get(domain)
         if not stats:
             return False  # No data yet, try HTTP first
-        
+
         total = stats['success'] + stats['failures']
         if total < self.min_samples:
             return False  # Not enough data yet
-        
+
         failure_rate = stats['failures'] / total
         return failure_rate > self.failure_threshold
-    
+
     def get_avg_latency(self, domain: str) -> Optional[float]:
         """Get average latency for this domain"""
         stats = self.domain_stats.get(domain)
@@ -166,30 +166,30 @@ class DomainCircuitBreaker:
     Blocks all requests to a domain after consecutive failures.
     Auto-resets after cooldown period.
     """
-    
+
     def __init__(self, failure_threshold: int = 3, cooldown_seconds: int = 60, logger=None):
         self.failure_threshold = failure_threshold
         self.cooldown_seconds = cooldown_seconds
         self.logger = logger
-        
+
         # Track consecutive failures per domain
         self.consecutive_failures: Dict[str, int] = {}
-        
+
         # Track when domain was blocked
         self.blocked_until: Dict[str, float] = {}
-        
+
         self.lock = asyncio.Lock()
-    
+
     async def is_blocked(self, domain: str) -> bool:
         """Check if domain is currently blocked by circuit breaker"""
         async with self.lock:
             if domain not in self.blocked_until:
                 return False
-            
+
             # Check if cooldown period has passed
             blocked_until = self.blocked_until[domain]
             current_time = time.time()
-            
+
             if current_time >= blocked_until:
                 # Reset circuit breaker
                 del self.blocked_until[domain]
@@ -197,21 +197,21 @@ class DomainCircuitBreaker:
                 if self.logger:
                     self.logger.info(f"🔓 Circuit breaker RESET for domain: {domain}")
                 return False
-            
+
             return True
-    
+
     async def record_success(self, domain: str):
         """Record successful request - resets failure counter"""
         async with self.lock:
             self.consecutive_failures[domain] = 0
             if domain in self.blocked_until:
                 del self.blocked_until[domain]
-    
+
     async def record_failure(self, domain: str, reason: str = "") -> bool:
         """Record failed request - may trigger circuit breaker"""
         async with self.lock:
             self.consecutive_failures[domain] = self.consecutive_failures.get(domain, 0) + 1
-            
+
             if self.consecutive_failures[domain] >= self.failure_threshold:
                 # Block the domain
                 self.blocked_until[domain] = time.time() + self.cooldown_seconds
@@ -221,9 +221,9 @@ class DomainCircuitBreaker:
                         f"Blocked for {self.cooldown_seconds}s. Reason: {reason}"
                     )
                 return True  # Domain is now blocked
-            
+
             return False  # Domain not blocked yet
-    
+
     def get_blocked_domains(self) -> List[str]:
         """Get list of currently blocked domains"""
         current_time = time.time()
@@ -237,84 +237,132 @@ class BrowserManager:
         self.playwright = playwright_instance
         self.browser = None
         self.semaphore = asyncio.Semaphore(max_concurrent)
+        self.context_semaphore = asyncio.Semaphore(1)  # CRITICAL: Only one context creation at a time
         self.page_count = 0
         self.restart_after = restart_after
         self.headless = headless
-        self.lock = asyncio.Lock()
+        self.lock = asyncio.Lock()  # Global lock for browser operations
+        self.restart_lock = asyncio.Lock()  # CRITICAL: Dedicated lock for restart operations
         self.logger = logger
+        self._is_restarting = False  # FIX: Prevent concurrent restart attempts
+        self._last_restart = 0  # FIX: Rate limit restarts
+        self._restart_cooldown = 5  # CRITICAL: Minimum 5 seconds between restarts
 
     async def _ensure_browser(self):
-        """Ensures browser is running, restarts if needed"""
-        async with self.lock:
+        """Ensures browser is running, restarts if needed - with strict concurrency control"""
+        # CRITICAL: Use restart_lock to prevent concurrent restart attempts
+        async with self.restart_lock:
+            # If already restarting, wait
+            while self._is_restarting:
+                await asyncio.sleep(0.5)
+
             should_restart = self.browser is None or self.page_count >= self.restart_after
 
             if should_restart:
-                if self.browser:
+                # CRITICAL: Enforce cooldown period between restarts
+                current_time = time.time()
+                time_since_last_restart = current_time - self._last_restart
+                if time_since_last_restart < self._restart_cooldown and self.browser is not None:
                     if self.logger:
-                        self.logger.debug(f"Restarting browser (pages: {self.page_count})")
-                    try:
-                        await asyncio.wait_for(self.browser.close(), timeout=5.0)
-                    except asyncio.TimeoutError:
-                        if self.logger:
-                            self.logger.warning("⚠️  Browser.close() timed out during restart")
-                    except Exception as e:
-                        if self.logger:
-                            self.logger.debug(f"Browser.close() error during restart: {e}")
-                    finally:
-                        # Ensure reference cleared so a fresh browser is launched
-                        self.browser = None
-                    self.page_count = 0
-                    await asyncio.sleep(1)  # Wait for cleanup (Issue #5)
+                        self.logger.debug(f"Skipping restart (cooldown: {time_since_last_restart:.1f}s < {self._restart_cooldown}s)")
+                    return
 
-                # Cross-platform Chromium launch arguments
-                # Linux VPS requires --no-sandbox and --disable-setuid-sandbox
-                # CPU-OPTIMIZED: Added aggressive CPU reduction flags
+                self._is_restarting = True
+                try:
+                    if self.browser:
+                        if self.logger:
+                            self.logger.info(f"🔄 Restarting browser (pages: {self.page_count})")
+                        try:
+                            await asyncio.wait_for(self.browser.close(), timeout=5.0)
+                        except asyncio.TimeoutError:
+                            if self.logger:
+                                self.logger.warning("⚠️  Browser.close() timed out during restart")
+                        except Exception as e:
+                            if self.logger:
+                                self.logger.debug(f"Browser.close() error during restart: {e}")
+                        finally:
+                            self.browser = None
+                        self.page_count = 0
+                        # CRITICAL: Cool down period after crash to prevent CPU hammering
+                        await asyncio.sleep(self._restart_cooldown)
+                finally:
+                    self._is_restarting = False
+                    self._last_restart = time.time()
+
+                # CRITICAL VPS-OPTIMIZED: Reduced resource consumption for 4 vCPU, 12GB RAM environment
                 launch_args = [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
+                    '--disable-dev-shm-usage',  # Critical for low-memory VPS
+                    '--disable-gpu',  # No GPU on VPS
                     '--disable-software-rasterizer',
                     '--disable-dev-tools',
                     '--disable-background-timer-throttling',
                     '--disable-backgrounding-occluded-windows',
                     '--disable-renderer-backgrounding',
-                    # CPU OPTIMIZATION FLAGS (added for multi-instance VPS)
-                    '--single-process',  # Run browser in single process (less CPU overhead)
-                    '--no-zygote',  # Disable process forking (saves CPU)
-                    '--disable-accelerated-2d-canvas',  # Disable canvas acceleration
-                    '--disable-animations',  # No CSS animations
-                    '--disable-web-security',  # Skip security checks (faster)
-                    '--disable-features=IsolateOrigins,site-per-process',  # Disable site isolation (less CPU)
-                    '--blink-settings=imagesEnabled=false',  # Don't load images (huge CPU save!)
-                    '--disable-javascript-harmony-shipping',  # Disable experimental JS features
-                    '--js-flags=--max-old-space-size=512'  # Limit V8 memory (forces faster GC)
+                    '--disable-accelerated-2d-canvas',
+                    '--disable-animations',
+                    '--disable-web-security',
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--blink-settings=imagesEnabled=false',  # Don't load images
+                    '--disable-javascript-harmony-shipping',
+                    '--js-flags=--max-old-space-size=512',  # Limit V8 memory
+                    '--disable-extensions',
+                    '--disable-plugins',
+                    '--disable-notifications',
+                    '--disable-popup-blocking',
+                    '--mute-audio'
                 ]
 
                 self.browser = await self.playwright.chromium.launch(
                     headless=self.headless,
-                    args=launch_args
+                    args=launch_args,
+                    timeout=30000  # 30 second timeout for browser launch
                 )
-    
+
+                # FIX: Wait for browser to fully initialize
+                await asyncio.sleep(1)
+
     async def fetch_with_context(self, url: str, page_timeout: int):
         """Fetch URL with proper context management"""
-        await self._ensure_browser()
-
+        # FIX: Acquire semaphore BEFORE ensuring browser to prevent concurrent new_context calls
         async with self.semaphore:
+            # FIX: Ensure browser is ready with proper error handling
+            max_browser_retries = 3
+            for attempt in range(max_browser_retries):
+                try:
+                    await self._ensure_browser()
+
+                    # FIX: Verify browser is actually running
+                    if self.browser is None:
+                        raise RuntimeError("Browser failed to initialize")
+
+                    break
+                except Exception as e:
+                    if attempt < max_browser_retries - 1:
+                        if self.logger:
+                            self.logger.warning(f"Browser initialization failed (attempt {attempt + 1}/{max_browser_retries}): {e}")
+                        await asyncio.sleep(2 * (attempt + 1))  # Exponential backoff
+                    else:
+                        raise
+
             context = None
             page = None
             js_urls = []
 
             try:
-                context = await self.browser.new_context(
-                    viewport={'width': 1920, 'height': 1080},
-                    ignore_https_errors=True,
-                    java_script_enabled=True
-                )
-
-                page = await context.new_page()
-                page.set_default_timeout(page_timeout)
-
+                # FIX: Add timeout and retry for context creation
+                try:
+                    context = await asyncio.wait_for(
+                        self.browser.new_context(
+                            viewport={'width': 1920, 'height': 1080},
+                            ignore_https_errors=True,
+                            java_script_enabled=True
+                        ),
+                        timeout=10.0
+                    )
+                except asyncio.TimeoutError:
+                    raise RuntimeError("Browser context creation timed out")
                 # Intercept script responses
                 async def handle_response(response):
                     if response.request.resource_type == 'script':
@@ -333,24 +381,36 @@ class BrowserManager:
                 raise e
             finally:
                 # CRITICAL: Always close to prevent memory leaks
-                # Suppress TargetClosedError during shutdown (Ctrl+C)
+                # FIX: Add proper error handling and delays
                 if page:
                     try:
-                        await page.close()
+                        await asyncio.wait_for(page.close(), timeout=3.0)
+                    except asyncio.TimeoutError:
+                        if self.logger:
+                            self.logger.debug("Page.close() timed out")
                     except Exception as e:
                         # Suppress "Target closed" errors during forced shutdown
                         if 'Target' not in str(e) and 'closed' not in str(e).lower():
-                            raise
+                            if self.logger:
+                                self.logger.debug(f"Page.close() error: {e}")
+
+                # FIX: Add delay between page and context close
+                await asyncio.sleep(0.1)
+
                 if context:
                     try:
-                        await context.close()
+                        await asyncio.wait_for(context.close(), timeout=3.0)
+                    except asyncio.TimeoutError:
+                        if self.logger:
+                            self.logger.debug("Context.close() timed out")
                     except Exception as e:
                         # Suppress "Target closed" errors during forced shutdown
                         if 'Target' not in str(e) and 'closed' not in str(e).lower():
-                            raise
+                            if self.logger:
+                                self.logger.debug(f"Context.close() error: {e}")
 
             return js_urls
-    
+
     async def close(self):
         """Close browser - suppress TargetClosedError during shutdown"""
         if self.browser:
@@ -401,13 +461,13 @@ class ActiveFetcher:
             'rate_limits': 0,
             'http_errors': 0
         }
-        
+
         # 🔍 DIAGNOSTIC: Track HTTP status codes for debugging
         self.http_status_breakdown = {}
 
         # Initialize noise filter
         self.noise_filter = NoiseFilter(logger=logger)
-        
+
         # Session Inheritance: Store valid cookies from Playwright for curl_cffi
         self.valid_cookies = {}  # Will be populated during live browser scan
         self.target_domain = None  # Track the domain for Referer header
@@ -417,7 +477,7 @@ class ActiveFetcher:
         self.restart_after = config.get('playwright', {}).get('restart_after', 100)
         self.page_timeout = config.get('playwright', {}).get('page_timeout', 30000)
         self.headless = config.get('playwright', {}).get('headless', True)
-        
+
         # User-Agent rotation (randomize to avoid WAF fingerprinting)
         self.user_agents = config.get('user_agents', [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -431,31 +491,31 @@ class ActiveFetcher:
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
             'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0'
         ])
-        
+
         # Session will be initialized in initialize() method
         self.session = None  # Legacy - kept for compatibility
         self.session_pool = []  # Pool of sessions for load distribution
         self.session_counter = 0  # Round-robin counter for session selection
         self.download_counter = 0  # Track downloads for rotation
         self.ssl_verify = config.get('verify_ssl', False)
-        
+
         # ✅ CRITICAL FIX: HTTP/2 auto-negotiation (removed http_version="1.1")
         # Real Chrome 120 uses HTTP/2. Forcing HTTP/1.1 breaks TLS fingerprint.
-        
+
         # Session management configuration
         session_config = config.get('session_management', {})
         self.session_pool_size = session_config.get('pool_size', 3)
         self.rotate_after = session_config.get('rotate_after', 150)
         # Honor configured download timeout; default to 30s for stability with slow domains
         self.download_timeout = config.get('session_management', {}).get('download_timeout', 30)
-        
+
         # Ensure retry config exists; allow user to set low retry counts (fail-fast)
         if 'retry' not in self.config:
             self.config['retry'] = {}
         if self.config['retry'].get('http_requests', 0) < 1:
             self.logger.warning("⚠️  Enforcing minimum retry count: http_requests = 1")
             self.config['retry']['http_requests'] = 1
-        
+
         # ✅ FIX 2A/2B/4: Initialize advanced performance features
         max_per_domain = config.get('download', {}).get('max_concurrent_per_domain', 3)
         self.domain_connection_manager = DomainConnectionManager(
@@ -464,20 +524,20 @@ class ActiveFetcher:
         )
         self.domain_rate_limiter = DomainRateLimiter(requests_per_second=5.0)
         self.domain_perf_tracker = DomainPerformanceTracker(min_samples=5, failure_threshold=0.7)
-        
+
         # ✅ NEW: Circuit Breaker to prevent hammering failing domains
         self.circuit_breaker = DomainCircuitBreaker(
             failure_threshold=3,  # Block after 3 consecutive failures
             cooldown_seconds=60,  # 60s cooldown before retry
             logger=self.logger
         )
-        
+
         self.logger.info(f"✅ Advanced features initialized: per-domain limits={max_per_domain}, rate_limiter=5rps, circuit_breaker=enabled")
-    
+
     def _get_random_user_agent(self) -> str:
         """Get a random user agent to avoid WAF fingerprinting"""
         return random.choice(self.user_agents)
-    
+
     def _is_in_scope(self, url: str, target: str) -> bool:
         """Check if URL is in scope (same root domain as target)"""
         try:
@@ -517,13 +577,13 @@ class ActiveFetcher:
 
         except Exception:
             return False
-    
+
     async def validate_domain(self, target: str) -> Tuple[bool, str]:
         """Fast DNS validation to filter dead domains before scanning
-        
+
         Args:
             target: Domain or URL to validate
-            
+
         Returns:
             Tuple of (is_valid, reason)
         """
@@ -534,11 +594,11 @@ class ActiveFetcher:
                 domain = parsed.netloc
             else:
                 domain = target.split('/')[0]
-            
+
             # Remove port if present
             if ':' in domain:
                 domain = domain.split(':')[0]
-            
+
             # Quick DNS lookup (non-blocking)
             loop = asyncio.get_event_loop()
             await asyncio.wait_for(
@@ -546,7 +606,7 @@ class ActiveFetcher:
                 timeout=1.0
             )
             return True, "valid"
-            
+
         except socket.gaierror:
             self.error_stats['dns_errors'] += 1
             return False, "DNS resolution failed"
@@ -558,7 +618,7 @@ class ActiveFetcher:
             self.logger.error(f"Domain validation error: {str(e)}")
             self.logger.debug("Full validation error traceback:", exc_info=True)
             return False, f"Validation error: {str(e)}"
-    
+
     async def initialize(self) -> None:
         """Initialize HTTP session pool and Playwright browser"""
         # 1. Initialize curl_cffi session pool with Chrome TLS fingerprint for WAF bypass
@@ -566,7 +626,7 @@ class ActiveFetcher:
         timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
         if not isinstance(timeout_val, (int, float)):
             timeout_val = 15
-        
+
         # Create session pool for load distribution and resilience
         self.logger.info(f"Creating session pool with {self.session_pool_size} sessions...")
         for i in range(self.session_pool_size):
@@ -577,11 +637,11 @@ class ActiveFetcher:
                 verify=self.ssl_verify
             )
             self.session_pool.append(session)
-        
+
         # Set primary session for backward compatibility
         self.session = self.session_pool[0]
         self.logger.info(f"✅ Stealth HTTP Session Pool initialized ({self.session_pool_size} sessions with Chrome 120 fingerprint)")
-        
+
         # 2. Initialize Playwright browser only if needed
         skip_live = self.config.get('skip_live', False)
         if not skip_live:
@@ -596,7 +656,7 @@ class ActiveFetcher:
             self.logger.info("Playwright browser manager initialized")
         else:
             self.logger.info("Playwright initialization skipped (--no-live flag)")
-    
+
     async def harvest_cookies_for_domains(self, urls: list[str]) -> None:
         """
         🍪 PROACTIVE COOKIE HARVESTING (Golden Ticket Strategy)
@@ -604,40 +664,40 @@ class ActiveFetcher:
         1. Solve WAF/Cloudflare challenges
         2. Capture authentication cookies
         3. Populate cookie jar BEFORE HTTP downloads begin
-        
+
         This prevents mid-scan browser launches and enables fast HTTP-only downloads.
         """
         if not self.browser_manager:
             self.logger.debug("Cookie harvesting skipped - no browser available")
             return
-        
+
         # Extract unique domains from URL list
         unique_domains = set()
         for url in urls:
             try:
-                parsed = urllib.parse.urlparse(url)
+                parsed = urlparse(url)
                 if parsed.scheme and parsed.netloc:
                     domain_root = f"{parsed.scheme}://{parsed.netloc}/"
                     unique_domains.add(domain_root)
             except Exception:
                 continue
-        
+
         if not unique_domains:
             self.logger.info("No unique domains found for cookie harvesting")
             return
-        
+
         self.logger.info(f"🍪 PROACTIVE COOKIE HARVEST: Visiting {len(unique_domains)} unique domains...")
-        
+
         harvested_count = 0
         failed_count = 0
-        
+
         for domain_root in unique_domains:
             try:
                 self.logger.debug(f"Harvesting cookies from {domain_root}...")
-                
+
                 # Visit domain root with browser to trigger WAF challenges
                 await self.fetch_with_playwright(domain_root)
-                
+
                 if self.valid_cookies:
                     harvested_count += 1
                     cf_cookies = [name for name in self.valid_cookies.keys() if 'cf' in name.lower()]
@@ -647,12 +707,12 @@ class ActiveFetcher:
                     )
                 else:
                     self.logger.debug(f"No cookies captured from {domain_root}")
-                    
+
             except Exception as e:
                 failed_count += 1
                 self.logger.warning(f"⚠️  Cookie harvest failed for {domain_root}: {str(e)[:100]}")
                 continue
-        
+
         self.logger.info(
             f"🍪 Cookie harvest complete: {harvested_count} successful, {failed_count} failed out of {len(unique_domains)} domains"
         )
@@ -732,16 +792,16 @@ class ActiveFetcher:
             # Preflight should never block download on unexpected errors - allow fallback
             self.logger.debug(f"Preflight check error: {e}")
             return True, 'preflight_error', None
-    
+
     def _get_session(self) -> AsyncSession:
         """Get next session from pool using round-robin selection"""
         if not self.session_pool:
             raise RuntimeError("Session pool not initialized!")
-        
+
         session = self.session_pool[self.session_counter % len(self.session_pool)]
         self.session_counter += 1
         return session
-    
+
     async def _rotate_session(self, session_index: int) -> None:
         """Rotate a specific session in the pool to prevent staleness"""
         try:
@@ -749,15 +809,15 @@ class ActiveFetcher:
             timeout_val = self.config.get('timeouts', {}).get('http_request', 15)
             if not isinstance(timeout_val, (int, float)):
                 timeout_val = 15
-            
+
             old_session = self.session_pool[session_index]
-            
+
             # Close old session
             try:
                 await asyncio.wait_for(old_session.close(), timeout=2.0)
             except Exception as e:
                 self.logger.debug(f"Error closing old session: {str(e)}")
-            
+
             # Create new session with same config
             # ✅ HTTP/2 auto-negotiation for realistic Chrome 120 fingerprint
             new_session = AsyncSession(
@@ -765,17 +825,17 @@ class ActiveFetcher:
                 timeout=None,  # ✅ FIX 1A: Disable session timeout, use per-request timeouts
                 verify=self.ssl_verify
             )
-            
+
             self.session_pool[session_index] = new_session
-            
+
             # Update primary session if rotating first one
             if session_index == 0:
                 self.session = new_session
-            
+
             self.logger.debug(f"✅ Rotated session {session_index} (downloads: {self.download_counter})")
         except Exception as e:
             self.logger.error(f"Failed to rotate session {session_index}: {str(e)}")
-    
+
     async def _smart_interactions(self, page) -> None:
         """Trigger lazy loaders through smart interactions"""
         try:
@@ -896,7 +956,7 @@ class ActiveFetcher:
                 # Traceback Pattern: Clean console + forensic log
                 self.logger.error(f"⚠️  Interaction triggers failed: {str(e)}")
                 self.logger.debug("Full interaction failure traceback:", exc_info=True)
-    
+
     async def cleanup(self) -> None:
         """Cleanup HTTP session pool and Playwright resources - thread-safe with lock"""
         async with self._browser_lock:
@@ -907,7 +967,7 @@ class ActiveFetcher:
                     self.logger.info("Domain connection manager closed successfully")
                 except Exception as e:
                     self.logger.debug(f"Domain connection manager cleanup error: {str(e)}")
-            
+
             # Close all sessions in the pool
             if self.session_pool:
                 for i, session in enumerate(self.session_pool):
@@ -923,11 +983,11 @@ class ActiveFetcher:
                                 self.logger.debug(f"Session {i} cleanup error: {str(e)}")
                         except Exception as e:
                             self.logger.debug(f"Session {i} cleanup error: {str(e)}")
-                
+
                 self.logger.info(f"HTTP Session pool closed successfully ({len(self.session_pool)} sessions)")
                 self.session_pool = []
                 self.session = None
-            
+
             # Then close Playwright with proper waiting
             if self.browser_manager:
                 try:
@@ -940,7 +1000,7 @@ class ActiveFetcher:
                     # Traceback Pattern: Clean console + forensic log
                     self.logger.error(f"❌ Browser manager cleanup error: {str(e)}")
                     self.logger.debug("Full browser manager cleanup traceback:", exc_info=True)
-            
+
             if self.playwright:
                 try:
                     # ✅ FIX: Check if we're in a valid event loop before async operations
@@ -968,7 +1028,7 @@ class ActiveFetcher:
                         # Traceback Pattern: Clean console + forensic log
                         self.logger.error(f"❌ Playwright cleanup error: {str(e)[:100]}")
                         self.logger.debug("Full playwright cleanup traceback:", exc_info=True)
-    
+
     async def fetch_live(self, target: str) -> List[str]:
         """Fetch JavaScript URLs from live site using Playwright with smart retries"""
         max_retries = 4  # Increased for timeout scenarios
@@ -980,14 +1040,16 @@ class ActiveFetcher:
             try:
                 if attempt > 0:
                     self.logger.info(f"🔄 Retry attempt {attempt + 1}/{max_retries} for {target}")
-                    await asyncio.sleep(retry_delay * attempt)
+                    # FIX: Exponential backoff with jitter to reduce concurrent load
+                    delay = retry_delay * (attempt + random.uniform(0.5, 1.5))
+                    await asyncio.sleep(delay)
 
                 result = await self._fetch_live_attempt(target)
                 return result
 
             except Exception as e:
                 error_msg = str(e)
-                
+
                 # Categorize error type for smart retry
                 is_timeout = "Timeout" in error_msg or "timeout" in error_msg.lower()
                 is_dns_error = "net::ERR_NAME_NOT_RESOLVED" in error_msg
@@ -995,7 +1057,8 @@ class ActiveFetcher:
                 is_ssl_error = "net::ERR_CERT" in error_msg or "SSL" in error_msg
                 is_browser_crash = any(x in error_msg for x in [
                     "Target closed", "Protocol error", "browser has been closed",
-                    "context has been closed", "page has been closed"
+                    "context has been closed", "page has been closed",
+                    "Target page, context or browser has been closed"  # FIX: More specific match
                 ])
 
                 # Track errors
@@ -1021,12 +1084,23 @@ class ActiveFetcher:
                     if is_browser_crash:
                         self.logger.warning(f"⚠️  Browser crashed (attempt {attempt + 1}/{max_retries}): {error_msg[:100]}")
                         self.logger.info(f"🔄 Restarting browser and retrying...")
+                        # CRITICAL: Force full browser restart with cooldown
                         try:
                             if self.browser_manager and self.browser_manager.browser:
-                                await self.browser_manager.browser.close()
-                                self.browser_manager.browser = None
-                        except:
-                            pass
+                                try:
+                                    await asyncio.wait_for(self.browser_manager.browser.close(), timeout=5.0)
+                                except Exception as close_error:
+                                    self.logger.debug(f"Browser close error during crash recovery: {close_error}")
+                                finally:
+                                    self.browser_manager.browser = None
+                                    self.browser_manager.page_count = 0
+                                    self.browser_manager._is_restarting = False
+                                    # CRITICAL: Cooldown to prevent CPU hammering
+                                    cooldown = 3 + (attempt * 2)  # Progressive cooldown: 3s, 5s, 7s
+                                    self.logger.debug(f"Cooling down for {cooldown}s after crash...")
+                                    await asyncio.sleep(cooldown)
+                        except Exception as cleanup_error:
+                            self.logger.debug(f"Browser cleanup error: {cleanup_error}")
                     continue
                 else:
                     # Final failure - log categorized error
@@ -1050,7 +1124,7 @@ class ActiveFetcher:
                     return []
 
         return []
-    
+
     async def _fetch_live_attempt(self, target: str) -> List[str]:
         """Single attempt to fetch JavaScript URLs from live site"""
         self.logger.info(f"🌐 Launching browser to scan live site: {target}")
@@ -1065,18 +1139,34 @@ class ActiveFetcher:
 
         try:
             self.logger.info(f"Opening page in headless browser...")
+
+            # FIX: Ensure browser is ready with proper error handling
             await self.browser_manager._ensure_browser()
 
-            context = await self.browser_manager.browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent=self._get_random_user_agent(),  # Rotate user agents
-                ignore_https_errors=True,
-                java_script_enabled=True,
-                bypass_csp=True
-            )
+            # FIX: Verify browser is actually running before creating context
+            if self.browser_manager.browser is None:
+                raise RuntimeError("Browser failed to initialize")
+
+            # CRITICAL: Use context semaphore to prevent concurrent context creation
+            async with self.browser_manager.context_semaphore:
+                try:
+                    context = await asyncio.wait_for(
+                        self.browser_manager.browser.new_context(
+                            viewport={'width': 1920, 'height': 1080},
+                            user_agent=self._get_random_user_agent(),
+                            ignore_https_errors=True,
+                            java_script_enabled=True,
+                            bypass_csp=True
+                        ),
+                        timeout=15.0  # Increased timeout for VPS
+                    )
+                except asyncio.TimeoutError:
+                    raise RuntimeError("Browser context creation timed out - browser may be overloaded")
+                except Exception as ctx_error:
+                    raise RuntimeError(f"Browser context creation failed: {str(ctx_error)}")
 
             page = await context.new_page()
-            page.set_default_timeout(60000)
+            page.set_default_timeout(90000)  # Increased timeout for slow VPS
 
             request_start_time = time.time()
 
@@ -1098,15 +1188,15 @@ class ActiveFetcher:
                 parsed = urlparse(url)
                 path = parsed.path.lower()
                 query = parsed.query.lower()
-                
+
                 # Valid JS files must have .js somewhere meaningful
                 is_valid_js = (
-                    path.endswith('.js') or 
+                    path.endswith('.js') or
                     path.endswith('.mjs') or
                     '.js?' in url.lower() or
                     (resource_type == 'script' and ('.js' in path or '.js' in query))
                 )
-                
+
                 if not is_valid_js:
                     return
 
@@ -1134,7 +1224,17 @@ class ActiveFetcher:
             try:
                 await page.goto(target, wait_until='domcontentloaded', timeout=30000)
                 self.logger.info(f"Page loaded, waiting for dynamic content...")
-                
+
+                # CRITICAL: Wait for scripts to populate in DOM
+                try:
+                    await page.wait_for_function(
+                        "() => document.querySelectorAll('script[src]').length > 0 || document.querySelectorAll('script:not([src])').length > 0",
+                        timeout=5000
+                    )
+                    self.logger.debug("✓ Scripts detected in DOM")
+                except Exception:
+                    self.logger.debug("No scripts detected yet, continuing...")
+
                 # 🍪 SESSION INHERITANCE: Extract cookies after Cloudflare challenge is solved
                 try:
                     cookies = await context.cookies()
@@ -1142,7 +1242,7 @@ class ActiveFetcher:
                     # Store target domain for Referer header
                     parsed = urlparse(target)
                     self.target_domain = f"{parsed.scheme}://{parsed.netloc}"
-                    
+
                     # Log cookie capture (useful for debugging Cloudflare bypass)
                     cf_cookies = [name for name in self.valid_cookies.keys() if 'cf' in name.lower()]
                     if cf_cookies:
@@ -1164,19 +1264,44 @@ class ActiveFetcher:
             self.logger.info(f"🖱️  Triggering interactions for lazy-loaded content...")
             await self._smart_interactions(page)
 
-            # Add timeout protection for DOM operations to prevent infinite hangs
+            # CRITICAL: Enhanced DOM script detection with multiple selectors
             try:
+                # Query external scripts
                 scripts = await asyncio.wait_for(
                     page.query_selector_all('script[src]'),
                     timeout=10
                 )
                 for script in scripts:
-                    src = await asyncio.wait_for(script.get_attribute('src'), timeout=5)
-                    if src:
-                        absolute_url = urljoin(target, src)
-                        if '.js' in absolute_url.lower():
-                            js_urls.add(absolute_url)
-                            self.logger.debug(f"Found JS (DOM): {absolute_url}")
+                    try:
+                        src = await asyncio.wait_for(script.get_attribute('src'), timeout=5)
+                        if src:
+                            absolute_url = urljoin(target, src)
+                            # Accept .js, .mjs, or type=module
+                            if '.js' in absolute_url.lower() or '.mjs' in absolute_url.lower():
+                                js_urls.add(absolute_url)
+                                self.logger.debug(f"Found JS (DOM): {absolute_url}")
+                    except Exception:
+                        pass
+
+                # CRITICAL: Also check for module preload links
+                try:
+                    module_links = await asyncio.wait_for(
+                        page.query_selector_all('link[rel="modulepreload"], link[rel="preload"][as="script"]'),
+                        timeout=5
+                    )
+                    for link in module_links:
+                        try:
+                            href = await asyncio.wait_for(link.get_attribute('href'), timeout=3)
+                            if href:
+                                absolute_url = urljoin(target, href)
+                                if '.js' in absolute_url.lower() or '.mjs' in absolute_url.lower():
+                                    js_urls.add(absolute_url)
+                                    self.logger.debug(f"Found JS (modulepreload): {absolute_url}")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
             except asyncio.TimeoutError:
                 self.logger.warning(f"⚠️  Timeout querying script[src] tags, continuing with discovered files")
             except Exception as e:
@@ -1191,20 +1316,20 @@ class ActiveFetcher:
                 for script in inline_scripts:
                     try:
                         content = await asyncio.wait_for(script.inner_text(), timeout=5)
-                        
+
                         # SAFETY FIX: Skip if content is too massive (e.g. data blobs)
                         if len(content) > 100000:  # 100KB limit for inline scripts
                             continue
-                        
+
                         import re
                         # FIX: Enforce valid URL characters for JS files (added . to character class)
                         urls_in_script = re.findall(r'["\']([a-zA-Z0-9_\-:/.]+\.js(?:[\?#][^"\']*)?)["\']', content)
-                        
+
                         for url in urls_in_script:
                             absolute_url = urljoin(target, url)
                             js_urls.add(absolute_url)
-                    except:
-                        pass
+                    except Exception as parse_error:
+                        self.logger.debug(f"Error parsing inline script URLs: {parse_error}")
             except asyncio.TimeoutError:
                 self.logger.warning(f"⚠️  Timeout querying inline script tags, continuing with discovered files")
             except Exception as e:
@@ -1216,17 +1341,38 @@ class ActiveFetcher:
         except Exception as e:
             raise
         finally:
-            try:
-                if page:
-                    await page.close()
-            except Exception:
-                pass
+            # CRITICAL: Guaranteed cleanup to prevent resource leaks
+            cleanup_errors = []
 
-            try:
-                if context:
-                    await context.close()
-            except Exception:
-                pass
+            if page:
+                try:
+                    await asyncio.wait_for(page.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self.logger.debug(f"Page.close() timed out for {target}")
+                    cleanup_errors.append("page_timeout")
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if 'closed' not in error_msg and 'target' not in error_msg:
+                        self.logger.debug(f"Page.close() error: {e}")
+                        cleanup_errors.append("page_error")
+
+            # CRITICAL: Small delay to allow browser to release resources
+            await asyncio.sleep(0.2)
+
+            if context:
+                try:
+                    await asyncio.wait_for(context.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self.logger.debug(f"Context.close() timed out for {target}")
+                    cleanup_errors.append("context_timeout")
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if 'closed' not in error_msg and 'target' not in error_msg:
+                        self.logger.debug(f"Context.close() error: {e}")
+                        cleanup_errors.append("context_error")
+
+            if cleanup_errors:
+                self.logger.debug(f"Cleanup completed with warnings: {', '.join(cleanup_errors)}")
 
         js_urls = list(js_urls)
 
@@ -1236,22 +1382,22 @@ class ActiveFetcher:
             self.logger.info(f"   ├─ Initial load: {len(js_urls) - len(lazy_loaded_urls)} files")
             self.logger.info(f"   └─ Lazy-loaded: {len(lazy_loaded_urls)} files")
         return js_urls
-    
+
     async def fetch_content(self, url: str, retry_count: int = 0) -> Optional[str]:
         """
         Fetches the content of a JavaScript file with PROGRESSIVE TIMEOUT on retries.
-        
+
         CRITICAL FIX: Each retry attempt gets progressively longer timeout to handle
         VPS resource saturation. Base timeout increases by 50% per attempt:
         - Attempt 1: base_timeout (e.g., 45s)
         - Attempt 2: base_timeout * 1.5 (e.g., 67.5s)
         - Attempt 3: base_timeout * 2.0 (e.g., 90s)
-        
+
         Retries on:
         - Network timeouts (asyncio.TimeoutError)
         - Connection errors (curl_cffi exceptions)
         - DNS resolution failures
-        
+
         Does NOT retry on:
         - Rate limiting (429, 503) - to avoid API bans
         - Client errors (4xx) - won't be fixed by retry
@@ -1260,7 +1406,7 @@ class ActiveFetcher:
         verbose_mode = self.config.get('verbose', False)
         if verbose_mode:
             self.logger.info(f"📥 Fetch: {url[:80]}")
-        
+
         # Pre-flight noise filter check (no network call)
         should_skip, reason = self.noise_filter.should_skip_url(url)
         if should_skip:
@@ -1272,17 +1418,17 @@ class ActiveFetcher:
             return None
 
         self.last_failure_reason = None
-        
+
         # ✅ FIX 1D: Known-slow domain bypass - skip HTTP entirely for domains that always fail
         KNOWN_SLOW_DOMAINS = {'getsentry.net', 'collegeboard.org', 'watsons.com.cn', 'watsonsvip.com.cn'}
-        
+
         # Extract domain from URL
         from urllib.parse import urlparse
         try:
             domain = urlparse(url).netloc
         except Exception:
             domain = ''
-        
+
         # Check if domain is known to always timeout on HTTP
         if any(slow_domain in domain for slow_domain in KNOWN_SLOW_DOMAINS):
             if self.browser_manager:
@@ -1295,13 +1441,13 @@ class ActiveFetcher:
                     return None
             else:
                 self.logger.warning(f"⚠️  Known-slow domain {domain} but browser not available - will attempt HTTP")
-        
+
         # Get retry config from global config
         retry_config = self.config.get('retry', {})
         max_attempts = retry_config.get('http_requests', 3)
         backoff_base = retry_config.get('backoff_base', 2.0)
         jitter_enabled = retry_config.get('jitter', True)
-        
+
         # Define retry exceptions (network-related only)
         retry_exceptions = (
             asyncio.TimeoutError,
@@ -1310,10 +1456,10 @@ class ActiveFetcher:
             OSError,
             IncompleteDownloadError,  # Retry on incomplete downloads
         )
-        
+
         # Get base timeout from config
         base_timeout = self.download_timeout if self.download_timeout is not None else self.config.get('session_management', {}).get('download_timeout', 45)
-        
+
         # ✅ FIX 1C: Domain-specific timeout multipliers for known-slow domains
         timeout_multipliers = {
             'getsentry.net': 3.0,
@@ -1322,35 +1468,35 @@ class ActiveFetcher:
             'watsonsvip.com': 3.0,
             # Add more as discovered
         }
-        
+
         # Extract domain from URL
         from urllib.parse import urlparse
         try:
             domain = urlparse(url).netloc
         except Exception:
             domain = ''
-        
+
         # Find domain-specific multiplier
         domain_multiplier = next(
             (mult for pattern, mult in timeout_multipliers.items() if pattern in domain),
             1.5  # Default multiplier for unknown domains
         )
-        
+
         # MANUAL RETRY LOOP with PROGRESSIVE TIMEOUT (boss's recommended approach)
         last_exception = None
         total_time_spent = 0.0  # Track cumulative time for timeout circuit breaker
         MAX_TOTAL_TIMEOUT = 180.0  # 3 minutes maximum per URL
-        
+
         # Check circuit breaker BEFORE attempting download
-        parsed = urllib.parse.urlparse(url)
+        parsed = urlparse(url)
         domain = parsed.netloc
-        
+
         if await self.circuit_breaker.is_blocked(domain):
             self.logger.warning(f"⛔ Circuit breaker ACTIVE for {domain} - skipping {url[:60]}...")
             self.last_failure_reason = 'circuit_breaker_blocked'
             self.error_stats['http_errors'] += 1
             return None
-        
+
         # ✅ ADAPTIVE PERFORMANCE TRACKER: Use browser-first if domain has high HTTP failure rate
         use_browser_first = self.domain_perf_tracker.should_use_browser(domain)
         if use_browser_first and self.browser_manager:
@@ -1367,17 +1513,17 @@ class ActiveFetcher:
                     self.logger.warning(f"⚠️  Adaptive browser-first failed, falling back to HTTP: {url[:60]}...")
             except Exception as e:
                 self.logger.debug(f"Adaptive browser error: {str(e)[:100]}. Falling back to HTTP.")
-        
+
         for attempt in range(max_attempts):
             try:
                 attempt_start_time = time.time()
-                
+
                 # ✅ FIX 1C: AGGRESSIVE timeout scaling - exponential for slow domains
                 current_timeout = base_timeout * (domain_multiplier ** attempt)
-                
+
                 # ✅ NEW: Cap individual attempt timeout to prevent runaway waits
                 current_timeout = min(current_timeout, MAX_TOTAL_TIMEOUT)
-                
+
                 # ✅ NEW: Timeout circuit breaker - if we've spent too much time already, abort
                 if total_time_spent >= MAX_TOTAL_TIMEOUT:
                     self.logger.error(
@@ -1385,38 +1531,38 @@ class ActiveFetcher:
                     )
                     await self.circuit_breaker.record_failure(domain, f"timeout_circuit_breaker_{total_time_spent:.0f}s")
                     break
-                
+
                 if attempt > 0:
                     # Log retry with new timeout
                     self.logger.warning(
                         f"⚠ Retry {attempt + 1}/{max_attempts} for {url[:50]}... "
                         f"(timeout increased to {current_timeout:.1f}s, cumulative: {total_time_spent:.1f}s, multiplier: {domain_multiplier}x)"
                     )
-                
+
                 # Try to fetch with progressive timeout
                 result = await self._fetch_content_impl(url, timeout_override=current_timeout)
-                
+
                 # Track time spent on this attempt
                 attempt_time = time.time() - attempt_start_time
                 total_time_spent += attempt_time
-                
+
                 # Success!
                 if attempt > 0:
                     self.logger.info(f"✓ {url[:50]}... succeeded on attempt {attempt + 1}/{max_attempts}")
-                
+
                 # Record success for circuit breaker and performance tracker
                 await self.circuit_breaker.record_success(domain)
                 await self.domain_perf_tracker.record(domain, success=True, latency=attempt_time)
-                
+
                 return result
-                
+
             except retry_exceptions as e:
                 last_exception = e
-                
+
                 # Track time spent
                 attempt_time = time.time() - attempt_start_time
                 total_time_spent += attempt_time
-                
+
                 # Check if we have more attempts left
                 if attempt < max_attempts - 1:
                     # Calculate backoff delay with optional jitter
@@ -1425,9 +1571,9 @@ class ActiveFetcher:
                         import random
                         jitter_amount = delay * 0.2
                         delay += random.uniform(-jitter_amount, jitter_amount)
-                    
+
                     delay = max(0.1, delay)  # Minimum 100ms
-                    
+
                     self.logger.warning(
                         f"⚠ {url[:50]}... failed (attempt {attempt + 1}/{max_attempts}): {str(e)[:100]} "
                         f"- retrying in {delay:.1f}s (cumulative time: {total_time_spent:.1f}s)"
@@ -1438,12 +1584,12 @@ class ActiveFetcher:
                     self.logger.error(
                         f"✗ {url[:50]}... failed after {max_attempts} attempts: {str(e)[:200]}"
                     )
-                    
+
                     # Record failure for circuit breaker and performance tracker
                     failure_reason = type(e).__name__
                     await self.circuit_breaker.record_failure(domain, failure_reason)
                     await self.domain_perf_tracker.record(domain, success=False, latency=total_time_spent)
-            
+
             except Exception as e:
                 # Non-retryable error - fail immediately
                 if verbose_mode:
@@ -1453,16 +1599,16 @@ class ActiveFetcher:
                 self.logger.debug("Full fetch error traceback:", exc_info=True)
                 self.last_failure_reason = 'non_retryable_error'
                 self.error_stats['http_errors'] += 1
-                
+
                 # Record failure for circuit breaker and performance tracker
                 await self.circuit_breaker.record_failure(domain, "non_retryable_error")
                 await self.domain_perf_tracker.record(domain, success=False, latency=time.time() - attempt_start_time)
-                
+
                 return None
-        
+
         # All retry attempts exhausted - TRY BROWSER FALLBACK for WAF bypass
         should_fallback_browser = False
-        
+
         if isinstance(last_exception, asyncio.TimeoutError):
             if verbose_mode:
                 self.logger.warning(f"❌ [TIMEOUT] {url[:80]}")
@@ -1471,14 +1617,14 @@ class ActiveFetcher:
             self.last_failure_reason = 'timeout'
             self.error_stats['timeouts'] += 1
             should_fallback_browser = True  # ✅ Browser can bypass slow/blocking servers
-            
+
         elif isinstance(last_exception, (ConnectionError, OSError)):
             if verbose_mode:
                 self.logger.warning(f"❌ [NETWORK ERROR] {url[:80]}: {str(last_exception)[:50]}")
             else:
                 self.logger.debug(f"❌ [NETWORK ERROR] {url}: {str(last_exception)}")
             self.last_failure_reason = 'network_error'
-            
+
             # Classify the specific network error
             error_str = str(last_exception)
             if 'Name or service not known' in error_str or 'getaddrinfo failed' in error_str:
@@ -1490,7 +1636,7 @@ class ActiveFetcher:
                 self.error_stats['ssl_errors'] += 1
             else:
                 self.error_stats['timeouts'] += 1  # Generic network failure
-                
+
         # 🛡️ BROWSER FALLBACK: If curl failed with WAF/timeout/connection errors, try Playwright
         if should_fallback_browser and self.browser_manager:
             try:
@@ -1509,22 +1655,22 @@ class ActiveFetcher:
             self.last_failure_reason = 'unknown_retry_error'
             self.error_stats['http_errors'] += 1
             return None
-    
+
     async def _fetch_content_impl(self, url: str, timeout_override: Optional[float] = None) -> Optional[str]:
         """
         Internal implementation of fetch_content (separated for retry logic).
         This method may raise exceptions that trigger retries.
         Uses the SHARED session to prevent connection exhaustion.
-        
+
         Args:
             url: URL to fetch
             timeout_override: If provided, overrides calculated timeout (used for progressive timeouts)
         """
         if not self.session_pool:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
-        
+
         max_size = self.config.get('max_file_size', 10485760)
-        
+
         # Preflight check to reject vendor/huge files quickly
         should_download, reason, preflight_content_length = await self._preflight_check(url)
         if not should_download:
@@ -1534,18 +1680,18 @@ class ActiveFetcher:
 
         # Get session from pool using round-robin
         session = self._get_session()
-        
+
         # Increment download counter and check for rotation
         self.download_counter += 1
         if self.download_counter % self.rotate_after == 0:
             # Rotate the session that was just used
             session_index = (self.session_counter - 1) % len(self.session_pool)
             await self._rotate_session(session_index)
-        
+
         # 🛡️ SESSION INHERITANCE: Build headers with Referer to bypass hotlink protection
         parsed_url = urlparse(url)
         origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        
+
         # More realistic browser headers to bypass 403 (anti-bot) protection
         # Key changes: Remove Sec-Fetch headers (bot detection), add realistic Accept header
         headers = {
@@ -1557,7 +1703,7 @@ class ActiveFetcher:
             'Pragma': 'no-cache',  # Legacy but many servers expect it
             # Removed Sec-Fetch-* headers - bot fingerprints that trigger 403
         }
-        
+
         # Add Referer and Origin if we have a target domain (from browser scan)
         if self.target_domain:
             headers['Referer'] = self.target_domain
@@ -1565,11 +1711,11 @@ class ActiveFetcher:
         else:
             # Fallback: use the URL's origin as Referer
             headers['Referer'] = origin
-        
+
         # 🍪 Use curl_cffi with inherited cookies from Playwright (Cloudflare bypass)
         # Apply download_timeout for large file downloads - progressive based on preflight
         # PERFORMANCE: Follow redirects automatically (301/302/308) to avoid treating them as errors
-        
+
         # PROGRESSIVE TIMEOUT LOGIC: Use override if provided (for retry attempts)
         if timeout_override is not None:
             download_timeout = timeout_override
@@ -1577,23 +1723,23 @@ class ActiveFetcher:
         else:
             # Determine progressive timeout (prioritize configured `self.download_timeout`)
             download_timeout = self.download_timeout if self.download_timeout is not None else self.config.get('session_management', {}).get('download_timeout', 45)
-            
+
             # Domain-specific timeout handling for known slow domains
-            slow_domains = ['getsentry.net', 'guildwars2.com', 'seagroup.com', 'garena.vn', 
+            slow_domains = ['getsentry.net', 'guildwars2.com', 'seagroup.com', 'garena.vn',
                            'garenanow.com', 'freefiremobile.com', 'watsonsestore.com.cn', 'watsons.com']
-            
+
             try:
                 parsed_url = urlparse(url)
                 domain = parsed_url.netloc.lower()
                 is_slow_domain = any(slow_dom in domain for slow_dom in slow_domains)
-                
+
                 if is_slow_domain:
                     # Slow domains get 2x timeout multiplier
                     download_timeout = download_timeout * 2
                     self.logger.debug(f"Slow domain detected ({domain}): doubling timeout to {download_timeout}s")
             except Exception:
                 pass
-            
+
             # Progressive timeout based on file size - more lenient for slow domains
             if preflight_content_length:
                 try:
@@ -1626,11 +1772,11 @@ class ActiveFetcher:
             )
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(f"Download timeout after {download_timeout}s: {url}")
-        
+
         try:
                 # ========== PHASE 3: Strategic Error Detection (Vulnerability Hinting) ==========
                 # Differentiate between "Network Failure" (Retry) and "Server Crash" (Vulnerability)
-                
+
                 # Server Error (Potential Vulnerability)
                 if response.status_code >= 500:
                     # Use correct attribute name - avoid AttributeError
@@ -1638,7 +1784,7 @@ class ActiveFetcher:
                     self.last_failure_reason = 'server_error'
                     self.error_stats['http_errors'] += 1
                     return None
-                
+
                 # Auth Error (Interesting but not critical)
                 if response.status_code in [401, 403]:
                     # 🔍 DIAGNOSTIC: Log HTTP 403/401 with details for troubleshooting
@@ -1652,32 +1798,32 @@ class ActiveFetcher:
                     self.last_failure_reason = 'auth_error'
                     self.error_stats['http_errors'] += 1
                     return None
-                
+
                 # Rate Limiting (Trigger emergency cookie harvest + exponential backoff)
                 if response.status_code in [429, 503]:
                     self.logger.warning(f"🚨 RATE LIMIT DETECTED (HTTP {response.status_code}): {url[:80]}")
-                    
+
                     # Trigger circuit breaker immediately for this domain
-                    parsed = urllib.parse.urlparse(url)
+                    parsed = urlparse(url)
                     domain = parsed.netloc
                     await self.circuit_breaker.record_failure(domain, f"rate_limit_{response.status_code}")
-                    
+
                     # Emergency cookie refresh via browser (one-time per domain)
                     if self.browser_manager and domain not in getattr(self, '_cookie_refreshed_domains', set()):
                         try:
                             # Track domains we've already tried to refresh
                             if not hasattr(self, '_cookie_refreshed_domains'):
                                 self._cookie_refreshed_domains = set()
-                            
+
                             self.logger.info(f"🍪 EMERGENCY COOKIE HARVEST for {domain}...")
-                            
+
                             # Visit domain root with browser to solve WAF challenge
                             domain_root = f"{parsed.scheme}://{domain}/"
                             await self.fetch_with_playwright(domain_root)
-                            
+
                             # Mark domain as refreshed
                             self._cookie_refreshed_domains.add(domain)
-                            
+
                             # If we captured new cookies, update ALL sessions in the pool
                             if self.valid_cookies:
                                 self.logger.info(
@@ -1685,16 +1831,16 @@ class ActiveFetcher:
                                     f"Updating all {len(self.session_pool)} sessions..."
                                 )
                                 # Note: Cookies are automatically used in next request via self.valid_cookies
-                            
+
                         except Exception as e:
                             self.logger.warning(f"⚠️  Cookie harvest failed for {domain}: {str(e)[:100]}")
-                    
+
                     self.last_failure_reason = 'rate_limit'
                     self.error_stats['rate_limits'] += 1
-                    
+
                     # Raise exception to trigger retry with exponential backoff
                     raise ConnectionError(f"Rate limit (HTTP {response.status_code})")
-                
+
                 # 🔍 DIAGNOSTIC: Handle 404 and other non-success status codes
                 if response.status_code == 404:
                     self.http_status_breakdown[404] = self.http_status_breakdown.get(404, 0) + 1
@@ -1705,7 +1851,7 @@ class ActiveFetcher:
                     self.last_failure_reason = 'not_found'
                     self.error_stats['http_errors'] += 1
                     return None
-                
+
                 # Any other non-200 status
                 if response.status_code != 200:
                     self.http_status_breakdown[response.status_code] = self.http_status_breakdown.get(response.status_code, 0) + 1
@@ -1736,16 +1882,16 @@ class ActiveFetcher:
                             chunks = []
                             async for chunk in response.content.iter_chunked(8192):
                                 chunks.append(chunk)
-                            
+
                             content_bytes = b''.join(chunks)
-                            
+
                             # Validate Content-Length if provided
                             # NOTE: Content-Length represents the compressed size if gzip is used
                             # We receive uncompressed data, so actual size may be larger
                             if content_length:
                                 expected_size = int(content_length)
                                 actual_size = len(content_bytes)
-                                
+
                                 # Only validate if we got LESS than expected (missing data)
                                 # If we got MORE, it means the server used compression (this is normal)
                                 if actual_size < expected_size:
@@ -1756,19 +1902,19 @@ class ActiveFetcher:
                                             f"Incomplete download: expected {expected_size} bytes, "
                                             f"got {actual_size} bytes ({missing_bytes} bytes missing)"
                                         )
-                            
+
                             # Decode to string
                             content = content_bytes.decode('utf-8', errors='ignore')
                         else:
                             # Fallback to response.text if streaming not available
                             content = response.text
-                            
+
                             # Validate size if Content-Length was provided
                             # NOTE: Content-Length may represent compressed size
                             if content_length:
                                 expected_size = int(content_length)
                                 actual_size = len(content.encode('utf-8'))
-                                
+
                                 # Only flag as error if we got significantly LESS than expected
                                 if actual_size < expected_size:
                                     missing_bytes = expected_size - actual_size
@@ -1778,14 +1924,14 @@ class ActiveFetcher:
                                             f"Incomplete download: expected {expected_size} bytes, "
                                             f"got {actual_size} bytes ({missing_bytes} bytes missing)"
                                         )
-                    
+
                     except IncompleteDownloadError:
                         # Re-raise to trigger retry
                         raise
                     except Exception as e:
                         self.logger.warning(f"Streaming download error, falling back to text: {str(e)}")
                         content = response.text
-                    
+
                     if len(content.encode('utf-8')) > max_size:
                         self.logger.warning(
                             f"❌ File exceeded size: {url}"
@@ -1831,24 +1977,24 @@ class ActiveFetcher:
         finally:
             # curl_cffi responses are auto-closed, but explicit is better
             pass
-    
+
     async def validate_url_exists(self, url: str) -> Tuple[bool, int]:
         """
         Validate if URL exists using HEAD request (fast existence check for 2nd/3rd level JS)
-        
+
         Args:
             url: URL to validate
-            
+
         Returns:
             Tuple of (exists: bool, status_code: int)
         """
         if not self.session:
             raise RuntimeError("Fetcher not initialized! Call initialize() first.")
-        
+
         headers = {
             'User-Agent': self._get_random_user_agent()
         }
-        
+
         try:
             response = await self.session.head(url, headers=headers, allow_redirects=True, timeout=10)
             exists = response.status_code == 200
@@ -1858,7 +2004,7 @@ class ActiveFetcher:
             self.logger.error(f"HEAD request failed for {url}: {str(e)}")
             self.logger.debug("Full HEAD request traceback:", exc_info=True)
             return (False, 0)
-    
+
     async def fetch_with_playwright(self, url: str) -> Optional[str]:
         """🛡️ Browser Fallback: Fetches content using Playwright to bypass WAF/IP blocks"""
         context = None
@@ -1866,7 +2012,7 @@ class ActiveFetcher:
 
         try:
             await self.browser_manager._ensure_browser()
-            
+
             # Use semaphore to prevent too many concurrent browsers
             async with self.browser_manager.semaphore:
                 context = await self.browser_manager.browser.new_context(
@@ -1878,16 +2024,16 @@ class ActiveFetcher:
 
                 # Navigate with faster wait strategy for JS files
                 response = await page.goto(url, wait_until='commit', timeout=45000)
-                
+
                 # Check HTTP status
                 if response and response.status >= 400:
                     self.logger.warning(f"❌ Browser got HTTP {response.status}: {url[:60]}...")
                     return None
-                
+
                 # For JS files, get raw source (not rendered HTML)
                 # Try to get the response body directly if it's a script
                 content = await page.content()
-                
+
                 # If content looks like HTML wrapper, extract text content
                 if '<html' in content.lower() or '<body' in content.lower():
                     try:
@@ -1895,7 +2041,7 @@ class ActiveFetcher:
                         text_content = await page.evaluate("document.body.innerText || document.documentElement.innerText")
                         if text_content and len(text_content) > len(content) * 0.1:  # If we got meaningful text
                             content = text_content
-                    except:
+                    except Exception:
                         pass  # Keep HTML content as fallback
 
                 return content
@@ -1909,13 +2055,13 @@ class ActiveFetcher:
             if page:
                 try:
                     await page.close()
-                except:
-                    pass
+                except Exception as page_close_error:
+                    self.logger.debug(f"Page close error in fetch_with_browser: {page_close_error}")
             if context:
                 try:
                     await context.close()
-                except:
-                    pass
+                except Exception as ctx_close_error:
+                    self.logger.debug(f"Context close error in fetch_with_browser: {ctx_close_error}")
 
     async def fetch_and_write(self, url: str, out_path: str) -> bool:
         """
@@ -1971,7 +2117,7 @@ class ActiveFetcher:
             error_str = str(e)
             self.logger.error(f"❌ [NETWORK ERROR] {url[:80]}: {error_str[:100]}")
             self.logger.debug(f"Full fetch_and_write error traceback for {url}:", exc_info=True)
-            
+
             # Classify the error to match download_one classification logic
             if 'Name or service not known' in error_str or 'getaddrinfo failed' in error_str:
                 self.last_failure_reason = 'dns_errors'
@@ -1985,7 +2131,7 @@ class ActiveFetcher:
             else:
                 self.last_failure_reason = 'network_error'
                 self.error_stats['http_errors'] += 1  # Generic network error
-            
+
             return False
 
         # Handle non-200 statuses
@@ -1994,14 +2140,14 @@ class ActiveFetcher:
             self.logger.warning(f"❌ HTTP {response.status_code}: {url[:80]}")
             self.error_stats['http_errors'] += 1
             self.http_status_breakdown[response.status_code] = self.http_status_breakdown.get(response.status_code, 0) + 1
-            
+
             # Track rate limiting separately
             if response.status_code in (429, 503):
                 self.error_stats['rate_limits'] += 1
                 self.last_failure_reason = 'rate_limits'
             else:
                 self.last_failure_reason = f'http_{response.status_code}'
-            
+
             return False
 
         # Stream to disk
@@ -2035,23 +2181,23 @@ class ActiveFetcher:
             self.logger.debug(f"Full write error traceback for {url}:", exc_info=True)
             self.last_failure_reason = 'write_error'
             return False
-    
+
     async def fetch_and_write_with_fallback(self, url: str, out_path: str) -> bool:
         """🛡️ Hybrid Download: Try curl first, fallback to browser if WAF blocks"""
         # 1. Try standard curl download
         success = await self.fetch_and_write(url, out_path)
         if success:
             return True
-        
+
         # 2. Check if failure warrants browser fallback
         should_fallback = self.last_failure_reason in [
             'timeout', 'network_error', 'connection_refused',
             'http_403', 'http_401', 'rate_limits'
         ]
-        
+
         if not should_fallback or not self.browser_manager:
             return False
-        
+
         # 3. Try browser fallback
         self.logger.info(f"🛡️ DOWNLOAD FALLBACK: Using browser for {url[:60]}...")
         try:
@@ -2068,5 +2214,5 @@ class ActiveFetcher:
                     return False
         except Exception as e:
             self.logger.debug(f"Browser download fallback failed: {str(e)[:100]}")
-        
+
         return False

@@ -243,7 +243,15 @@ class PassiveFetcher:
     
     def _is_valid_url(self, url: str) -> bool:
         """Check if URL is valid and starts with http(s)"""
-        return url and (url.startswith('http://') or url.startswith('https://'))
+        if not url or not isinstance(url, str):
+            return False
+        # Must start with http:// or https:// and have at least a domain
+        if not (url.startswith('http://') or url.startswith('https://')):
+            return False
+        # Basic validation: must have more than just the protocol
+        # http:// is 7 chars, https:// is 8 chars
+        min_length = 7 if url.startswith('http://') else 8
+        return len(url) > min_length
     
     def _filter_by_scope(self, urls: List[str], scope_domains: Set[str]) -> List[str]:
         """

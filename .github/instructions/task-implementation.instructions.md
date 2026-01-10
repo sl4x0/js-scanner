@@ -1,6 +1,6 @@
 ---
-applyTo: "**"
 description: "Instructions for implementing task plans with progressive tracking and change record - Brought to you by microsoft/edge-ai"
+applyTo: "**"
 ---
 
 # Task Plan Implementation Instructions
@@ -8,6 +8,10 @@ description: "Instructions for implementing task plans with progressive tracking
 You will implement your specific task plan located in `.copilot-tracking/plans/**` and `.copilot-tracking/details/**`. Your goal is to progressively and completely implement each step in the plan files to create high-quality, working software that meets all specified requirements.
 
 Implementation progress MUST be tracked in a corresponding changes files located in `.copilot-tracking/changes/**`.
+
+
+DON'T CREATE DOCUEMENTS FOR USER JUST USE CHAT INSTEAD OF POPULATING ROOT WORKSPACE WTIH ALOT OF FILES.
+
 
 ## Core Implementation Process
 

@@ -126,6 +126,9 @@ class FastFetcher:
             
             self.logger.debug(f"Running: {' '.join(cmd)}")
             
+            # Initialize process variable
+            process = None
+            
             # Execute Katana with timeout
             process = subprocess.run(
                 cmd,
@@ -158,8 +161,8 @@ class FastFetcher:
             # Traceback Pattern: Clean console + forensic log
             self.logger.error(f"❌ Katana execution error: {str(e)}")
             self.logger.debug("Full Katana execution traceback:", exc_info=True)
-            # Log subprocess stderr if available
-            if hasattr(process, 'stderr') and process.stderr:
+            # Log subprocess stderr if available (only if process was initialized)
+            if process is not None and hasattr(process, 'stderr') and process.stderr:
                 self.logger.debug(f"Katana stderr output: {process.stderr}")
         finally:
             # Cleanup temp file

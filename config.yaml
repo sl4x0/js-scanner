@@ -33,8 +33,8 @@ subjs:
 # Deep scan for lazy-loaded code. RAM intensive.
 playwright:
   headless: true
-  max_concurrent: 2 # CPU-OPTIMIZED: Reduced from 5 to 2 (browsers are CPU hogs!)
-  restart_after: 20 # CPU-OPTIMIZED: Restart more frequently (was 50) to free CPU
+  max_concurrent: 1 # FIX: Reduced from 2 to 1 - prevents browser crash race conditions!
+  restart_after: 15 # FIX: Restart more frequently (was 20) to prevent memory buildup
   page_timeout: 30000 # CPU-OPTIMIZED: Reduced from 45s to 30s for faster fail-fast
   enable_interactions: false # ✅ FIX 3: DISABLED for speed - only downloading JS, no UI testing
 
